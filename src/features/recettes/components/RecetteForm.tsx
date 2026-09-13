@@ -38,6 +38,13 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
     recette?.poidsAccompagnementG ?? 0
   );
   const [modeQuantite, setModeQuantite] = useState<"portions" | "poids">("portions");
+  // Valeur brute du champ "poids total (kg)", indépendante de portions : liée directement à
+  // portions (arrondi à l'entier), elle se corromprait à chaque frappe (le champ se resynchronise
+  // à chaque changement de portions, donc sur une valeur arrondie différente de ce qui vient
+  // d'être tapé).
+  const [poidsTotalKgSaisi, setPoidsTotalKgSaisi] = useState(() =>
+    recette?.poidsPortionG ? (recette.portions * recette.poidsPortionG) / 1000 : 0
+  );
   const [prixVenteHT, setPrixVenteHT] = useState(recette?.prixVenteHT ?? 0);
   const [instructions, setInstructions] = useState(recette?.instructions ?? "");
   const [photo, setPhoto] = useState<string | null>(recette?.photo ?? null);
@@ -91,14 +98,27 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
     ]);
   }
 
-  // Poids total (kg) équivalent au nombre de portions actuel, pour permettre de basculer entre
-  // les deux façons d'exprimer la quantité à produire.
+  // Poids total (kg) équivalent au nombre de portions actuel, pour l'indication sous le champ —
+  // toujours dérivé de portions (la valeur qui fait foi), contrairement au champ de saisie en kg
+  // lui-même (poidsTotalKgSaisi) qui doit rester libre pendant la frappe.
   const poidsTotalKg = poidsPortionG > 0 ? (portions * poidsPortionG) / 1000 : 0;
 
   function changerPoidsTotalKg(kg: number) {
+    setPoidsTotalKgSaisi(kg);
     if (poidsPortionG > 0) {
       setPortions(Math.max(1, Math.round((kg * 1000) / poidsPortionG)));
     }
+  }
+
+  function passerEnModeKg() {
+    if (poidsPortionG <= 0) {
+      alert(
+        "Renseigne d'abord le poids d'une portion (en grammes, ci-dessous) pour pouvoir saisir la quantité à produire en kg."
+      );
+      return;
+    }
+    setPoidsTotalKgSaisi((portions * poidsPortionG) / 1000);
+    setModeQuantite("poids");
   }
 
   function retirerLigne(index: number) {
@@ -268,18 +288,30 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
             <button
               type="button"
               onClick={() => setModeQuantite("portions")}
-              style={{ flex: 1, fontWeight: modeQuantite === "portions" ? "bold" : "normal" }}
+              style={{
+                flex: 1,
+                padding: 8,
+                border: "1px solid #16a085",
+                borderRadius: 4,
+                cursor: "pointer",
+                background: modeQuantite === "portions" ? "#16a085" : "white",
+                color: modeQuantite === "portions" ? "white" : "#16a085",
+              }}
             >
               Portions
             </button>
             <button
               type="button"
-              onClick={() => poidsPortionG > 0 && setModeQuantite("poids")}
-              disabled={poidsPortionG <= 0}
-              title={
-                poidsPortionG <= 0 ? "Renseigne le poids d'une portion pour basculer en kg" : ""
-              }
-              style={{ flex: 1, fontWeight: modeQuantite === "poids" ? "bold" : "normal" }}
+              onClick={passerEnModeKg}
+              style={{
+                flex: 1,
+                padding: 8,
+                border: "1px solid #16a085",
+                borderRadius: 4,
+                cursor: "pointer",
+                background: modeQuantite === "poids" ? "#16a085" : "white",
+                color: modeQuantite === "poids" ? "white" : poidsPortionG > 0 ? "#16a085" : "#aaa",
+              }}
             >
               Kg
             </button>
@@ -294,7 +326,7 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
             />
           ) : (
             <ChampNombre
-              valeur={poidsTotalKg}
+              valeur={poidsTotalKgSaisi}
               onChanger={(n) => changerPoidsTotalKg(n ?? 0)}
               style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
             />
