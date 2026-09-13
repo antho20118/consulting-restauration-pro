@@ -55,7 +55,9 @@ const MOTS_ENTETE = [
 const RE_INGREDIENT =
   /^[-•*]?\s*(\d+(?:[.,]\d+)?(?:\s*\/\s*\d+)?)\s*([a-zàâäéèêëïîôöùûüç.]+)?\s*(?:de\s+|d')?(.*)$/i;
 
-const RE_ETAPE_NUMEROTEE = /^(\d+)[.)]\s*(.+)$/;
+// Certaines mises en page (magazines de cuisine notamment) numérotent les étapes avec un chevron
+// (»/›) plutôt qu'un point ou une parenthèse.
+const RE_ETAPE_NUMEROTEE = /^(\d+)[.)»›]\s*(.+)$/;
 
 const RE_PORTIONS = /\(?\s*(\d+)\s*(?:personnes?|portions?|parts?|couverts?)\s*\)?/i;
 
