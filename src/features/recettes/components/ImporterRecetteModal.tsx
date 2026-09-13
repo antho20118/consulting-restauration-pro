@@ -3,11 +3,19 @@ import { Camera } from "lucide-react";
 import toast from "react-hot-toast";
 import { redimensionnerImage } from "../../../common/redimensionnerImage";
 import {
+  ErreurImportIA,
   getArticlesDisponibles,
   getUnitesDisponibles,
   importerRecetteIA,
 } from "../services/recetteService";
-import type { ArticleRecette, LigneRecetteInput, UniteRecette } from "../types/recette";
+import { analyseRecetteLocale } from "../utils/analyseRecetteLocale";
+import { extraireTexteDePhoto } from "../utils/ocrPhoto";
+import type {
+  ArticleRecette,
+  ExtractionRecette,
+  LigneRecetteInput,
+  UniteRecette,
+} from "../types/recette";
 
 type Props = {
   onClose: () => void;
@@ -55,6 +63,13 @@ function trouverUnite(symbole: string | null, unites: UniteRecette[]): UniteRece
   return unites.find((u) => normaliser(u.symbole) === normaliser(symbole)) ?? null;
 }
 
+// Fonction à part (plutôt qu'inline dans le catch ci-dessous) : le rétrécissement de type de
+// `source` par TypeScript ne survit pas à l'entrée d'un bloc catch, même via une simple relecture
+// de la même constante.
+async function obtenirTexteSource(source: { texte: string } | { photoDataUrl: string }): Promise<string> {
+  return "texte" in source ? source.texte : await extraireTexteDePhoto(source.photoDataUrl);
+}
+
 export default function ImporterRecetteModal({ onClose, onExtrait }: Props) {
   const [mode, setMode] = useState<"texte" | "photo">("texte");
   const [texte, setTexte] = useState("");
@@ -86,8 +101,23 @@ export default function ImporterRecetteModal({ onClose, onExtrait }: Props) {
 
     setEnCours(true);
     try {
-      const [extraction, articles, unites] = await Promise.all([
-        importerRecetteIA(source),
+      let extraction: ExtractionRecette;
+      try {
+        extraction = await importerRecetteIA(source);
+      } catch (error) {
+        if (!(error instanceof ErreurImportIA) || error.status !== 503) throw error;
+
+        // IA non configurée (pas de clé ANTHROPIC_API_KEY) : repli gratuit, mais nettement moins
+        // fiable — texte lu par OCR (Tesseract) pour une photo, puis analyse par règles dans les
+        // deux cas (voir analyseRecetteLocale.ts).
+        toast(
+          "IA non configurée : analyse locale utilisée (moins précise, à vérifier).",
+          { icon: "ℹ️" }
+        );
+        extraction = analyseRecetteLocale(await obtenirTexteSource(source));
+      }
+
+      const [articles, unites] = await Promise.all([
         getArticlesDisponibles(),
         getUnitesDisponibles(),
       ]);
