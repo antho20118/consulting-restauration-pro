@@ -286,6 +286,10 @@ model Recette {
   nom          String
   instructions String?
 
+  // Photo du plat fini, en data URL base64 (redimensionnée côté client avant envoi) : évite de
+  // dépendre d'un stockage de fichiers externe ou d'un disque persistant en production.
+  photo String?
+
   categorieId Int?
   categorie   CategorieRecette? @relation(fields: [categorieId], references: [id])
 
@@ -301,9 +305,29 @@ model Recette {
   updatedAt DateTime @updatedAt
 
   lignes       RecetteLigne[]
+  etapes       RecetteEtape[]
   utilisations MenuLigne[]
 
   @@index([nom])
+}
+
+// Une étape du procédé, dans l'ordre : la description couvre le geste/la technique à mettre en
+// œuvre, et peut porter un point de contrôle HACCP (ex. décontamination des légumes avant
+// cuisine, refroidissement à <10°C en moins de 2h, remise en température de +3°C à +63°C en
+// moins d'1h) — mis en avant dans la fiche pour ne pas être noyé dans le texte de l'étape.
+model RecetteEtape {
+  id Int @id @default(autoincrement())
+
+  recetteId Int
+  recette   Recette @relation(fields: [recetteId], references: [id], onDelete: Cascade)
+
+  ordre       Int
+  description String
+
+  pointCritiqueHACCP Boolean @default(false)
+  controleHACCP      String?
+
+  @@index([recetteId])
 }
 
 model RecetteLigne {

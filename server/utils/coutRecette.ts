@@ -1,5 +1,8 @@
 export const inclusionsRecette = {
   categorie: true,
+  etapes: {
+    orderBy: { ordre: "asc" as const },
+  },
   lignes: {
     orderBy: { ordre: "asc" as const },
     include: {
@@ -12,6 +15,9 @@ export const inclusionsRecette = {
             take: 1,
             include: { unite: true },
           },
+          allergenes: {
+            include: { allergene: true },
+          },
         },
       },
     },
@@ -20,6 +26,9 @@ export const inclusionsRecette = {
 
 // Calcule le coût matière d'une recette à partir du dernier tarif actif de chaque ingrédient,
 // en convertissant les unités via leur facteurBase et en tenant compte du rendement de l'article.
+// Déduit aussi la liste des allergènes de la recette par union de ceux de ses ingrédients, plutôt
+// que de les faire ressaisir manuellement (qui pourrait diverger des ingrédients réellement
+// utilisés — une source d'erreur qu'on évite en la calculant).
 export function calculerCoutRecette<
   T extends {
     portions: number;
@@ -30,6 +39,7 @@ export function calculerCoutRecette<
       article: {
         rendement: number;
         tarifs: { prixHT: number; unite: { facteurBase: number } }[];
+        allergenes: { allergene: { id: number; nom: string } }[];
       };
     }[];
   },
@@ -59,6 +69,16 @@ export function calculerCoutRecette<
       : null;
   const margeHT = recette.prixVenteHT != null ? recette.prixVenteHT - coutParPortion : null;
 
+  const allergenesParId = new Map<number, string>();
+  for (const ligne of recette.lignes) {
+    for (const { allergene } of ligne.article.allergenes) {
+      allergenesParId.set(allergene.id, allergene.nom);
+    }
+  }
+  const allergenes = Array.from(allergenesParId, ([id, nom]) => ({ id, nom })).sort((a, b) =>
+    a.nom.localeCompare(b.nom)
+  );
+
   return {
     ...recette,
     lignes,
@@ -66,5 +86,6 @@ export function calculerCoutRecette<
     coutParPortion,
     foodCostPct,
     margeHT,
+    allergenes,
   };
 }

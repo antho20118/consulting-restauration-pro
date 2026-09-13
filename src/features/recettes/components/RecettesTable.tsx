@@ -3,11 +3,12 @@ import type { Recette } from "../types/recette";
 
 type Props = {
   recettes: Recette[];
+  onView: (recette: Recette) => void;
   onEdit: (recette: Recette) => void;
   onDelete: (recette: Recette) => void;
 };
 
-export default function RecettesTable({ recettes, onEdit, onDelete }: Props) {
+export default function RecettesTable({ recettes, onView, onEdit, onDelete }: Props) {
   const columns: GridColDef<Recette>[] = [
     {
       field: "nom",
@@ -46,11 +47,12 @@ export default function RecettesTable({ recettes, onEdit, onDelete }: Props) {
     {
       field: "actions",
       headerName: "Actions",
-      width: 160,
+      width: 220,
       sortable: false,
       filterable: false,
       renderCell: (params) => (
         <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => onView(params.row)}>Fiche</button>
           <button onClick={() => onEdit(params.row)}>Modifier</button>
           <button onClick={() => onDelete(params.row)}>Supprimer</button>
         </div>
