@@ -11,8 +11,13 @@ export type FichierImporte = {
 export async function lireFichierImport(fichier: File): Promise<FichierImporte> {
   const XLSX = await import("xlsx");
 
-  const donnees = await fichier.arrayBuffer();
-  const classeur = XLSX.read(donnees, { type: "array" });
+  // Un .csv est du texte brut : sans décodage explicite en UTF-8, xlsx devine parfois mal
+  // l'encodage et mutile les caractères accentués (ex. "é" -> "Ã©"). Un .xlsx/.xls est un binaire
+  // (zip) dont le XML interne est déjà en UTF-8, donc sans ce problème une fois lu tel quel.
+  const estCsv = /\.csv$/i.test(fichier.name);
+  const classeur = estCsv
+    ? XLSX.read(await fichier.text(), { type: "string" })
+    : XLSX.read(await fichier.arrayBuffer(), { type: "array" });
   const feuille = classeur.Sheets[classeur.SheetNames[0]];
   const lignes: string[][] = XLSX.utils.sheet_to_json(feuille, { header: 1, defval: "" });
 

@@ -273,18 +273,35 @@ router.post("/import", async (req: Request, res: Response) => {
     // (clôture + ouverture de tarif, ou création d'article + tarif) sont transactionnelles.
     const fournisseurId = await trouverOuCreerFournisseur(prisma, fournisseurNom, societeId);
 
-    const [uniteKg, uniteL, unitePiece, conditionnement, allergenesExistants, articlesExistants] =
-      await Promise.all([
-        prisma.unite.findFirst({ where: { symbole: { equals: "kg", mode: "insensitive" } } }),
-        prisma.unite.findFirst({ where: { symbole: { equals: "l", mode: "insensitive" } } }),
-        prisma.unite.findFirst({ where: { symbole: { equals: "pièce", mode: "insensitive" } } }),
-        prisma.conditionnement.findFirst({ orderBy: { id: "asc" } }),
-        prisma.allergene.findMany(),
-        prisma.article.findMany({
-          where: { societeId, actif: true },
-          select: { id: true, nom: true, reference: true },
-        }),
-      ]);
+    const [
+      uniteKg,
+      uniteL,
+      unitePiece,
+      conditionnement,
+      allergenesExistants,
+      categoriesExistantes,
+      articlesExistants,
+    ] = await Promise.all([
+      prisma.unite.findFirst({ where: { symbole: { equals: "kg", mode: "insensitive" } } }),
+      prisma.unite.findFirst({ where: { symbole: { equals: "l", mode: "insensitive" } } }),
+      prisma.unite.findFirst({ where: { symbole: { equals: "pièce", mode: "insensitive" } } }),
+      prisma.conditionnement.findFirst({ orderBy: { id: "asc" } }),
+      prisma.allergene.findMany(),
+      prisma.categorie.findMany({ where: { actif: true } }),
+      prisma.article.findMany({
+        where: { societeId, actif: true },
+        select: { id: true, nom: true, reference: true },
+      }),
+    ]);
+
+    // Un fournisseur mélange souvent plusieurs rayons (épicerie, frais, surgelés…) dans un même
+    // listing : la catégorie d'un nouvel article vient en priorité de la colonne mappée dans le
+    // fichier (créée à la volée si elle n'existe pas encore), et à défaut de la catégorie par
+    // défaut choisie dans la modale d'import.
+    const categorieIdParNom = new Map<string, number>();
+    for (const c of categoriesExistantes) {
+      categorieIdParNom.set(c.nom.trim().toLowerCase(), c.id);
+    }
 
     const candidats: CandidatExistant[] = articlesExistants.map((a) => ({
       articleId: a.id,
@@ -397,12 +414,30 @@ router.post("/import", async (req: Request, res: Response) => {
           .filter((a) => nomsAllergenes.includes(a.nom.toLowerCase()))
           .map((a) => a.id);
 
+        const nomCategorie = ligne.categorie ? String(ligne.categorie).trim() : "";
+        let categorieIdLigne = categorieId;
+        if (nomCategorie) {
+          const cleCategorie = nomCategorie.toLowerCase();
+          const categorieExistanteId = categorieIdParNom.get(cleCategorie);
+          if (categorieExistanteId) {
+            categorieIdLigne = categorieExistanteId;
+          } else {
+            const categorieCreee = await prisma.categorie.upsert({
+              where: { nom: nomCategorie },
+              update: {},
+              create: { nom: nomCategorie },
+            });
+            categorieIdParNom.set(cleCategorie, categorieCreee.id);
+            categorieIdLigne = categorieCreee.id;
+          }
+        }
+
         const { nouvelArticle, tarifCree } = await prisma.$transaction(async (tx) => {
           const created = await tx.article.create({
             data: {
               nom: designation,
               reference,
-              categorieId,
+              categorieId: categorieIdLigne,
               tvaId,
               societeId,
               type: type || "MATIERE_PREMIERE",
