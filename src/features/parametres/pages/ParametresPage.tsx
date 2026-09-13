@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import SocieteSection from "../components/SocieteSection";
 import CategoriesManager from "../components/CategoriesManager";
 import UnitesManager from "../components/UnitesManager";
+import TvaManager from "../components/TvaManager";
 
 function Section({ titre, children }: { titre: string; children: ReactNode }) {
   return (
@@ -35,6 +36,10 @@ export default function ParametresPage() {
 
       <Section titre="Unités">
         <UnitesManager />
+      </Section>
+
+      <Section titre="TVA">
+        <TvaManager />
       </Section>
     </div>
   );

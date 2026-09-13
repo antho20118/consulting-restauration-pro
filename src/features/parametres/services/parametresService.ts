@@ -1,5 +1,5 @@
 import { API_URL } from "../../../config/api";
-import type { Categorie, Societe, Unite, UniteInput } from "../types/parametres";
+import type { Categorie, Societe, Tva, TvaInput, Unite, UniteInput } from "../types/parametres";
 
 async function verifierReponse(response: Response, messageErreur: string) {
   if (!response.ok) {
@@ -84,4 +84,35 @@ export async function modifierSociete(id: number, nom: string): Promise<Societe>
   });
   await verifierReponse(response, "Impossible de modifier la société");
   return response.json();
+}
+
+export async function getTva(): Promise<Tva[]> {
+  const response = await fetch(`${API_URL}/tva`);
+  await verifierReponse(response, "Impossible de récupérer les taux de TVA");
+  return response.json();
+}
+
+export async function creerTva(input: TvaInput): Promise<Tva> {
+  const response = await fetch(`${API_URL}/tva`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  await verifierReponse(response, "Impossible de créer la TVA");
+  return response.json();
+}
+
+export async function modifierTva(id: number, input: TvaInput): Promise<Tva> {
+  const response = await fetch(`${API_URL}/tva/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  await verifierReponse(response, "Impossible de modifier la TVA");
+  return response.json();
+}
+
+export async function supprimerTva(id: number): Promise<void> {
+  const response = await fetch(`${API_URL}/tva/${id}`, { method: "DELETE" });
+  await verifierReponse(response, "Impossible de supprimer la TVA");
 }
