@@ -28,8 +28,8 @@ export default function DepotsTable({ depots, onEdit, onDelete }: Props) {
       filterable: false,
       renderCell: (params) => (
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => onEdit(params.row)}>Modifier</button>
-          <button onClick={() => onDelete(params.row)}>Supprimer</button>
+          <button className="btn-table" onClick={() => onEdit(params.row)}>Modifier</button>
+          <button className="btn-table btn-danger" onClick={() => onDelete(params.row)}>Supprimer</button>
         </div>
       ),
     },

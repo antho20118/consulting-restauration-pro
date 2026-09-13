@@ -86,7 +86,7 @@ export default function RecettesPage() {
         }}
       >
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={ouvrirCreation}>+ Nouvelle recette</button>
+          <button className="btn-primary" onClick={ouvrirCreation}>+ Nouvelle recette</button>
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 

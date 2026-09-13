@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import { useState } from "react";
 import { creerDepot, modifierDepot } from "../services/depotService";
 import type { Depot } from "../types/depot";
@@ -25,7 +26,7 @@ export default function DepotForm({ depot, onClose, onSave }: Props) {
       onSave();
       onClose();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -62,7 +63,7 @@ export default function DepotForm({ depot, onClose, onSave }: Props) {
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
         <button onClick={onClose}>Annuler</button>
-        <button onClick={enregistrer}>Enregistrer</button>
+        <button className="btn-primary" onClick={enregistrer}>Enregistrer</button>
       </div>
     </div>
   );

@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+:root {
+  --couleur-primaire: #16a085;
+  --couleur-primaire-hover: #128f76;
+  --couleur-primaire-clair: #e6f6f2;
+  --couleur-danger: #c0392b;
+  --couleur-danger-hover: #a5311f;
+  --couleur-texte: #1f2937;
+  --couleur-texte-attenue: #6b7280;
+  --couleur-bordure: #d8dee3;
+  --couleur-fond: #f4f6f8;
+  --couleur-carte: #ffffff;
+  --couleur-sidebar: #202729;
+  --couleur-sidebar-survol: #3b4447;
+  --rayon: 10px;
+  --rayon-petit: 6px;
+  --ombre-carte: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
 html,
 body,
 #root {
@@ -9,6 +31,109 @@ body,
 }
 
 body {
-  background: #111827;
-  font-family: Arial, sans-serif;
+  background: var(--couleur-fond);
+  color: var(--couleur-texte);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Défauts pour les champs de formulaire "bruts" (sans style inline) répartis dans toute l'appli.
+   Exclut les champs internes de MUI (DataGrid, etc.), qui ont déjà leur propre habillage. */
+input:not(.MuiInputBase-input),
+select:not(.MuiInputBase-input),
+textarea:not(.MuiInputBase-input) {
+  font: inherit;
+  color: var(--couleur-texte);
+  background: var(--couleur-carte);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--rayon-petit);
+  padding: 8px 10px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:not(.MuiInputBase-input):focus,
+select:not(.MuiInputBase-input):focus,
+textarea:not(.MuiInputBase-input):focus {
+  outline: none;
+  border-color: var(--couleur-primaire);
+  box-shadow: 0 0 0 3px var(--couleur-primaire-clair);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9ca3af;
+}
+
+/* Défaut pour les boutons "bruts" (sans style inline) : neutre, bordé, cohérent partout.
+   Exclut les boutons MUI (DataGrid) et ceux qui ont déjà un style inline complet (Sidebar, Login). */
+button:not(.MuiButtonBase-root) {
+  font: inherit;
+  color: var(--couleur-texte);
+  background: var(--couleur-carte);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: var(--rayon-petit);
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+button:not(.MuiButtonBase-root):hover:not(:disabled) {
+  background: #f0f2f4;
+  border-color: #c3cad1;
+}
+
+button:not(.MuiButtonBase-root):disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Utilitaires pour distinguer une action principale (créer, enregistrer) d'une action destructive. */
+.btn-primary {
+  background: var(--couleur-primaire) !important;
+  border-color: var(--couleur-primaire) !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--couleur-primaire-hover) !important;
+  border-color: var(--couleur-primaire-hover) !important;
+}
+
+/* Boutons d'action compacts dans les cellules de tableau (DataGrid), où l'espace est restreint. */
+.btn-table {
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+  border-radius: 4px !important;
+}
+
+.btn-danger {
+  color: var(--couleur-danger) !important;
+  border-color: #eecac5 !important;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #fdf1ef !important;
+  border-color: var(--couleur-danger) !important;
+}
+
+/* Ascenseur discret, plus cohérent avec le reste de l'interface que celui du navigateur. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c3cad1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8b0b8;
 }

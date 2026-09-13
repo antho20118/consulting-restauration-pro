@@ -63,7 +63,7 @@ export default function IdentifiantsSection() {
       {erreur && <p style={{ color: "#c0392b", margin: 0 }}>{erreur}</p>}
       {message && <p style={{ color: "#16a085", margin: 0 }}>{message}</p>}
 
-      <button onClick={enregistrer} style={{ alignSelf: "flex-start", padding: "8px 16px" }}>
+      <button className="btn-primary" onClick={enregistrer} style={{ alignSelf: "flex-start" }}>
         Enregistrer
       </button>
     </div>

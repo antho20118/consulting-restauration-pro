@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import { useEffect, useState } from "react";
 import {
   creerUnite,
@@ -45,7 +46,7 @@ export default function UnitesManager() {
       setNouvelle(UNITE_VIDE);
       chargerUnites();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -56,7 +57,7 @@ export default function UnitesManager() {
       await modifierUnite(unite.id, input);
       chargerUnites();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -66,7 +67,7 @@ export default function UnitesManager() {
       await supprimerUnite(unite.id);
       chargerUnites();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -108,8 +109,8 @@ export default function UnitesManager() {
               onChange={(e) => modifierChamp(unite.id, { facteurBase: Number(e.target.value) })}
               style={{ width: 90, padding: 8 }}
             />
-            <button onClick={() => enregistrer(unite)}>Enregistrer</button>
-            <button onClick={() => supprimer(unite)}>Supprimer</button>
+            <button className="btn-primary" onClick={() => enregistrer(unite)}>Enregistrer</button>
+            <button className="btn-danger" onClick={() => supprimer(unite)}>Supprimer</button>
           </div>
         );
       })}
@@ -148,7 +149,7 @@ export default function UnitesManager() {
           }
           style={{ width: 90, padding: 8 }}
         />
-        <button onClick={ajouter}>Ajouter</button>
+        <button className="btn-primary" onClick={ajouter}>Ajouter</button>
       </div>
     </div>
   );

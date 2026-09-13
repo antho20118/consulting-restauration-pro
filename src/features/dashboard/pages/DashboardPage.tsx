@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import KpiCard from "../components/KpiCard";
 import RepartitionCategories from "../components/RepartitionCategories";
 import RecettesAlerteTable from "../components/RecettesAlerteTable";
+import PageLoader from "../../../common/PageLoader";
 import { getDashboard } from "../services/dashboardService";
 import type { DashboardData } from "../types/dashboard";
 
@@ -16,6 +17,7 @@ export default function DashboardPage() {
     return (
       <div style={{ padding: 20 }}>
         <h1>🏠 Tableau de bord</h1>
+        <PageLoader />
       </div>
     );
   }
