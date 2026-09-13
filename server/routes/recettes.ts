@@ -4,7 +4,7 @@ import type { Request, Response } from "express";
 import prisma from "../prisma.js";
 import { calculerCoutRecette, inclusionsRecette } from "../utils/coutRecette.js";
 import { suggestionsEconomieRecette } from "../utils/suggestionsEconomie.js";
-import { extraireRecetteDepuisTexte, ImportIANonConfigureError } from "../utils/importRecetteIA.js";
+import { extraireRecette, ImportIANonConfigureError } from "../utils/importRecetteIA.js";
 
 const router = Router();
 
@@ -61,22 +61,22 @@ router.get("/:id/suggestions-economie", async (req: Request, res: Response) => {
   }
 });
 
-// Import d'une recette depuis un texte libre (IA) : extrait nom, portions, ingrédients et étapes.
-// Ne crée rien en base ni ne rapproche les ingrédients des articles existants (voir
-// server/utils/importRecetteIA.ts) — c'est un brouillon que l'utilisateur complète et valide dans
-// le formulaire de recette habituel avant d'enregistrer.
+// Import d'une recette depuis un texte libre ou une photo (IA) : extrait nom, portions,
+// ingrédients et étapes. Ne crée rien en base ni ne rapproche les ingrédients des articles
+// existants (voir server/utils/importRecetteIA.ts) — c'est un brouillon que l'utilisateur complète
+// et valide dans le formulaire de recette habituel avant d'enregistrer.
 router.post("/import-ia", async (req: Request, res: Response) => {
   try {
-    const { texte } = req.body as { texte?: string };
+    const { texte, photoDataUrl } = req.body as { texte?: string; photoDataUrl?: string };
 
-    if (!texte || !texte.trim()) {
-      res.status(400).json({ error: "Texte de recette requis" });
+    if (!texte?.trim() && !photoDataUrl) {
+      res.status(400).json({ error: "Texte ou photo de recette requis" });
       return;
     }
 
     const unites = await prisma.unite.findMany({ where: { actif: true } });
-    const extraction = await extraireRecetteDepuisTexte(
-      texte,
+    const extraction = await extraireRecette(
+      texte?.trim() ? { texte } : { photoDataUrl: photoDataUrl! },
       unites.map((u) => u.symbole)
     );
 
