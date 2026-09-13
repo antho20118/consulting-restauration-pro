@@ -55,6 +55,8 @@ router.post("/", async (req: Request, res: Response) => {
       prixVenteHT,
       instructions,
       photo,
+      poidsPortionG,
+      poidsAccompagnementG,
       lignes,
       etapes,
     } = req.body as {
@@ -65,7 +67,9 @@ router.post("/", async (req: Request, res: Response) => {
       prixVenteHT?: number | null;
       instructions?: string | null;
       photo?: string | null;
-      lignes: { articleId: number; quantite: number; uniteId: number }[];
+      poidsPortionG?: number | null;
+      poidsAccompagnementG?: number | null;
+      lignes: { articleId: number; quantite: number; uniteId: number; gainCuissonPct?: number }[];
       etapes?: { description: string; pointCritiqueHACCP: boolean; controleHACCP: string | null }[];
     };
 
@@ -78,11 +82,14 @@ router.post("/", async (req: Request, res: Response) => {
         prixVenteHT: prixVenteHT ?? null,
         instructions: instructions ?? null,
         photo: photo ?? null,
+        poidsPortionG: poidsPortionG ?? null,
+        poidsAccompagnementG: poidsAccompagnementG ?? null,
         lignes: {
           create: (lignes ?? []).map((ligne, index) => ({
             articleId: ligne.articleId,
             quantite: ligne.quantite,
             uniteId: ligne.uniteId,
+            gainCuissonPct: ligne.gainCuissonPct ?? 0,
             ordre: index,
           })),
         },
@@ -117,6 +124,8 @@ router.put("/:id", async (req: Request, res: Response) => {
       prixVenteHT,
       instructions,
       photo,
+      poidsPortionG,
+      poidsAccompagnementG,
       lignes,
       etapes,
     } = req.body as {
@@ -126,7 +135,9 @@ router.put("/:id", async (req: Request, res: Response) => {
       prixVenteHT?: number | null;
       instructions?: string | null;
       photo?: string | null;
-      lignes: { articleId: number; quantite: number; uniteId: number }[];
+      poidsPortionG?: number | null;
+      poidsAccompagnementG?: number | null;
+      lignes: { articleId: number; quantite: number; uniteId: number; gainCuissonPct?: number }[];
       etapes?: { description: string; pointCritiqueHACCP: boolean; controleHACCP: string | null }[];
     };
 
@@ -143,11 +154,14 @@ router.put("/:id", async (req: Request, res: Response) => {
           prixVenteHT: prixVenteHT ?? null,
           instructions: instructions ?? null,
           photo: photo ?? null,
+          poidsPortionG: poidsPortionG ?? null,
+          poidsAccompagnementG: poidsAccompagnementG ?? null,
           lignes: {
             create: (lignes ?? []).map((ligne, index) => ({
               articleId: ligne.articleId,
               quantite: ligne.quantite,
               uniteId: ligne.uniteId,
+              gainCuissonPct: ligne.gainCuissonPct ?? 0,
               ordre: index,
             })),
           },

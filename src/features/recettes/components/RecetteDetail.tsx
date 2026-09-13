@@ -1,3 +1,4 @@
+import CalculateurProduction from "./CalculateurProduction";
 import type { Recette } from "../types/recette";
 
 type Props = {
@@ -155,6 +156,10 @@ export default function RecetteDetail({ recette, onClose }: Props) {
           Food cost :{" "}
           <strong>{recette.foodCostPct != null ? `${recette.foodCostPct.toFixed(1)} %` : "—"}</strong>
         </span>
+      </div>
+
+      <div className="fiche-technique-sans-impression">
+        <CalculateurProduction recette={recette} />
       </div>
 
       <div

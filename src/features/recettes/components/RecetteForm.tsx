@@ -33,6 +33,11 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
   const [nom, setNom] = useState(recette?.nom ?? "");
   const [categorieId, setCategorieId] = useState<number>(recette?.categorieId ?? 0);
   const [portions, setPortions] = useState(recette?.portions ?? 1);
+  const [poidsPortionG, setPoidsPortionG] = useState(recette?.poidsPortionG ?? 0);
+  const [poidsAccompagnementG, setPoidsAccompagnementG] = useState(
+    recette?.poidsAccompagnementG ?? 0
+  );
+  const [modeQuantite, setModeQuantite] = useState<"portions" | "poids">("portions");
   const [prixVenteHT, setPrixVenteHT] = useState(recette?.prixVenteHT ?? 0);
   const [instructions, setInstructions] = useState(recette?.instructions ?? "");
   const [photo, setPhoto] = useState<string | null>(recette?.photo ?? null);
@@ -41,6 +46,7 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
       articleId: ligne.articleId,
       quantite: ligne.quantite,
       uniteId: ligne.uniteId,
+      gainCuissonPct: ligne.gainCuissonPct,
     })) ?? []
   );
   const [etapes, setEtapes] = useState<EtapeRecetteInput[]>(
@@ -80,8 +86,19 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
         articleId: 0,
         quantite: 0,
         uniteId: unites[0]?.id ?? 0,
+        gainCuissonPct: 0,
       },
     ]);
+  }
+
+  // Poids total (kg) équivalent au nombre de portions actuel, pour permettre de basculer entre
+  // les deux façons d'exprimer la quantité à produire.
+  const poidsTotalKg = poidsPortionG > 0 ? (portions * poidsPortionG) / 1000 : 0;
+
+  function changerPoidsTotalKg(kg: number) {
+    if (poidsPortionG > 0) {
+      setPortions(Math.max(1, Math.round((kg * 1000) / poidsPortionG)));
+    }
   }
 
   function retirerLigne(index: number) {
@@ -159,6 +176,8 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
       nom,
       categorieId: categorieId || null,
       portions,
+      poidsPortionG: poidsPortionG || null,
+      poidsAccompagnementG: poidsAccompagnementG || null,
       prixVenteHT: prixVenteHT || null,
       instructions: instructions || null,
       photo,
@@ -243,15 +262,48 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
           </select>
         </div>
 
-        <div style={{ width: 120 }}>
-          <label>Portions</label>
-          <input
-            type="number"
-            min={1}
-            value={portions}
-            onChange={(e) => setPortions(Number(e.target.value))}
-            style={{ width: "100%", padding: 10 }}
-          />
+        <div style={{ width: 180 }}>
+          <label>Quantité à produire</label>
+          <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+            <button
+              type="button"
+              onClick={() => setModeQuantite("portions")}
+              style={{ flex: 1, fontWeight: modeQuantite === "portions" ? "bold" : "normal" }}
+            >
+              Portions
+            </button>
+            <button
+              type="button"
+              onClick={() => poidsPortionG > 0 && setModeQuantite("poids")}
+              disabled={poidsPortionG <= 0}
+              title={
+                poidsPortionG <= 0 ? "Renseigne le poids d'une portion pour basculer en kg" : ""
+              }
+              style={{ flex: 1, fontWeight: modeQuantite === "poids" ? "bold" : "normal" }}
+            >
+              Kg
+            </button>
+          </div>
+          {modeQuantite === "portions" ? (
+            <input
+              type="number"
+              min={1}
+              value={portions}
+              onChange={(e) => setPortions(Number(e.target.value))}
+              style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
+            />
+          ) : (
+            <ChampNombre
+              valeur={poidsTotalKg}
+              onChanger={(n) => changerPoidsTotalKg(n ?? 0)}
+              style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
+            />
+          )}
+          {poidsPortionG > 0 && (
+            <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+              {portions} portion{portions > 1 ? "s" : ""} ≈ {poidsTotalKg.toFixed(2)} kg
+            </div>
+          )}
         </div>
 
         <div style={{ width: 160 }}>
@@ -264,7 +316,33 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
         </div>
       </div>
 
+      <div style={{ display: "flex", gap: 20, marginBottom: 20 }}>
+        <div style={{ width: 200 }}>
+          <label>Poids d'une portion (g)</label>
+          <ChampNombre
+            valeur={poidsPortionG}
+            onChanger={(n) => setPoidsPortionG(n ?? 0)}
+            style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
+            placeholder="ex. 350"
+          />
+        </div>
+
+        <div style={{ width: 200 }}>
+          <label>dont accompagnement (g)</label>
+          <ChampNombre
+            valeur={poidsAccompagnementG}
+            onChanger={(n) => setPoidsAccompagnementG(n ?? 0)}
+            style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
+            placeholder="ex. 130"
+          />
+        </div>
+      </div>
+
       <h3>Ingrédients</h3>
+      <p style={{ fontSize: 12, color: "#888", marginTop: -8, marginBottom: 12 }}>
+        « Gain % » : poids gagné à la cuisson pour cet ingrédient (ex. eau ou sauce absorbée),
+        en plus de son rendement — sert au calcul de production (voir la fiche de la recette).
+      </p>
 
       {lignes.map((ligne, index) => {
         const article = articles.find((a) => a.id === ligne.articleId);
@@ -304,6 +382,13 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
                 </option>
               ))}
             </select>
+
+            <ChampNombre
+              valeur={ligne.gainCuissonPct}
+              onChanger={(n) => modifierLigne(index, { gainCuissonPct: n ?? 0 })}
+              style={{ width: 70, padding: 8, boxSizing: "border-box" }}
+              placeholder="Gain %"
+            />
 
             <span style={{ width: 70, textAlign: "right", color: "#555" }}>
               {cout.toFixed(2)} €
