@@ -23,6 +23,7 @@ type RecetteAvecLignes = {
     article: {
       rendement: number;
       tarifs: { prixHT: number; unite: { facteurBase: number } }[];
+      allergenes: { allergene: { id: number; nom: string } }[];
     };
   }[];
 };

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import RecettesTable from "../components/RecettesTable";
 import RecetteForm from "../components/RecetteForm";
+import RecetteDetail from "../components/RecetteDetail";
 import { getRecettes, supprimerRecette } from "../services/recetteService";
 import { exporterExcel } from "../../../common/exportExcel";
 import type { Recette } from "../types/recette";
@@ -9,6 +10,7 @@ export default function RecettesPage() {
   const [recettes, setRecettes] = useState<Recette[]>([]);
   const [recetteEnEdition, setRecetteEnEdition] = useState<Recette | null>(null);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
+  const [recetteConsultee, setRecetteConsultee] = useState<Recette | null>(null);
   const [recherche, setRecherche] = useState("");
 
   async function chargerRecettes() {
@@ -97,7 +99,12 @@ export default function RecettesPage() {
         />
       </div>
 
-      <RecettesTable recettes={recettesFiltrees} onEdit={ouvrirEdition} onDelete={supprimer} />
+      <RecettesTable
+        recettes={recettesFiltrees}
+        onView={setRecetteConsultee}
+        onEdit={ouvrirEdition}
+        onDelete={supprimer}
+      />
 
       {formulaireOuvert && (
         <div
@@ -117,6 +124,24 @@ export default function RecettesPage() {
             onClose={() => setFormulaireOuvert(false)}
             onSave={chargerRecettes}
           />
+        </div>
+      )}
+
+      {recetteConsultee && (
+        <div
+          className="fiche-technique-apercu-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            overflowY: "auto",
+            padding: "40px 0",
+          }}
+        >
+          <RecetteDetail recette={recetteConsultee} onClose={() => setRecetteConsultee(null)} />
         </div>
       )}
     </div>

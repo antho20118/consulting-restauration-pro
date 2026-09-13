@@ -54,7 +54,9 @@ router.post("/", async (req: Request, res: Response) => {
       portions,
       prixVenteHT,
       instructions,
+      photo,
       lignes,
+      etapes,
     } = req.body as {
       nom: string;
       categorieId?: number | null;
@@ -62,7 +64,9 @@ router.post("/", async (req: Request, res: Response) => {
       portions?: number;
       prixVenteHT?: number | null;
       instructions?: string | null;
+      photo?: string | null;
       lignes: { articleId: number; quantite: number; uniteId: number }[];
+      etapes?: { description: string; pointCritiqueHACCP: boolean; controleHACCP: string | null }[];
     };
 
     const recette = await prisma.recette.create({
@@ -73,11 +77,20 @@ router.post("/", async (req: Request, res: Response) => {
         portions: portions ?? 1,
         prixVenteHT: prixVenteHT ?? null,
         instructions: instructions ?? null,
+        photo: photo ?? null,
         lignes: {
           create: (lignes ?? []).map((ligne, index) => ({
             articleId: ligne.articleId,
             quantite: ligne.quantite,
             uniteId: ligne.uniteId,
+            ordre: index,
+          })),
+        },
+        etapes: {
+          create: (etapes ?? []).map((etape, index) => ({
+            description: etape.description,
+            pointCritiqueHACCP: etape.pointCritiqueHACCP,
+            controleHACCP: etape.controleHACCP,
             ordre: index,
           })),
         },
@@ -92,7 +105,7 @@ router.post("/", async (req: Request, res: Response) => {
   }
 });
 
-// Mise à jour d'une recette (les lignes sont remplacées intégralement)
+// Mise à jour d'une recette (les lignes et les étapes sont remplacées intégralement)
 router.put("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
@@ -103,18 +116,23 @@ router.put("/:id", async (req: Request, res: Response) => {
       portions,
       prixVenteHT,
       instructions,
+      photo,
       lignes,
+      etapes,
     } = req.body as {
       nom: string;
       categorieId?: number | null;
       portions?: number;
       prixVenteHT?: number | null;
       instructions?: string | null;
+      photo?: string | null;
       lignes: { articleId: number; quantite: number; uniteId: number }[];
+      etapes?: { description: string; pointCritiqueHACCP: boolean; controleHACCP: string | null }[];
     };
 
     const recette = await prisma.$transaction(async (tx) => {
       await tx.recetteLigne.deleteMany({ where: { recetteId: id } });
+      await tx.recetteEtape.deleteMany({ where: { recetteId: id } });
 
       return tx.recette.update({
         where: { id },
@@ -124,11 +142,20 @@ router.put("/:id", async (req: Request, res: Response) => {
           portions: portions ?? 1,
           prixVenteHT: prixVenteHT ?? null,
           instructions: instructions ?? null,
+          photo: photo ?? null,
           lignes: {
             create: (lignes ?? []).map((ligne, index) => ({
               articleId: ligne.articleId,
               quantite: ligne.quantite,
               uniteId: ligne.uniteId,
+              ordre: index,
+            })),
+          },
+          etapes: {
+            create: (etapes ?? []).map((etape, index) => ({
+              description: etape.description,
+              pointCritiqueHACCP: etape.pointCritiqueHACCP,
+              controleHACCP: etape.controleHACCP,
               ordre: index,
             })),
           },
