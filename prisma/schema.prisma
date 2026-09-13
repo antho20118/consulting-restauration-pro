@@ -61,6 +61,18 @@ model Categorie {
   updatedAt DateTime @updatedAt
 
   articles Article[]
+}
+
+// Catégories des recettes (Entrée, Plat, Dessert…), distinctes des catégories des ingrédients
+// (Épicerie, Frais…) : les deux ne classent pas la même chose et ne doivent pas être mélangées.
+model CategorieRecette {
+  id    Int     @id @default(autoincrement())
+  nom   String  @unique
+  actif Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   recettes Recette[]
 }
 
@@ -273,7 +285,7 @@ model Recette {
   instructions String?
 
   categorieId Int?
-  categorie   Categorie? @relation(fields: [categorieId], references: [id])
+  categorie   CategorieRecette? @relation(fields: [categorieId], references: [id])
 
   societeId Int
   societe   Societe @relation(fields: [societeId], references: [id])

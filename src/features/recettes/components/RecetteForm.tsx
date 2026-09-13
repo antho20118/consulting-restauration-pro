@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { API_URL } from "../../../config/api";
+import ChampNombre from "../../../common/ChampNombre";
 import {
   creerRecette,
   getArticlesDisponibles,
@@ -7,9 +8,10 @@ import {
   modifierRecette,
 } from "../services/recetteService";
 import { estimerCoutLigne } from "../utils/cout";
+import RechercheArticle from "./RechercheArticle";
 import type { ArticleRecette, LigneRecetteInput, Recette, UniteRecette } from "../types/recette";
 
-type Categorie = {
+type CategorieRecette = {
   id: number;
   nom: string;
 };
@@ -34,12 +36,12 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
     })) ?? []
   );
 
-  const [categories, setCategories] = useState<Categorie[]>([]);
+  const [categories, setCategories] = useState<CategorieRecette[]>([]);
   const [articles, setArticles] = useState<ArticleRecette[]>([]);
   const [unites, setUnites] = useState<UniteRecette[]>([]);
 
   useEffect(() => {
-    fetch(`${API_URL}/categories`)
+    fetch(`${API_URL}/categories-recette`)
       .then((r) => r.json())
       .then((data) => {
         setCategories(data);
@@ -160,12 +162,10 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
 
         <div style={{ width: 160 }}>
           <label>Prix de vente HT (€)</label>
-          <input
-            type="number"
-            step="0.01"
-            value={prixVenteHT}
-            onChange={(e) => setPrixVenteHT(Number(e.target.value))}
-            style={{ width: "100%", padding: 10 }}
+          <ChampNombre
+            valeur={prixVenteHT}
+            onChanger={(n) => setPrixVenteHT(n ?? 0)}
+            style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
           />
         </div>
       </div>
@@ -187,24 +187,16 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
               marginBottom: 10,
             }}
           >
-            <select
-              value={ligne.articleId}
-              onChange={(e) => modifierLigne(index, { articleId: Number(e.target.value) })}
-              style={{ flex: 2, padding: 8 }}
-            >
-              {articles.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.nom}
-                </option>
-              ))}
-            </select>
+            <RechercheArticle
+              articles={articles}
+              articleId={ligne.articleId}
+              onChange={(articleId) => modifierLigne(index, { articleId })}
+            />
 
-            <input
-              type="number"
-              step="0.01"
-              value={ligne.quantite}
-              onChange={(e) => modifierLigne(index, { quantite: Number(e.target.value) })}
-              style={{ width: 90, padding: 8 }}
+            <ChampNombre
+              valeur={ligne.quantite}
+              onChanger={(n) => modifierLigne(index, { quantite: n ?? 0 })}
+              style={{ width: 90, padding: 8, boxSizing: "border-box" }}
             />
 
             <select
@@ -228,7 +220,7 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
         );
       })}
 
-      <button onClick={ajouterLigne} style={{ marginBottom: 20 }}>
+      <button onClick={ajouterLigne} style={{ display: "block", marginBottom: 20 }}>
         + Ajouter un ingrédient
       </button>
 

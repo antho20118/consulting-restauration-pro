@@ -3,6 +3,11 @@ export interface Categorie {
   nom: string;
 }
 
+export interface CategorieRecette {
+  id: number;
+  nom: string;
+}
+
 export interface Unite {
   id: number;
   nom: string;

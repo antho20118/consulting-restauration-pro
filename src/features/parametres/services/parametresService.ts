@@ -1,5 +1,13 @@
 import { API_URL } from "../../../config/api";
-import type { Categorie, Societe, Tva, TvaInput, Unite, UniteInput } from "../types/parametres";
+import type {
+  Categorie,
+  CategorieRecette,
+  Societe,
+  Tva,
+  TvaInput,
+  Unite,
+  UniteInput,
+} from "../types/parametres";
 
 async function verifierReponse(response: Response, messageErreur: string) {
   if (!response.ok) {
@@ -37,6 +45,37 @@ export async function modifierCategorie(id: number, nom: string): Promise<Catego
 export async function supprimerCategorie(id: number): Promise<void> {
   const response = await fetch(`${API_URL}/categories/${id}`, { method: "DELETE" });
   await verifierReponse(response, "Impossible de supprimer la catégorie");
+}
+
+export async function getCategoriesRecette(): Promise<CategorieRecette[]> {
+  const response = await fetch(`${API_URL}/categories-recette`);
+  await verifierReponse(response, "Impossible de récupérer les catégories de recettes");
+  return response.json();
+}
+
+export async function creerCategorieRecette(nom: string): Promise<CategorieRecette> {
+  const response = await fetch(`${API_URL}/categories-recette`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nom }),
+  });
+  await verifierReponse(response, "Impossible de créer la catégorie de recette");
+  return response.json();
+}
+
+export async function modifierCategorieRecette(id: number, nom: string): Promise<CategorieRecette> {
+  const response = await fetch(`${API_URL}/categories-recette/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nom }),
+  });
+  await verifierReponse(response, "Impossible de modifier la catégorie de recette");
+  return response.json();
+}
+
+export async function supprimerCategorieRecette(id: number): Promise<void> {
+  const response = await fetch(`${API_URL}/categories-recette/${id}`, { method: "DELETE" });
+  await verifierReponse(response, "Impossible de supprimer la catégorie de recette");
 }
 
 export async function getUnites(): Promise<Unite[]> {
