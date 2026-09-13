@@ -76,6 +76,18 @@ export async function getSuggestionsEconomie(recetteId: number): Promise<Suggest
   return response.json();
 }
 
+// Porte le statut HTTP pour permettre à l'appelant de distinguer "IA non configurée" (503, à
+// traiter par un repli local) d'une vraie erreur (message affiché tel quel), sans dépendre du
+// texte du message qui pourrait changer ou être traduit.
+export class ErreurImportIA extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 export async function importerRecetteIA(
   source: { texte: string } | { photoDataUrl: string }
 ): Promise<ExtractionRecette> {
@@ -88,7 +100,7 @@ export async function importerRecetteIA(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(data?.error ?? "Impossible d'analyser cette recette");
+    throw new ErreurImportIA(data?.error ?? "Impossible d'analyser cette recette", response.status);
   }
 
   return data;
