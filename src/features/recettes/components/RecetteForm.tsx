@@ -75,7 +75,9 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
     setLignes((precedent) => [
       ...precedent,
       {
-        articleId: articles[0]?.id ?? 0,
+        // Pas de présélection : le champ de recherche reste vide pour écrire directement, plutôt
+        // que de forcer à effacer le premier article de la liste avant de pouvoir taper.
+        articleId: 0,
         quantite: 0,
         uniteId: unites[0]?.id ?? 0,
       },
@@ -148,6 +150,11 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
   }, [lignes, articles]);
 
   async function enregistrer() {
+    if (lignes.some((ligne) => !ligne.articleId)) {
+      alert("Choisis un ingrédient pour chaque ligne (ou supprime les lignes vides).");
+      return;
+    }
+
     const payload = {
       nom,
       categorieId: categorieId || null,
