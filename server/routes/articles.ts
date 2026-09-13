@@ -267,97 +267,111 @@ router.post("/import", async (req: Request, res: Response) => {
       return;
     }
 
-    const resultat = await prisma.$transaction(async (tx) => {
-      const fournisseurId = await trouverOuCreerFournisseur(tx, fournisseurNom, societeId);
+    // Un listing fournisseur peut compter plusieurs milliers de lignes : on évite de tout
+    // traiter dans une seule transaction interactive (délai par défaut de 5s chez Prisma, qui
+    // se ferme avant la fin d'un import volumineux). Seules les écritures d'une même ligne
+    // (clôture + ouverture de tarif, ou création d'article + tarif) sont transactionnelles.
+    const fournisseurId = await trouverOuCreerFournisseur(prisma, fournisseurNom, societeId);
 
-      const [uniteKg, uniteL, unitePiece, conditionnement, allergenesExistants, articlesExistants] =
-        await Promise.all([
-          tx.unite.findFirst({ where: { symbole: { equals: "kg", mode: "insensitive" } } }),
-          tx.unite.findFirst({ where: { symbole: { equals: "l", mode: "insensitive" } } }),
-          tx.unite.findFirst({ where: { symbole: { equals: "pièce", mode: "insensitive" } } }),
-          tx.conditionnement.findFirst({ orderBy: { id: "asc" } }),
-          tx.allergene.findMany(),
-          tx.article.findMany({
-            where: { societeId, actif: true },
-            select: { id: true, nom: true, reference: true },
-          }),
-        ]);
+    const [uniteKg, uniteL, unitePiece, conditionnement, allergenesExistants, articlesExistants] =
+      await Promise.all([
+        prisma.unite.findFirst({ where: { symbole: { equals: "kg", mode: "insensitive" } } }),
+        prisma.unite.findFirst({ where: { symbole: { equals: "l", mode: "insensitive" } } }),
+        prisma.unite.findFirst({ where: { symbole: { equals: "pièce", mode: "insensitive" } } }),
+        prisma.conditionnement.findFirst({ orderBy: { id: "asc" } }),
+        prisma.allergene.findMany(),
+        prisma.article.findMany({
+          where: { societeId, actif: true },
+          select: { id: true, nom: true, reference: true },
+        }),
+      ]);
 
-      const candidats: CandidatExistant[] = articlesExistants.map((a) => ({
-        articleId: a.id,
-        nom: a.nom,
-        reference: a.reference,
-      }));
+    const candidats: CandidatExistant[] = articlesExistants.map((a) => ({
+      articleId: a.id,
+      nom: a.nom,
+      reference: a.reference,
+    }));
 
-      let crees = 0;
-      let misesAJour = 0;
-      let inchanges = 0;
-      const erreurs: string[] = [];
+    // Tarifs actifs des articles existants, préchargés en une seule requête plutôt qu'une par
+    // ligne rapprochée.
+    const tarifsActifsExistants = await prisma.tarifArticle.findMany({
+      where: { actif: true, articleId: { in: articlesExistants.map((a) => a.id) } },
+      orderBy: { dateDebut: "desc" },
+    });
+    const tarifActifParArticle = new Map<number, (typeof tarifsActifsExistants)[number]>();
+    for (const t of tarifsActifsExistants) {
+      if (!tarifActifParArticle.has(t.articleId)) tarifActifParArticle.set(t.articleId, t);
+    }
 
-      for (const ligne of lignes) {
-        const designation = String(ligne.designation ?? "").trim();
-        if (!designation) continue;
+    let crees = 0;
+    let misesAJour = 0;
+    let inchanges = 0;
+    const erreurs: string[] = [];
 
-        const reference = ligne.reference ? String(ligne.reference).trim() : null;
-        const prixTotal = parsePrix(ligne.prix);
-        if (prixTotal === null) {
-          erreurs.push(`Prix illisible pour "${designation}"`);
+    for (const ligne of lignes) {
+      const designation = String(ligne.designation ?? "").trim();
+      if (!designation) continue;
+
+      const reference = ligne.reference ? String(ligne.reference).trim() : null;
+      const prixTotal = parsePrix(ligne.prix);
+      if (prixTotal === null) {
+        erreurs.push(`Prix illisible pour "${designation}"`);
+        continue;
+      }
+
+      // Déduit l'unité de vente (kg/L) et le prix unitaire correspondant à partir de la
+      // désignation/du conditionnement ; à défaut, l'article est considéré vendu à la pièce.
+      const quantiteDetectee = extraireQuantiteDesignation(designation, ligne.conditionnement);
+      let uniteId: number | null = null;
+      let prixHT = prixTotal;
+
+      if (quantiteDetectee && quantiteDetectee.quantite > 0) {
+        const unite = quantiteDetectee.unite === "kg" ? uniteKg : uniteL;
+        if (unite) {
+          uniteId = unite.id;
+          prixHT = Math.round((prixTotal / quantiteDetectee.quantite) * 10000) / 10000;
+        }
+      }
+      if (uniteId === null && unitePiece) {
+        uniteId = unitePiece.id;
+      }
+      if (uniteId === null) {
+        erreurs.push(`Aucune unité disponible pour "${designation}"`);
+        continue;
+      }
+      if (!conditionnement) {
+        erreurs.push(`Aucun conditionnement configuré pour "${designation}"`);
+        continue;
+      }
+
+      const { candidat, score, parReference } = trouverCorrespondance(designation, reference, candidats);
+      const correspondanceValide = candidat && (parReference || score >= SEUIL_CORRESPONDANCE_DESIGNATION);
+
+      if (correspondanceValide && candidat) {
+        const tarifActif = tarifActifParArticle.get(candidat.articleId);
+
+        const inchange =
+          tarifActif &&
+          tarifActif.uniteId === uniteId &&
+          tarifActif.fournisseurId === fournisseurId &&
+          tarifActif.prixHT === prixHT;
+
+        if (inchange) {
+          inchanges++;
           continue;
         }
 
-        // Déduit l'unité de vente (kg/L) et le prix unitaire correspondant à partir de la
-        // désignation/du conditionnement ; à défaut, l'article est considéré vendu à la pièce.
-        const quantiteDetectee = extraireQuantiteDesignation(designation, ligne.conditionnement);
-        let uniteId: number | null = null;
-        let prixHT = prixTotal;
-
-        if (quantiteDetectee && quantiteDetectee.quantite > 0) {
-          const unite = quantiteDetectee.unite === "kg" ? uniteKg : uniteL;
-          if (unite) {
-            uniteId = unite.id;
-            prixHT = Math.round((prixTotal / quantiteDetectee.quantite) * 10000) / 10000;
-          }
-        }
-        if (uniteId === null && unitePiece) {
-          uniteId = unitePiece.id;
-        }
-        if (uniteId === null) {
-          erreurs.push(`Aucune unité disponible pour "${designation}"`);
-          continue;
-        }
-        if (!conditionnement) {
-          erreurs.push(`Aucun conditionnement configuré pour "${designation}"`);
-          continue;
-        }
-
-        const { candidat, score, parReference } = trouverCorrespondance(designation, reference, candidats);
-        const correspondanceValide = candidat && (parReference || score >= SEUIL_CORRESPONDANCE_DESIGNATION);
-
-        if (correspondanceValide && candidat) {
-          const tarifActif = await tx.tarifArticle.findFirst({
-            where: { articleId: candidat.articleId, actif: true },
-            orderBy: { dateDebut: "desc" },
-          });
-
-          const inchange =
-            tarifActif &&
-            tarifActif.uniteId === uniteId &&
-            tarifActif.fournisseurId === fournisseurId &&
-            tarifActif.prixHT === prixHT;
-
-          if (inchange) {
-            inchanges++;
-            continue;
-          }
-
-          if (tarifActif) {
-            await tx.tarifArticle.update({
+        const operations = [];
+        if (tarifActif) {
+          operations.push(
+            prisma.tarifArticle.update({
               where: { id: tarifActif.id },
               data: { actif: false, dateFin: new Date() },
-            });
-          }
-
-          await tx.tarifArticle.create({
+            })
+          );
+        }
+        operations.push(
+          prisma.tarifArticle.create({
             data: {
               articleId: candidat.articleId,
               fournisseurId,
@@ -366,20 +380,25 @@ router.post("/import", async (req: Request, res: Response) => {
               quantiteConditionnement: 1,
               prixHT,
             },
-          });
+          })
+        );
 
-          misesAJour++;
-        } else {
-          const nomsAllergenes = String(ligne.allergenes ?? "")
-            .split(/[,/;]/)
-            .map((m) => m.trim().toLowerCase())
-            .filter(Boolean);
+        const resultats = await prisma.$transaction(operations);
+        tarifActifParArticle.set(candidat.articleId, resultats[resultats.length - 1]);
 
-          const allergeneIds = allergenesExistants
-            .filter((a) => nomsAllergenes.includes(a.nom.toLowerCase()))
-            .map((a) => a.id);
+        misesAJour++;
+      } else {
+        const nomsAllergenes = String(ligne.allergenes ?? "")
+          .split(/[,/;]/)
+          .map((m) => m.trim().toLowerCase())
+          .filter(Boolean);
 
-          const nouvelArticle = await tx.article.create({
+        const allergeneIds = allergenesExistants
+          .filter((a) => nomsAllergenes.includes(a.nom.toLowerCase()))
+          .map((a) => a.id);
+
+        const { nouvelArticle, tarifCree } = await prisma.$transaction(async (tx) => {
+          const created = await tx.article.create({
             data: {
               nom: designation,
               reference,
@@ -392,13 +411,13 @@ router.post("/import", async (req: Request, res: Response) => {
 
           if (allergeneIds.length > 0) {
             await tx.articleAllergene.createMany({
-              data: allergeneIds.map((allergeneId) => ({ articleId: nouvelArticle.id, allergeneId })),
+              data: allergeneIds.map((allergeneId) => ({ articleId: created.id, allergeneId })),
             });
           }
 
-          await tx.tarifArticle.create({
+          const tarifCree = await tx.tarifArticle.create({
             data: {
-              articleId: nouvelArticle.id,
+              articleId: created.id,
               fournisseurId,
               uniteId,
               conditionnementId: conditionnement.id,
@@ -407,15 +426,16 @@ router.post("/import", async (req: Request, res: Response) => {
             },
           });
 
-          candidats.push({ articleId: nouvelArticle.id, nom: designation, reference });
-          crees++;
-        }
+          return { nouvelArticle: created, tarifCree };
+        });
+
+        candidats.push({ articleId: nouvelArticle.id, nom: designation, reference });
+        tarifActifParArticle.set(nouvelArticle.id, tarifCree);
+        crees++;
       }
+    }
 
-      return { crees, misesAJour, inchanges, erreurs };
-    });
-
-    res.json(resultat);
+    res.json({ crees, misesAJour, inchanges, erreurs });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Impossible d'importer le listing" });
