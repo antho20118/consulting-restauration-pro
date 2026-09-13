@@ -7,9 +7,11 @@
     "dev": "vite",
     "server": "tsx server/server.ts",
     "build": "tsc -b && vite build",
+    "start": "prisma migrate deploy && NODE_ENV=production tsx server/server.ts",
     "lint": "eslint .",
     "preview": "vite preview",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
