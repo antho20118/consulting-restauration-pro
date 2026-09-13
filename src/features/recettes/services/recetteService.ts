@@ -1,5 +1,11 @@
 import { API_URL, apiFetch } from "../../../config/api";
-import type { ArticleRecette, Recette, RecetteInput, UniteRecette } from "../types/recette";
+import type {
+  ArticleRecette,
+  Recette,
+  RecetteInput,
+  SuggestionEconomie,
+  UniteRecette,
+} from "../types/recette";
 
 export async function getRecettes(): Promise<Recette[]> {
   const response = await apiFetch(`${API_URL}/recettes`);
@@ -54,6 +60,16 @@ export async function getArticlesDisponibles(): Promise<ArticleRecette[]> {
 
   if (!response.ok) {
     throw new Error("Impossible de récupérer les articles");
+  }
+
+  return response.json();
+}
+
+export async function getSuggestionsEconomie(recetteId: number): Promise<SuggestionEconomie[]> {
+  const response = await apiFetch(`${API_URL}/recettes/${recetteId}/suggestions-economie`);
+
+  if (!response.ok) {
+    throw new Error("Impossible de calculer les suggestions d'économies");
   }
 
   return response.json();

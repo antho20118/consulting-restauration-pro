@@ -7,7 +7,9 @@ type Props = {
 
 export default function RecettesAlerteTable({ recettes }: Props) {
   if (recettes.length === 0) {
-    return <p style={{ color: "#898781" }}>Aucune recette avec un prix de vente renseigné.</p>;
+    return (
+      <p style={{ color: "#0ca30c" }}>✓ Aucune recette ne nécessite d'attention pour le moment.</p>
+    );
   }
 
   return (

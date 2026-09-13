@@ -37,10 +37,14 @@ router.get("/", async (_req: Request, res: Response) => {
         ? foodCostValues.reduce((total, valeur) => total + valeur, 0) / foodCostValues.length
         : null;
 
+    // Seuil "Bon" du statut food cost (voir src/features/dashboard/utils/statutFoodCost.ts, à
+    // garder synchronisé) : ne remonter en alerte que les recettes qui en ont réellement besoin,
+    // plutôt que systématiquement les 5 recettes les plus chères même quand tout va bien.
+    const SEUIL_FOOD_COST_BON = 28;
     const recettesAlerte = recettes
-      .filter((recette) => recette.foodCostPct != null)
+      .filter((recette) => recette.foodCostPct != null && recette.foodCostPct > SEUIL_FOOD_COST_BON)
       .sort((a, b) => (b.foodCostPct ?? 0) - (a.foodCostPct ?? 0))
-      .slice(0, 5)
+      .slice(0, 10)
       .map((recette) => ({
         id: recette.id,
         nom: recette.nom,

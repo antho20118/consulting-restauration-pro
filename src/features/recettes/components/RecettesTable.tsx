@@ -1,4 +1,5 @@
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
+import { statutFoodCost } from "../../dashboard/utils/statutFoodCost";
 import type { Recette } from "../types/recette";
 
 type Props = {
@@ -41,8 +42,27 @@ export default function RecettesTable({ recettes, onView, onEdit, onDelete }: Pr
     {
       field: "foodCostPct",
       headerName: "Food cost",
-      width: 110,
-      valueFormatter: (value) => (value != null ? `${Number(value).toFixed(1)} %` : "—"),
+      width: 130,
+      renderCell: (params) => {
+        const valeur = params.value as number | null;
+        if (valeur == null) return "—";
+        const statut = statutFoodCost(valeur);
+        return (
+          <span>
+            <span
+              style={{
+                display: "inline-block",
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: statut.couleur,
+                marginRight: 6,
+              }}
+            />
+            {valeur.toFixed(1)} %
+          </span>
+        );
+      },
     },
     {
       field: "actions",
