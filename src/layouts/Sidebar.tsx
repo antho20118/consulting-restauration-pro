@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
 
 const menu = [
   { label: "🏠 Tableau de bord", path: "/" },
@@ -43,6 +44,29 @@ export default function Sidebar() {
           {item.label}
         </Link>
       ))}
+
+      <button
+        onClick={() => {
+          // Force une requête neuve (contourne un cache navigateur ou une app ajoutée à
+          // l'écran d'accueil qui, elle, n'a pas de bouton "recharger" accessible).
+          window.location.href = window.location.pathname + "?_=" + Date.now();
+        }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          width: "100%",
+          padding: 12,
+          marginTop: 20,
+          border: "none",
+          borderRadius: 8,
+          background: "#3b4447",
+          color: "white",
+          cursor: "pointer",
+        }}
+      >
+        <RefreshCw size={16} /> Actualiser
+      </button>
     </aside>
   );
 }

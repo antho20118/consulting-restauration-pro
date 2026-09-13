@@ -48,13 +48,27 @@ if (process.env.NODE_ENV === "production") {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const distPath = path.resolve(__dirname, "../dist");
 
-  app.use(express.static(distPath));
+  // index.html doit toujours être revalidé (sinon certains navigateurs, notamment Safari,
+  // continuent de servir une version en cache après un déploiement) ; les fichiers de dist/assets
+  // ont un nom qui change avec leur contenu (hash Vite), donc peuvent être mis en cache longtemps.
+  app.use(
+    express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith("index.html")) {
+          res.setHeader("Cache-Control", "no-cache");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      },
+    })
+  );
 
   app.use((req, res, next) => {
     if (req.method !== "GET") {
       next();
       return;
     }
+    res.setHeader("Cache-Control", "no-cache");
     res.sendFile(path.join(distPath, "index.html"));
   });
 }
