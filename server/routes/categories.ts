@@ -48,20 +48,16 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// Suppression d'une catégorie : refusée si des articles ou des recettes l'utilisent encore
+// Suppression d'une catégorie : refusée si des articles l'utilisent encore
 router.delete("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
 
-    const [nbArticles, nbRecettes] = await Promise.all([
-      prisma.article.count({ where: { categorieId: id } }),
-      prisma.recette.count({ where: { categorieId: id } }),
-    ]);
+    const nbArticles = await prisma.article.count({ where: { categorieId: id } });
 
-    if (nbArticles > 0 || nbRecettes > 0) {
+    if (nbArticles > 0) {
       res.status(400).json({
-        error:
-          "Cette catégorie est utilisée par des ingrédients ou des recettes et ne peut pas être supprimée.",
+        error: "Cette catégorie est utilisée par des ingrédients et ne peut pas être supprimée.",
       });
       return;
     }

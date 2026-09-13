@@ -36,9 +36,18 @@ async function main() {
     await prisma.depot.create({ data: { nom: "Dépôt principal", societeId: societe.id } });
   }
 
-  // Catégories de base
+  // Catégories de base (ingrédients)
   for (const nom of ["Épicerie", "Frais", "Surgelés", "Boissons", "Entretien"]) {
     await prisma.categorie.upsert({
+      where: { nom },
+      update: {},
+      create: { nom },
+    });
+  }
+
+  // Catégories de recettes (distinctes des catégories d'ingrédients ci-dessus)
+  for (const nom of ["Entrée", "Plat", "Dessert", "Autre", "Festif", "Mariage"]) {
+    await prisma.categorieRecette.upsert({
       where: { nom },
       update: {},
       create: { nom },

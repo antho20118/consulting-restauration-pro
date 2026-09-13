@@ -5,6 +5,7 @@ import cors from "cors";
 
 import articlesRouter from "./routes/articles.js";
 import categoriesRouter from "./routes/categories.js";
+import categoriesRecetteRouter from "./routes/categoriesRecette.js";
 import unitesRouter from "./routes/unites.js";
 import recettesRouter from "./routes/recettes.js";
 import dashboardRouter from "./routes/dashboard.js";
@@ -26,6 +27,7 @@ app.use(express.json({ limit: "10mb" }));
 // une fois servi par ce même serveur en production (ex. /recettes est une page React).
 app.use("/api/articles", articlesRouter);
 app.use("/api/categories", categoriesRouter);
+app.use("/api/categories-recette", categoriesRecetteRouter);
 app.use("/api/unites", unitesRouter);
 app.use("/api/recettes", recettesRouter);
 app.use("/api/dashboard", dashboardRouter);
