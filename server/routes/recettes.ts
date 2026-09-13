@@ -1,0 +1,231 @@
+import { Router } from "express";
+import type { Request, Response } from "express";
+
+import prisma from "../prisma.js";
+
+const router = Router();
+
+const inclusionsRecette = {
+  categorie: true,
+  lignes: {
+    orderBy: { ordre: "asc" as const },
+    include: {
+      unite: true,
+      article: {
+        include: {
+          tarifs: {
+            where: { actif: true },
+            orderBy: { dateDebut: "desc" as const },
+            take: 1,
+            include: { unite: true },
+          },
+        },
+      },
+    },
+  },
+};
+
+// Calcule le coût matière d'une recette à partir du dernier tarif actif de chaque ingrédient,
+// en convertissant les unités via leur facteurBase et en tenant compte du rendement de l'article.
+function calculerCoutRecette<
+  T extends {
+    portions: number;
+    prixVenteHT: number | null;
+    lignes: {
+      quantite: number;
+      unite: { facteurBase: number };
+      article: {
+        rendement: number;
+        tarifs: { prixHT: number; unite: { facteurBase: number } }[];
+      };
+    }[];
+  },
+>(recette: T) {
+  let coutTotal = 0;
+
+  const lignes = recette.lignes.map((ligne) => {
+    const tarif = ligne.article.tarifs[0];
+
+    let coutLigne = 0;
+    if (tarif) {
+      const prixParUniteBase = tarif.prixHT / tarif.unite.facteurBase;
+      const quantiteBase = ligne.quantite * ligne.unite.facteurBase;
+      const rendement = ligne.article.rendement || 100;
+      coutLigne = (quantiteBase * prixParUniteBase) / (rendement / 100);
+    }
+
+    coutTotal += coutLigne;
+
+    return { ...ligne, coutLigne };
+  });
+
+  const coutParPortion = recette.portions > 0 ? coutTotal / recette.portions : coutTotal;
+  const foodCostPct =
+    recette.prixVenteHT && recette.prixVenteHT > 0
+      ? (coutParPortion / recette.prixVenteHT) * 100
+      : null;
+  const margeHT = recette.prixVenteHT != null ? recette.prixVenteHT - coutParPortion : null;
+
+  return {
+    ...recette,
+    lignes,
+    coutTotal,
+    coutParPortion,
+    foodCostPct,
+    margeHT,
+  };
+}
+
+// Liste des recettes
+router.get("/", async (_req: Request, res: Response) => {
+  try {
+    const recettes = await prisma.recette.findMany({
+      where: { actif: true },
+      include: inclusionsRecette,
+      orderBy: { nom: "asc" },
+    });
+
+    res.json(recettes.map(calculerCoutRecette));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de récupérer les recettes" });
+  }
+});
+
+// Détail d'une recette
+router.get("/:id", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+
+    const recette = await prisma.recette.findUnique({
+      where: { id },
+      include: inclusionsRecette,
+    });
+
+    if (!recette) {
+      res.status(404).json({ error: "Recette introuvable" });
+      return;
+    }
+
+    res.json(calculerCoutRecette(recette));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de récupérer la recette" });
+  }
+});
+
+// Création d'une recette
+router.post("/", async (req: Request, res: Response) => {
+  try {
+    const {
+      nom,
+      categorieId,
+      societeId,
+      portions,
+      prixVenteHT,
+      instructions,
+      lignes,
+    } = req.body as {
+      nom: string;
+      categorieId?: number | null;
+      societeId: number;
+      portions?: number;
+      prixVenteHT?: number | null;
+      instructions?: string | null;
+      lignes: { articleId: number; quantite: number; uniteId: number }[];
+    };
+
+    const recette = await prisma.recette.create({
+      data: {
+        nom,
+        categorieId: categorieId ?? null,
+        societeId,
+        portions: portions ?? 1,
+        prixVenteHT: prixVenteHT ?? null,
+        instructions: instructions ?? null,
+        lignes: {
+          create: (lignes ?? []).map((ligne, index) => ({
+            articleId: ligne.articleId,
+            quantite: ligne.quantite,
+            uniteId: ligne.uniteId,
+            ordre: index,
+          })),
+        },
+      },
+      include: inclusionsRecette,
+    });
+
+    res.status(201).json(calculerCoutRecette(recette));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de créer la recette" });
+  }
+});
+
+// Mise à jour d'une recette (les lignes sont remplacées intégralement)
+router.put("/:id", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+
+    const {
+      nom,
+      categorieId,
+      portions,
+      prixVenteHT,
+      instructions,
+      lignes,
+    } = req.body as {
+      nom: string;
+      categorieId?: number | null;
+      portions?: number;
+      prixVenteHT?: number | null;
+      instructions?: string | null;
+      lignes: { articleId: number; quantite: number; uniteId: number }[];
+    };
+
+    const recette = await prisma.$transaction(async (tx) => {
+      await tx.recetteLigne.deleteMany({ where: { recetteId: id } });
+
+      return tx.recette.update({
+        where: { id },
+        data: {
+          nom,
+          categorieId: categorieId ?? null,
+          portions: portions ?? 1,
+          prixVenteHT: prixVenteHT ?? null,
+          instructions: instructions ?? null,
+          lignes: {
+            create: (lignes ?? []).map((ligne, index) => ({
+              articleId: ligne.articleId,
+              quantite: ligne.quantite,
+              uniteId: ligne.uniteId,
+              ordre: index,
+            })),
+          },
+        },
+        include: inclusionsRecette,
+      });
+    });
+
+    res.json(calculerCoutRecette(recette));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de mettre à jour la recette" });
+  }
+});
+
+// Suppression (douce) d'une recette
+router.delete("/:id", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+
+    await prisma.recette.update({ where: { id }, data: { actif: false } });
+
+    res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de supprimer la recette" });
+  }
+});
+
+export default router;

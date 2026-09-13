@@ -5,6 +5,7 @@ import type { Request, Response } from "express";
 import prisma from "./prisma.js";
 import categoriesRouter from "./routes/categories.js";
 import unitesRouter from "./routes/unites.js";
+import recettesRouter from "./routes/recettes.js";
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(express.json());
 
 app.use("/categories", categoriesRouter);
 app.use("/unites", unitesRouter);
+app.use("/recettes", recettesRouter);
 
 app.get("/", (_req, res) => {
   res.json({

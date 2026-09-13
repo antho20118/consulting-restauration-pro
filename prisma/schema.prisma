@@ -18,90 +18,95 @@ enum TypeArticle {
 }
 
 model Societe {
-  id          Int      @id @default(autoincrement())
-  nom         String
-  siret       String?  @unique
-  actif       Boolean  @default(true)
+  id    Int     @id @default(autoincrement())
+  nom   String
+  siret String? @unique
+  actif Boolean @default(true)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  depots      Depot[]
+  depots       Depot[]
   fournisseurs Fournisseur[]
-  articles    Article[]
+  articles     Article[]
+  recettes     Recette[]
 }
 
 model Depot {
-  id          Int      @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   nom         String
   description String?
 
-  societeId   Int
-  societe     Societe @relation(fields: [societeId], references: [id])
+  societeId Int
+  societe   Societe @relation(fields: [societeId], references: [id])
 
-  actif       Boolean  @default(true)
+  actif Boolean @default(true)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  stocks      Stock[]
-  mouvements  MouvementStock[]
+  stocks     Stock[]
+  mouvements MouvementStock[]
 }
+
 model Categorie {
-  id          Int      @id @default(autoincrement())
-  nom         String   @unique
-  couleur     String?
-  icone       String?
+  id      Int     @id @default(autoincrement())
+  nom     String  @unique
+  couleur String?
+  icone   String?
 
-  actif       Boolean  @default(true)
+  actif Boolean @default(true)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  articles    Article[]
+  articles Article[]
+  recettes Recette[]
 }
+
 model TVA {
-  id          Int      @id @default(autoincrement())
-  nom         String
-  taux        Float
+  id   Int    @id @default(autoincrement())
+  nom  String
+  taux Float
 
-  actif       Boolean  @default(true)
+  actif Boolean @default(true)
 
-  articles    Article[]
+  articles Article[]
 }
 
 model Article {
-  id              Int          @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  type            TypeArticle
+  type TypeArticle
 
-  nom             String
-  reference        String?
-  codeBarres       String?
+  nom        String
+  reference  String?
+  codeBarres String?
 
-  categorieId      Int
-  categorie        Categorie   @relation(fields: [categorieId], references: [id])
+  categorieId Int
+  categorie   Categorie @relation(fields: [categorieId], references: [id])
 
-  tvaId            Int
-  tva              TVA         @relation(fields: [tvaId], references: [id])
+  tvaId Int
+  tva   TVA @relation(fields: [tvaId], references: [id])
 
-  societeId        Int
-  societe          Societe     @relation(fields: [societeId], references: [id])
+  societeId Int
+  societe   Societe @relation(fields: [societeId], references: [id])
 
-  rendement        Float       @default(100)
+  rendement Float @default(100)
 
-  actif            Boolean     @default(true)
+  actif Boolean @default(true)
 
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  tarifs           TarifArticle[]
-  stocks           Stock[]
+  tarifs TarifArticle[]
+  stocks Stock[]
 
-  nutrition        ValeurNutritionnelle?
-  documents        Document[]
-  allergenes       ArticleAllergene[]
-  mouvements       MouvementStock[]
+  nutrition     ValeurNutritionnelle?
+  documents     Document[]
+  allergenes    ArticleAllergene[]
+  mouvements    MouvementStock[]
+  lignesRecette RecetteLigne[]
 
   @@index([nom])
   @@index([reference])
@@ -109,152 +114,198 @@ model Article {
 }
 
 model Fournisseur {
-  id          Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  nom         String
+  nom String
 
-  telephone   String?
-  email       String?
-  siteWeb     String?
+  telephone String?
+  email     String?
+  siteWeb   String?
 
-  societeId   Int
-  societe     Societe @relation(fields: [societeId], references: [id])
+  societeId Int
+  societe   Societe @relation(fields: [societeId], references: [id])
 
-  actif       Boolean  @default(true)
+  actif Boolean @default(true)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  tarifs      TarifArticle[]
+  tarifs TarifArticle[]
 }
 
 model TarifArticle {
-  id              Int       @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  articleId       Int
-  fournisseurId   Int
-uniteId              Int
-conditionnementId    Int
-quantiteConditionnement Float
+  articleId               Int
+  fournisseurId           Int
+  uniteId                 Int
+  conditionnementId       Int
+  quantiteConditionnement Float
 
-unite               Unite            @relation(fields: [uniteId], references: [id])
-conditionnement     Conditionnement  @relation(fields: [conditionnementId], references: [id])
+  unite           Unite           @relation(fields: [uniteId], references: [id])
+  conditionnement Conditionnement @relation(fields: [conditionnementId], references: [id])
   prixHT          Float
 
-  dateDebut       DateTime  @default(now())
-  dateFin         DateTime?
+  dateDebut DateTime  @default(now())
+  dateFin   DateTime?
 
-  actif           Boolean   @default(true)
+  actif Boolean @default(true)
 
-  article          Article      @relation(fields: [articleId], references: [id])
-  fournisseur      Fournisseur  @relation(fields: [fournisseurId], references: [id])
+  article     Article     @relation(fields: [articleId], references: [id])
+  fournisseur Fournisseur @relation(fields: [fournisseurId], references: [id])
 
   @@index([articleId])
   @@index([fournisseurId])
 }
 
 model Stock {
-  id          Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  articleId   Int
-  depotId     Int
+  articleId Int
+  depotId   Int
 
-  quantite    Float    @default(0)
+  quantite Float @default(0)
 
-  article      Article @relation(fields: [articleId], references: [id])
-  depot        Depot   @relation(fields: [depotId], references: [id])
+  article Article @relation(fields: [articleId], references: [id])
+  depot   Depot   @relation(fields: [depotId], references: [id])
 
   @@unique([articleId, depotId])
 }
+
 model Unite {
-  id          Int      @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   nom         String
   symbole     String
   type        String
   facteurBase Float
-  actif       Boolean  @default(true)
+  actif       Boolean @default(true)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  tarifs      TarifArticle[]
+  tarifs        TarifArticle[]
+  lignesRecette RecetteLigne[]
 }
 
 model Conditionnement {
-  id          Int      @id @default(autoincrement())
-  nom         String
-  actif       Boolean  @default(true)
+  id    Int     @id @default(autoincrement())
+  nom   String
+  actif Boolean @default(true)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  tarifs      TarifArticle[]
+  tarifs TarifArticle[]
 }
 
 model Allergene {
-  id          Int      @id @default(autoincrement())
-  nom         String
-  code        String   @unique
+  id   Int    @id @default(autoincrement())
+  nom  String
+  code String @unique
 
-  articles    ArticleAllergene[]
+  articles ArticleAllergene[]
 }
 
 model ArticleAllergene {
-  articleId     Int
-  allergeneId   Int
+  articleId   Int
+  allergeneId Int
 
-  article        Article     @relation(fields: [articleId], references: [id])
-  allergene      Allergene   @relation(fields: [allergeneId], references: [id])
+  article   Article   @relation(fields: [articleId], references: [id])
+  allergene Allergene @relation(fields: [allergeneId], references: [id])
 
   @@id([articleId, allergeneId])
 }
 
 model ValeurNutritionnelle {
-  articleId            Int   @id
+  articleId Int @id
 
-  energie              Float?
-  proteines            Float?
-  glucides             Float?
-  sucres               Float?
-  lipides              Float?
-  acidesGrasSatures    Float?
-  fibres               Float?
-  sel                  Float?
+  energie           Float?
+  proteines         Float?
+  glucides          Float?
+  sucres            Float?
+  lipides           Float?
+  acidesGrasSatures Float?
+  fibres            Float?
+  sel               Float?
 
-  article              Article @relation(fields: [articleId], references: [id])
+  article Article @relation(fields: [articleId], references: [id])
 }
 
 model Document {
-  id          Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  articleId   Int?
+  articleId Int?
 
-  nom         String
-  type        String
-  chemin      String
+  nom    String
+  type   String
+  chemin String
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  article      Article? @relation(fields: [articleId], references: [id])
+  article Article? @relation(fields: [articleId], references: [id])
 }
 
 model MouvementStock {
-  id          Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  articleId   Int
-  depotId     Int
+  articleId Int
+  depotId   Int
 
-  date        DateTime @default(now())
+  date DateTime @default(now())
 
-  type        String
+  type String
 
-  quantite    Float
+  quantite Float
 
-  motif       String?
+  motif String?
 
-  article     Article @relation(fields: [articleId], references: [id])
-  depot       Depot   @relation(fields: [depotId], references: [id])
+  article Article @relation(fields: [articleId], references: [id])
+  depot   Depot   @relation(fields: [depotId], references: [id])
 
   @@index([articleId])
   @@index([depotId])
+}
+
+model Recette {
+  id Int @id @default(autoincrement())
+
+  nom          String
+  instructions String?
+
+  categorieId Int?
+  categorie   Categorie? @relation(fields: [categorieId], references: [id])
+
+  societeId Int
+  societe   Societe @relation(fields: [societeId], references: [id])
+
+  portions    Int    @default(1)
+  prixVenteHT Float?
+
+  actif Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lignes RecetteLigne[]
+
+  @@index([nom])
+}
+
+model RecetteLigne {
+  id Int @id @default(autoincrement())
+
+  recetteId Int
+  recette   Recette @relation(fields: [recetteId], references: [id], onDelete: Cascade)
+
+  articleId Int
+  article   Article @relation(fields: [articleId], references: [id])
+
+  quantite Float
+  uniteId  Int
+  unite    Unite @relation(fields: [uniteId], references: [id])
+
+  ordre Int @default(0)
+
+  @@index([recetteId])
+  @@index([articleId])
 }

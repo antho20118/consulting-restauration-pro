@@ -2,13 +2,10 @@ import { Routes, Route } from "react-router-dom";
 
 import MainLayout from "../layouts/MainLayout";
 import IngredientsPage from "../features/ingredients/pages/IngredientsPage";
+import RecettesPage from "../features/recettes/pages/RecettesPage";
 
 function Dashboard() {
   return <h1>🏠 Tableau de bord</h1>;
-}
-
-function Recipes() {
-  return <h1>📖 Fiches techniques</h1>;
 }
 
 function Settings() {
@@ -20,7 +17,7 @@ export default function AppRoutes() {
     <Routes>
       <Route element={<MainLayout />}>
         <Route index element={<Dashboard />} />
-        <Route path="recettes" element={<Recipes />} />
+        <Route path="recettes" element={<RecettesPage />} />
         <Route path="ingredients" element={<IngredientsPage />} />
         <Route path="parametres" element={<Settings />} />
       </Route>
