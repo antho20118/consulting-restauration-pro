@@ -1,8 +1,8 @@
-import { API_URL } from "../../../config/api";
+import { API_URL, apiFetch } from "../../../config/api";
 import type { Depot, DepotInput } from "../types/depot";
 
 export async function getDepots(): Promise<Depot[]> {
-  const response = await fetch(`${API_URL}/depots`);
+  const response = await apiFetch(`${API_URL}/depots`);
 
   if (!response.ok) {
     throw new Error("Impossible de récupérer les dépôts");
@@ -12,7 +12,7 @@ export async function getDepots(): Promise<Depot[]> {
 }
 
 export async function creerDepot(input: DepotInput & { societeId: number }): Promise<Depot> {
-  const response = await fetch(`${API_URL}/depots`, {
+  const response = await apiFetch(`${API_URL}/depots`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -26,7 +26,7 @@ export async function creerDepot(input: DepotInput & { societeId: number }): Pro
 }
 
 export async function modifierDepot(id: number, input: DepotInput): Promise<Depot> {
-  const response = await fetch(`${API_URL}/depots/${id}`, {
+  const response = await apiFetch(`${API_URL}/depots/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -40,7 +40,7 @@ export async function modifierDepot(id: number, input: DepotInput): Promise<Depo
 }
 
 export async function supprimerDepot(id: number): Promise<void> {
-  const response = await fetch(`${API_URL}/depots/${id}`, { method: "DELETE" });
+  const response = await apiFetch(`${API_URL}/depots/${id}`, { method: "DELETE" });
 
   if (!response.ok) {
     throw new Error("Impossible de supprimer le dépôt");

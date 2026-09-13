@@ -1,8 +1,8 @@
-import { API_URL } from "../../../config/api";
+import { API_URL, apiFetch } from "../../../config/api";
 import type { Menu, MenuInput } from "../types/menu";
 
 export async function getMenus(): Promise<Menu[]> {
-  const response = await fetch(`${API_URL}/menus`);
+  const response = await apiFetch(`${API_URL}/menus`);
 
   if (!response.ok) {
     throw new Error("Impossible de récupérer les menus");
@@ -12,7 +12,7 @@ export async function getMenus(): Promise<Menu[]> {
 }
 
 export async function creerMenu(input: MenuInput & { societeId: number }): Promise<Menu> {
-  const response = await fetch(`${API_URL}/menus`, {
+  const response = await apiFetch(`${API_URL}/menus`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -26,7 +26,7 @@ export async function creerMenu(input: MenuInput & { societeId: number }): Promi
 }
 
 export async function modifierMenu(id: number, input: MenuInput): Promise<Menu> {
-  const response = await fetch(`${API_URL}/menus/${id}`, {
+  const response = await apiFetch(`${API_URL}/menus/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -40,7 +40,7 @@ export async function modifierMenu(id: number, input: MenuInput): Promise<Menu> 
 }
 
 export async function supprimerMenu(id: number): Promise<void> {
-  const response = await fetch(`${API_URL}/menus/${id}`, { method: "DELETE" });
+  const response = await apiFetch(`${API_URL}/menus/${id}`, { method: "DELETE" });
 
   if (!response.ok) {
     throw new Error("Impossible de supprimer le menu");

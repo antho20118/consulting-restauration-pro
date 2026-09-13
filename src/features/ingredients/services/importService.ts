@@ -1,4 +1,4 @@
-import { API_URL } from "../../../config/api";
+import { API_URL, apiFetch } from "../../../config/api";
 
 export type LigneImport = {
   designation: string;
@@ -24,7 +24,7 @@ export async function importerListing(payload: {
   type: string;
   lignes: LigneImport[];
 }): Promise<ResultatImport> {
-  const response = await fetch(`${API_URL}/articles/import`, {
+  const response = await apiFetch(`${API_URL}/articles/import`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

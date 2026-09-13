@@ -17,6 +17,16 @@ enum TypeArticle {
   PETIT_MATERIEL
 }
 
+// Un seul identifiant/code partagé pour toute l'équipe (pas de notion d'utilisateur nominatif
+// dans le reste de l'appli, une seule société) : une ligne unique (id=1), comme Societe. Le code
+// n'est jamais stocké en clair (codeHache).
+model AccesApplication {
+  id          Int      @id @default(autoincrement())
+  identifiant String
+  codeHache   String
+  updatedAt   DateTime @updatedAt
+}
+
 model Societe {
   id    Int     @id @default(autoincrement())
   nom   String

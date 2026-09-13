@@ -1,4 +1,4 @@
-import { API_URL } from "../../../config/api";
+import { API_URL, apiFetch } from "../../../config/api";
 import type { Allergene, Ingredient } from "../types/ingredient";
 
 export type IngredientInput = {
@@ -14,7 +14,7 @@ export type IngredientInput = {
 };
 
 export async function getIngredients(): Promise<Ingredient[]> {
-  const response = await fetch(`${API_URL}/articles`);
+  const response = await apiFetch(`${API_URL}/articles`);
 
   if (!response.ok) {
     throw new Error("Impossible de récupérer les articles");
@@ -24,7 +24,7 @@ export async function getIngredients(): Promise<Ingredient[]> {
 }
 
 export async function getAllergenes(): Promise<Allergene[]> {
-  const response = await fetch(`${API_URL}/allergenes`);
+  const response = await apiFetch(`${API_URL}/allergenes`);
 
   if (!response.ok) {
     throw new Error("Impossible de récupérer les allergènes");
@@ -36,7 +36,7 @@ export async function getAllergenes(): Promise<Allergene[]> {
 export async function creerIngredient(
   input: IngredientInput & { tvaId: number; societeId: number; type: string }
 ): Promise<Ingredient> {
-  const response = await fetch(`${API_URL}/articles`, {
+  const response = await apiFetch(`${API_URL}/articles`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -50,7 +50,7 @@ export async function creerIngredient(
 }
 
 export async function modifierIngredient(id: number, input: IngredientInput): Promise<Ingredient> {
-  const response = await fetch(`${API_URL}/articles/${id}`, {
+  const response = await apiFetch(`${API_URL}/articles/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -64,7 +64,7 @@ export async function modifierIngredient(id: number, input: IngredientInput): Pr
 }
 
 export async function supprimerIngredient(id: number): Promise<void> {
-  const response = await fetch(`${API_URL}/articles/${id}`, { method: "DELETE" });
+  const response = await apiFetch(`${API_URL}/articles/${id}`, { method: "DELETE" });
 
   if (!response.ok) {
     throw new Error("Impossible de supprimer l'article");

@@ -4,6 +4,7 @@ import CategoriesManager from "../components/CategoriesManager";
 import CategoriesRecetteManager from "../components/CategoriesRecetteManager";
 import UnitesManager from "../components/UnitesManager";
 import TvaManager from "../components/TvaManager";
+import IdentifiantsSection from "../components/IdentifiantsSection";
 
 function Section({ titre, children }: { titre: string; children: ReactNode }) {
   return (
@@ -45,6 +46,10 @@ export default function ParametresPage() {
 
       <Section titre="TVA">
         <TvaManager />
+      </Section>
+
+      <Section titre="Identifiants de connexion">
+        <IdentifiantsSection />
       </Section>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { API_URL } from "../../../config/api";
+import { API_URL, apiFetch } from "../../../config/api";
 import { creerMouvement } from "../services/mouvementService";
 import type { TypeMouvement } from "../types/mouvement";
 
@@ -28,14 +28,14 @@ export default function MouvementForm({ onClose, onSave }: Props) {
   const [motif, setMotif] = useState("");
 
   useEffect(() => {
-    fetch(`${API_URL}/articles`)
+    apiFetch(`${API_URL}/articles`)
       .then((response) => response.json())
       .then((data) => {
         setArticles(data);
         if (data.length > 0) setArticleId(data[0].id);
       });
 
-    fetch(`${API_URL}/depots`)
+    apiFetch(`${API_URL}/depots`)
       .then((response) => response.json())
       .then((data) => {
         setDepots(data);

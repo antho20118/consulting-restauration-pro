@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { API_URL } from "../../../config/api";
+import { API_URL, apiFetch } from "../../../config/api";
 import { creerIngredient, getAllergenes, modifierIngredient } from "../services/ingredientService";
 import type { Allergene, Ingredient } from "../types/ingredient";
 
@@ -40,14 +40,14 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
   );
 
   useEffect(() => {
-    fetch(`${API_URL}/categories`)
+    apiFetch(`${API_URL}/categories`)
       .then((response) => response.json())
       .then((data) => {
         setCategories(data);
         if (!ingredient && data.length > 0) setCategorieId(data[0].id);
       });
 
-    fetch(`${API_URL}/unites`)
+    apiFetch(`${API_URL}/unites`)
       .then((response) => response.json())
       .then((data) => {
         setUnites(data);

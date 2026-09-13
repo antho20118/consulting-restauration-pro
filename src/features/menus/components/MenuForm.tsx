@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { API_URL } from "../../../config/api";
+import { API_URL, apiFetch } from "../../../config/api";
 import ChampNombre from "../../../common/ChampNombre";
 import { getRecettes } from "../../recettes/services/recetteService";
 import type { Recette } from "../../recettes/types/recette";
@@ -33,7 +33,7 @@ export default function MenuForm({ menu, onClose, onSave }: Props) {
   const [recettes, setRecettes] = useState<Recette[]>([]);
 
   useEffect(() => {
-    fetch(`${API_URL}/categories-recette`)
+    apiFetch(`${API_URL}/categories-recette`)
       .then((r) => r.json())
       .then((data) => {
         setCategories(data);

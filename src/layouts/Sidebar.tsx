@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, LogOut } from "lucide-react";
+import { seDeconnecter } from "../config/api";
 
 const menu = [
   { label: "🏠 Tableau de bord", path: "/" },
@@ -67,6 +68,25 @@ export default function Sidebar() {
         }}
       >
         <RefreshCw size={16} /> Actualiser
+      </button>
+
+      <button
+        onClick={seDeconnecter}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          width: "100%",
+          padding: 12,
+          marginTop: 10,
+          border: "none",
+          borderRadius: 8,
+          background: "#3b4447",
+          color: "white",
+          cursor: "pointer",
+        }}
+      >
+        <LogOut size={16} /> Déconnexion
       </button>
     </aside>
   );

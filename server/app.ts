@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
 
+import authRouter from "./routes/auth.js";
+import { requireAuth } from "./middleware/requireAuth.js";
 import articlesRouter from "./routes/articles.js";
 import categoriesRouter from "./routes/categories.js";
 import categoriesRecetteRouter from "./routes/categoriesRecette.js";
@@ -26,6 +28,12 @@ app.use(express.json({ limit: "10mb" }));
 
 // Préfixées par /api pour ne pas entrer en collision avec les routes du frontend
 // une fois servi par ce même serveur en production (ex. /recettes est une page React).
+// /api/auth est montée avant le garde d'authentification : la connexion doit rester accessible
+// sans jeton. Tout le reste de l'API l'exige (vérifié côté serveur, pas seulement caché côté
+// client, sans quoi l'écran de connexion serait contournable en appelant l'API directement).
+app.use("/api/auth", authRouter);
+app.use("/api", requireAuth);
+
 app.use("/api/articles", articlesRouter);
 app.use("/api/categories", categoriesRouter);
 app.use("/api/categories-recette", categoriesRecetteRouter);

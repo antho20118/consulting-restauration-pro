@@ -1,8 +1,8 @@
-import { API_URL } from "../../../config/api";
+import { API_URL, apiFetch } from "../../../config/api";
 import type { Fournisseur, FournisseurInput } from "../types/fournisseur";
 
 export async function getFournisseurs(): Promise<Fournisseur[]> {
-  const response = await fetch(`${API_URL}/fournisseurs`);
+  const response = await apiFetch(`${API_URL}/fournisseurs`);
 
   if (!response.ok) {
     throw new Error("Impossible de récupérer les fournisseurs");
@@ -14,7 +14,7 @@ export async function getFournisseurs(): Promise<Fournisseur[]> {
 export async function creerFournisseur(
   input: FournisseurInput & { societeId: number }
 ): Promise<Fournisseur> {
-  const response = await fetch(`${API_URL}/fournisseurs`, {
+  const response = await apiFetch(`${API_URL}/fournisseurs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -31,7 +31,7 @@ export async function modifierFournisseur(
   id: number,
   input: FournisseurInput
 ): Promise<Fournisseur> {
-  const response = await fetch(`${API_URL}/fournisseurs/${id}`, {
+  const response = await apiFetch(`${API_URL}/fournisseurs/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -45,7 +45,7 @@ export async function modifierFournisseur(
 }
 
 export async function supprimerFournisseur(id: number): Promise<void> {
-  const response = await fetch(`${API_URL}/fournisseurs/${id}`, { method: "DELETE" });
+  const response = await apiFetch(`${API_URL}/fournisseurs/${id}`, { method: "DELETE" });
 
   if (!response.ok) {
     throw new Error("Impossible de supprimer le fournisseur");
