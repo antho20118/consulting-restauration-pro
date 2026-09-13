@@ -24,16 +24,27 @@ type CategorieRecette = {
   nom: string;
 };
 
+// Pré-remplissage optionnel utilisé uniquement à la création (ex. depuis l'import de recette par
+// IA) : contrairement à `recette`, sa présence ne déclenche jamais une modification (PUT) plutôt
+// qu'une création (POST) — voir enregistrer().
+type BrouillonRecette = {
+  nom?: string;
+  portions?: number;
+  lignes?: LigneRecetteInput[];
+  etapes?: EtapeRecetteInput[];
+};
+
 type Props = {
   recette: Recette | null;
+  brouillon?: BrouillonRecette;
   onClose: () => void;
   onSave: () => void;
 };
 
-export default function RecetteForm({ recette, onClose, onSave }: Props) {
-  const [nom, setNom] = useState(recette?.nom ?? "");
+export default function RecetteForm({ recette, brouillon, onClose, onSave }: Props) {
+  const [nom, setNom] = useState(recette?.nom ?? brouillon?.nom ?? "");
   const [categorieId, setCategorieId] = useState<number>(recette?.categorieId ?? 0);
-  const [portions, setPortions] = useState(recette?.portions ?? 1);
+  const [portions, setPortions] = useState(recette?.portions ?? brouillon?.portions ?? 1);
   const [poidsPortionG, setPoidsPortionG] = useState(recette?.poidsPortionG ?? 0);
   const [poidsAccompagnementG, setPoidsAccompagnementG] = useState(
     recette?.poidsAccompagnementG ?? 0
@@ -55,14 +66,16 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
       quantite: ligne.quantite,
       uniteId: ligne.uniteId,
       gainCuissonPct: ligne.gainCuissonPct,
-    })) ?? []
+    })) ??
+      brouillon?.lignes ??
+      []
   );
   const [etapes, setEtapes] = useState<EtapeRecetteInput[]>(
     recette?.etapes.map((etape) => ({
       description: etape.description,
       pointCritiqueHACCP: etape.pointCritiqueHACCP,
       controleHACCP: etape.controleHACCP,
-    })) ?? []
+    })) ?? brouillon?.etapes ?? []
   );
 
   const [categories, setCategories] = useState<CategorieRecette[]>([]);

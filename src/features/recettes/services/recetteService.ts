@@ -1,6 +1,7 @@
 import { API_URL, apiFetch } from "../../../config/api";
 import type {
   ArticleRecette,
+  ExtractionRecette,
   Recette,
   RecetteInput,
   SuggestionEconomie,
@@ -73,6 +74,22 @@ export async function getSuggestionsEconomie(recetteId: number): Promise<Suggest
   }
 
   return response.json();
+}
+
+export async function importerRecetteIA(texte: string): Promise<ExtractionRecette> {
+  const response = await apiFetch(`${API_URL}/recettes/import-ia`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ texte }),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error ?? "Impossible d'analyser cette recette");
+  }
+
+  return data;
 }
 
 export async function getUnitesDisponibles(): Promise<UniteRecette[]> {

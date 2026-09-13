@@ -4,6 +4,7 @@ import type { Request, Response } from "express";
 import prisma from "../prisma.js";
 import { calculerCoutRecette, inclusionsRecette } from "../utils/coutRecette.js";
 import { suggestionsEconomieRecette } from "../utils/suggestionsEconomie.js";
+import { extraireRecetteDepuisTexte, ImportIANonConfigureError } from "../utils/importRecetteIA.js";
 
 const router = Router();
 
@@ -57,6 +58,36 @@ router.get("/:id/suggestions-economie", async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Impossible de calculer les suggestions d'économies" });
+  }
+});
+
+// Import d'une recette depuis un texte libre (IA) : extrait nom, portions, ingrédients et étapes.
+// Ne crée rien en base ni ne rapproche les ingrédients des articles existants (voir
+// server/utils/importRecetteIA.ts) — c'est un brouillon que l'utilisateur complète et valide dans
+// le formulaire de recette habituel avant d'enregistrer.
+router.post("/import-ia", async (req: Request, res: Response) => {
+  try {
+    const { texte } = req.body as { texte?: string };
+
+    if (!texte || !texte.trim()) {
+      res.status(400).json({ error: "Texte de recette requis" });
+      return;
+    }
+
+    const unites = await prisma.unite.findMany({ where: { actif: true } });
+    const extraction = await extraireRecetteDepuisTexte(
+      texte,
+      unites.map((u) => u.symbole)
+    );
+
+    res.json(extraction);
+  } catch (error) {
+    if (error instanceof ImportIANonConfigureError) {
+      res.status(503).json({ error: error.message });
+      return;
+    }
+    console.error(error);
+    res.status(500).json({ error: "Impossible d'analyser cette recette" });
   }
 });
 

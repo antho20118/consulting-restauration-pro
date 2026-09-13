@@ -17,13 +17,18 @@ export default function RechercheArticle({ articles, articleId, onChange }: Prop
   const [recherche, setRecherche] = useState(articleSelectionne?.nom ?? "");
   const [ouvert, setOuvert] = useState(false);
   const [dernierArticleId, setDernierArticleId] = useState(articleId);
+  const [dernierNomResolu, setDernierNomResolu] = useState(articleSelectionne?.nom);
   const conteneurRef = useRef<HTMLDivElement>(null);
 
   // Resynchronise le texte affiché quand la sélection change depuis l'extérieur (ex. un article
-  // par défaut assigné à une nouvelle ligne) — ajustement pendant le rendu plutôt que dans un
-  // effet.
-  if (articleId !== dernierArticleId) {
+  // par défaut assigné à une nouvelle ligne), ou quand le nom vient d'être résolu après coup pour
+  // le même articleId (la liste des articles arrive après coup, par un fetch asynchrone : au
+  // premier rendu d'une recette existante ou d'un brouillon importé, articles est encore vide et
+  // articleSelectionne indéfini bien que articleId soit déjà connu) — ajustement pendant le rendu
+  // plutôt que dans un effet.
+  if (articleId !== dernierArticleId || articleSelectionne?.nom !== dernierNomResolu) {
     setDernierArticleId(articleId);
+    setDernierNomResolu(articleSelectionne?.nom);
     setRecherche(articleSelectionne?.nom ?? "");
   }
 
