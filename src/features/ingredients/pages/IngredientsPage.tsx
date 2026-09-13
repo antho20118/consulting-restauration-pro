@@ -76,7 +76,7 @@ export default function IngredientsPage() {
         }}
       >
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={ouvrirCreation}>
+          <button className="btn-primary" onClick={ouvrirCreation}>
             + Nouvel ingrédient
           </button>
           <button onClick={() => setImportOuvert(true)}>Importer un listing</button>

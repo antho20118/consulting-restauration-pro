@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import { useState } from "react";
 import { creerFournisseur, modifierFournisseur } from "../services/fournisseurService";
 import type { Fournisseur } from "../types/fournisseur";
@@ -27,7 +28,7 @@ export default function FournisseurForm({ fournisseur, onClose, onSave }: Props)
       onSave();
       onClose();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -80,7 +81,7 @@ export default function FournisseurForm({ fournisseur, onClose, onSave }: Props)
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
         <button onClick={onClose}>Annuler</button>
-        <button onClick={enregistrer}>Enregistrer</button>
+        <button className="btn-primary" onClick={enregistrer}>Enregistrer</button>
       </div>
     </div>
   );

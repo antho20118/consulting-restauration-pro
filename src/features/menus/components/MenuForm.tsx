@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import { useEffect, useMemo, useState } from "react";
 import { API_URL, apiFetch } from "../../../config/api";
 import ChampNombre from "../../../common/ChampNombre";
@@ -92,7 +93,7 @@ export default function MenuForm({ menu, onClose, onSave }: Props) {
       onSave();
       onClose();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -215,7 +216,7 @@ export default function MenuForm({ menu, onClose, onSave }: Props) {
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
         <button onClick={onClose}>Annuler</button>
-        <button onClick={enregistrer}>Enregistrer</button>
+        <button className="btn-primary" onClick={enregistrer}>Enregistrer</button>
       </div>
     </div>
   );

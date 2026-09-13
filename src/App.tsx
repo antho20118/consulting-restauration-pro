@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Toaster } from "react-hot-toast";
 import AppRoutes from "./routes/AppRoutes";
 import LoginPage from "./features/auth/pages/LoginPage";
 import { getToken } from "./config/api";
@@ -14,9 +15,10 @@ export default function App() {
     return () => window.removeEventListener("auth:logout", surDeconnexion);
   }, []);
 
-  if (!connecte) {
-    return <LoginPage onConnexion={() => setConnecte(true)} />;
-  }
-
-  return <AppRoutes />;
+  return (
+    <>
+      <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+      {connecte ? <AppRoutes /> : <LoginPage onConnexion={() => setConnecte(true)} />}
+    </>
+  );
 }

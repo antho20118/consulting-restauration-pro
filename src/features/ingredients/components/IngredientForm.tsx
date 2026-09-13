@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import { useEffect, useState } from "react";
 import { API_URL, apiFetch } from "../../../config/api";
 import { creerIngredient, getAllergenes, modifierIngredient } from "../services/ingredientService";
@@ -87,7 +88,7 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
       onSave();
       onClose();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -246,7 +247,7 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
         }}
       >
         <button onClick={onClose}>Annuler</button>
-        <button onClick={enregistrer}>Enregistrer</button>
+        <button className="btn-primary" onClick={enregistrer}>Enregistrer</button>
       </div>
     </div>
   );

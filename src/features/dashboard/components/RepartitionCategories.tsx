@@ -4,7 +4,7 @@ type Props = {
   repartition: RepartitionCategorie[];
 };
 
-const BLEU = "#2a78d6";
+const COULEUR_BARRE = "#16a085";
 const PISTE = "#e1e0d9";
 
 export default function RepartitionCategories({ repartition }: Props) {
@@ -29,7 +29,7 @@ export default function RepartitionCategories({ repartition }: Props) {
             <div
               style={{
                 width: `${(item.count / maxCount) * 100}%`,
-                background: BLEU,
+                background: COULEUR_BARRE,
                 height: 16,
                 borderRadius: "0 4px 4px 0",
               }}

@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import { useEffect, useState } from "react";
 import { getSociete, modifierSociete } from "../services/parametresService";
 import type { Societe } from "../types/parametres";
@@ -19,7 +20,7 @@ export default function SocieteSection() {
       const misAJour = await modifierSociete(societe.id, nom.trim());
       setSociete(misAJour);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -33,7 +34,7 @@ export default function SocieteSection() {
         onChange={(e) => setNom(e.target.value)}
         style={{ flex: 1, padding: 8 }}
       />
-      <button onClick={enregistrer}>Enregistrer</button>
+      <button className="btn-primary" onClick={enregistrer}>Enregistrer</button>
     </div>
   );
 }

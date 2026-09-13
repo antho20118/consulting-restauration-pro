@@ -38,7 +38,7 @@ export default function DepotsPage() {
       <h1>🏭 Dépôts</h1>
 
       <div style={{ marginBottom: 20 }}>
-        <button onClick={ouvrirCreation}>+ Nouveau dépôt</button>
+        <button className="btn-primary" onClick={ouvrirCreation}>+ Nouveau dépôt</button>
       </div>
 
       <DepotsTable depots={depots} onEdit={ouvrirEdition} onDelete={supprimer} />

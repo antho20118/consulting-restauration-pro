@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import { useEffect, useState } from "react";
 import { creerTva, getTva, modifierTva, supprimerTva } from "../services/parametresService";
 import type { Tva, TvaInput } from "../types/parametres";
@@ -31,7 +32,7 @@ export default function TvaManager() {
       setNouvelle(TVA_VIDE);
       chargerTva();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -42,7 +43,7 @@ export default function TvaManager() {
       await modifierTva(tva.id, input);
       chargerTva();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -52,7 +53,7 @@ export default function TvaManager() {
       await supprimerTva(tva.id);
       chargerTva();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -79,8 +80,8 @@ export default function TvaManager() {
               style={{ width: 90, padding: 8 }}
             />
             <span style={{ color: "#898781" }}>%</span>
-            <button onClick={() => enregistrer(tva)}>Enregistrer</button>
-            <button onClick={() => supprimer(tva)}>Supprimer</button>
+            <button className="btn-primary" onClick={() => enregistrer(tva)}>Enregistrer</button>
+            <button className="btn-danger" onClick={() => supprimer(tva)}>Supprimer</button>
           </div>
         );
       })}
@@ -101,7 +102,7 @@ export default function TvaManager() {
           style={{ width: 90, padding: 8 }}
         />
         <span style={{ color: "#898781" }}>%</span>
-        <button onClick={ajouter}>Ajouter</button>
+        <button className="btn-primary" onClick={ajouter}>Ajouter</button>
       </div>
     </div>
   );

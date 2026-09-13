@@ -55,7 +55,7 @@ export default function FournisseursPage() {
           marginBottom: 20,
         }}
       >
-        <button onClick={ouvrirCreation}>+ Nouveau fournisseur</button>
+        <button className="btn-primary" onClick={ouvrirCreation}>+ Nouveau fournisseur</button>
 
         <input
           type="text"

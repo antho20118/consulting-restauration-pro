@@ -52,9 +52,9 @@ export default function RecettesTable({ recettes, onView, onEdit, onDelete }: Pr
       filterable: false,
       renderCell: (params) => (
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => onView(params.row)}>Fiche</button>
-          <button onClick={() => onEdit(params.row)}>Modifier</button>
-          <button onClick={() => onDelete(params.row)}>Supprimer</button>
+          <button className="btn-table" onClick={() => onView(params.row)}>Fiche</button>
+          <button className="btn-table" onClick={() => onEdit(params.row)}>Modifier</button>
+          <button className="btn-table btn-danger" onClick={() => onDelete(params.row)}>Supprimer</button>
         </div>
       ),
     },

@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import { useEffect, useState } from "react";
 import {
   creerCategorie,
@@ -30,7 +31,7 @@ export default function CategoriesManager() {
       setNouveauNom("");
       chargerCategories();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -41,7 +42,7 @@ export default function CategoriesManager() {
       await modifierCategorie(categorie.id, nom);
       chargerCategories();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -51,7 +52,7 @@ export default function CategoriesManager() {
       await supprimerCategorie(categorie.id);
       chargerCategories();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Erreur inconnue");
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
   }
 
@@ -69,7 +70,7 @@ export default function CategoriesManager() {
             style={{ flex: 1, padding: 8 }}
           />
           <button onClick={() => renommer(categorie)}>Renommer</button>
-          <button onClick={() => supprimer(categorie)}>Supprimer</button>
+          <button className="btn-danger" onClick={() => supprimer(categorie)}>Supprimer</button>
         </div>
       ))}
 
@@ -81,7 +82,7 @@ export default function CategoriesManager() {
           onChange={(e) => setNouveauNom(e.target.value)}
           style={{ flex: 1, padding: 8 }}
         />
-        <button onClick={ajouter}>Ajouter</button>
+        <button className="btn-primary" onClick={ajouter}>Ajouter</button>
       </div>
     </div>
   );

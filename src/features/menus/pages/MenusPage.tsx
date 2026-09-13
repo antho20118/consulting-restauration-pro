@@ -81,7 +81,7 @@ export default function MenusPage() {
         }}
       >
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={ouvrirCreation}>+ Nouveau menu</button>
+          <button className="btn-primary" onClick={ouvrirCreation}>+ Nouveau menu</button>
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 

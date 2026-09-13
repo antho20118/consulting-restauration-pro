@@ -34,7 +34,7 @@ export default function MouvementsPage() {
           marginBottom: 20,
         }}
       >
-        <button onClick={() => setFormulaireOuvert(true)}>+ Nouveau mouvement</button>
+        <button className="btn-primary" onClick={() => setFormulaireOuvert(true)}>+ Nouveau mouvement</button>
 
         <input
           type="text"
