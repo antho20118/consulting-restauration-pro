@@ -58,6 +58,13 @@ export default function IngredientsTable({ ingredients, onEdit, onDelete }: Prop
     },
 
     {
+      field: "allergenes",
+      headerName: "Allergènes",
+      flex: 1,
+      valueGetter: (_value, row) => row.allergenes.map((a) => a.allergene.nom).join(", "),
+    },
+
+    {
       field: "actions",
       headerName: "Actions",
       width: 160,

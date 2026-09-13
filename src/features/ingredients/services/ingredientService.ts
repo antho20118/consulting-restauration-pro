@@ -1,5 +1,5 @@
 import { API_URL } from "../../../config/api";
-import type { Ingredient } from "../types/ingredient";
+import type { Allergene, Ingredient } from "../types/ingredient";
 
 export type IngredientInput = {
   nom: string;
@@ -10,6 +10,7 @@ export type IngredientInput = {
   fournisseurNom: string;
   prixHT: number;
   stockInitial: number;
+  allergeneIds: number[];
 };
 
 export async function getIngredients(): Promise<Ingredient[]> {
@@ -17,6 +18,16 @@ export async function getIngredients(): Promise<Ingredient[]> {
 
   if (!response.ok) {
     throw new Error("Impossible de récupérer les articles");
+  }
+
+  return response.json();
+}
+
+export async function getAllergenes(): Promise<Allergene[]> {
+  const response = await fetch(`${API_URL}/allergenes`);
+
+  if (!response.ok) {
+    throw new Error("Impossible de récupérer les allergènes");
   }
 
   return response.json();

@@ -66,6 +66,7 @@ router.post("/", async (req: Request, res: Response) => {
       fournisseurNom,
       prixHT,
       stockInitial,
+      allergeneIds,
     } = req.body;
 
     const article = await prisma.$transaction(async (tx) => {
@@ -80,6 +81,15 @@ router.post("/", async (req: Request, res: Response) => {
           type,
         },
       });
+
+      if (Array.isArray(allergeneIds) && allergeneIds.length > 0) {
+        await tx.articleAllergene.createMany({
+          data: allergeneIds.map((allergeneId: number) => ({
+            articleId: created.id,
+            allergeneId,
+          })),
+        });
+      }
 
       // Tarif (prix + unité + fournisseur) : uniquement si une unité et un prix ont été fournis
       if (uniteId && prixHT !== undefined && prixHT !== null) {
@@ -134,8 +144,17 @@ router.put("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
-    const { nom, reference, categorieId, rendement, uniteId, fournisseurNom, prixHT, stockInitial } =
-      req.body;
+    const {
+      nom,
+      reference,
+      categorieId,
+      rendement,
+      uniteId,
+      fournisseurNom,
+      prixHT,
+      stockInitial,
+      allergeneIds,
+    } = req.body;
 
     const article = await prisma.$transaction(async (tx) => {
       const existant = await tx.article.findUniqueOrThrow({ where: { id } });
@@ -144,6 +163,16 @@ router.put("/:id", async (req: Request, res: Response) => {
         where: { id },
         data: { nom, reference, categorieId, rendement },
       });
+
+      if (Array.isArray(allergeneIds)) {
+        await tx.articleAllergene.deleteMany({ where: { articleId: id } });
+
+        if (allergeneIds.length > 0) {
+          await tx.articleAllergene.createMany({
+            data: allergeneIds.map((allergeneId: number) => ({ articleId: id, allergeneId })),
+          });
+        }
+      }
 
       if (uniteId && prixHT !== undefined && prixHT !== null) {
         const fournisseurId = await trouverOuCreerFournisseur(tx, fournisseurNom, existant.societeId);
