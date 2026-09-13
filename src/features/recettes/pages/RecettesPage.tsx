@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import RecettesTable from "../components/RecettesTable";
+import RecettesGrille from "../components/RecettesGrille";
 import RecetteForm from "../components/RecetteForm";
 import RecetteDetail from "../components/RecetteDetail";
 import ImporterRecetteModal from "../components/ImporterRecetteModal";
@@ -50,6 +50,7 @@ export default function RecettesPage() {
   }
 
   function ouvrirEdition(recette: Recette) {
+    setRecetteConsultee(null);
     setRecetteEnEdition(recette);
     setFormulaireOuvert(true);
   }
@@ -57,6 +58,7 @@ export default function RecettesPage() {
   async function supprimer(recette: Recette) {
     if (!confirm(`Supprimer la recette "${recette.nom}" ?`)) return;
     await supprimerRecette(recette.id);
+    setRecetteConsultee(null);
     chargerRecettes();
   }
 
@@ -92,7 +94,7 @@ export default function RecettesPage() {
 
   return (
     <div style={{ padding: 20 }}>
-      <h1>📖 Fiches techniques</h1>
+      <h1>📖 Fiches recettes</h1>
 
       <div
         style={{
@@ -116,12 +118,7 @@ export default function RecettesPage() {
         />
       </div>
 
-      <RecettesTable
-        recettes={recettesFiltrees}
-        onView={setRecetteConsultee}
-        onEdit={ouvrirEdition}
-        onDelete={supprimer}
-      />
+      <RecettesGrille recettes={recettesFiltrees} onOuvrir={setRecetteConsultee} />
 
       {formulaireOuvert && (
         <div
@@ -184,7 +181,12 @@ export default function RecettesPage() {
             padding: "40px 0",
           }}
         >
-          <RecetteDetail recette={recetteConsultee} onClose={() => setRecetteConsultee(null)} />
+          <RecetteDetail
+            recette={recetteConsultee}
+            onClose={() => setRecetteConsultee(null)}
+            onEdit={ouvrirEdition}
+            onDelete={supprimer}
+          />
         </div>
       )}
     </div>
