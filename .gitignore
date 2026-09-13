@@ -1,0 +1,10 @@
+node_modules
+dist
+.vscode
+.env
+.env.local
+coverage
+*.log
+/src/generated/prisma
+prisma/*.db
+prisma/*.db-journal

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>consulting-restauration-pro</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="diagnostic" style="display:none; position:fixed; inset:0; background:#fff; color:#b00020; font-family:monospace; font-size:14px; padding:20px; white-space:pre-wrap; overflow:auto; z-index:99999;"></div>
+    <script>
+      function afficherErreur(msg) {
+        var d = document.getElementById("diagnostic");
+        d.style.display = "block";
+        d.textContent += msg + "\n\n";
+      }
+      window.addEventListener("error", function (e) {
+        afficherErreur("ERREUR: " + e.message + "\n  fichier: " + e.filename + ":" + e.lineno + ":" + e.colno + "\n  stack: " + (e.error && e.error.stack));
+      });
+      window.addEventListener("unhandledrejection", function (e) {
+        afficherErreur("PROMESSE REJETÉE: " + (e.reason && (e.reason.stack || e.reason.message || e.reason)));
+      });
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

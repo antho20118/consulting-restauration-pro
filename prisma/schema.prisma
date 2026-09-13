@@ -1,0 +1,260 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./consulting.db"
+}
+
+enum TypeArticle {
+  MATIERE_PREMIERE
+  SOUS_RECETTE
+  PRODUIT_FINI
+  EMBALLAGE
+  CONSOMMABLE
+  ENTRETIEN
+  PETIT_MATERIEL
+}
+
+model Societe {
+  id          Int      @id @default(autoincrement())
+  nom         String
+  siret       String?  @unique
+  actif       Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  depots      Depot[]
+  fournisseurs Fournisseur[]
+  articles    Article[]
+}
+
+model Depot {
+  id          Int      @id @default(autoincrement())
+  nom         String
+  description String?
+
+  societeId   Int
+  societe     Societe @relation(fields: [societeId], references: [id])
+
+  actif       Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stocks      Stock[]
+  mouvements  MouvementStock[]
+}
+model Categorie {
+  id          Int      @id @default(autoincrement())
+  nom         String   @unique
+  couleur     String?
+  icone       String?
+
+  actif       Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  articles    Article[]
+}
+model TVA {
+  id          Int      @id @default(autoincrement())
+  nom         String
+  taux        Float
+
+  actif       Boolean  @default(true)
+
+  articles    Article[]
+}
+
+model Article {
+  id              Int          @id @default(autoincrement())
+
+  type            TypeArticle
+
+  nom             String
+  reference        String?
+  codeBarres       String?
+
+  categorieId      Int
+  categorie        Categorie   @relation(fields: [categorieId], references: [id])
+
+  tvaId            Int
+  tva              TVA         @relation(fields: [tvaId], references: [id])
+
+  societeId        Int
+  societe          Societe     @relation(fields: [societeId], references: [id])
+
+  rendement        Float       @default(100)
+
+  actif            Boolean     @default(true)
+
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  tarifs           TarifArticle[]
+  stocks           Stock[]
+
+  nutrition        ValeurNutritionnelle?
+  documents        Document[]
+  allergenes       ArticleAllergene[]
+  mouvements       MouvementStock[]
+
+  @@index([nom])
+  @@index([reference])
+  @@index([codeBarres])
+}
+
+model Fournisseur {
+  id          Int      @id @default(autoincrement())
+
+  nom         String
+
+  telephone   String?
+  email       String?
+  siteWeb     String?
+
+  societeId   Int
+  societe     Societe @relation(fields: [societeId], references: [id])
+
+  actif       Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tarifs      TarifArticle[]
+}
+
+model TarifArticle {
+  id              Int       @id @default(autoincrement())
+
+  articleId       Int
+  fournisseurId   Int
+uniteId              Int
+conditionnementId    Int
+quantiteConditionnement Float
+
+unite               Unite            @relation(fields: [uniteId], references: [id])
+conditionnement     Conditionnement  @relation(fields: [conditionnementId], references: [id])
+  prixHT          Float
+
+  dateDebut       DateTime  @default(now())
+  dateFin         DateTime?
+
+  actif           Boolean   @default(true)
+
+  article          Article      @relation(fields: [articleId], references: [id])
+  fournisseur      Fournisseur  @relation(fields: [fournisseurId], references: [id])
+
+  @@index([articleId])
+  @@index([fournisseurId])
+}
+
+model Stock {
+  id          Int      @id @default(autoincrement())
+
+  articleId   Int
+  depotId     Int
+
+  quantite    Float    @default(0)
+
+  article      Article @relation(fields: [articleId], references: [id])
+  depot        Depot   @relation(fields: [depotId], references: [id])
+
+  @@unique([articleId, depotId])
+}
+model Unite {
+  id          Int      @id @default(autoincrement())
+  nom         String
+  symbole     String
+  type        String
+  facteurBase Float
+  actif       Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tarifs      TarifArticle[]
+}
+
+model Conditionnement {
+  id          Int      @id @default(autoincrement())
+  nom         String
+  actif       Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tarifs      TarifArticle[]
+}
+
+model Allergene {
+  id          Int      @id @default(autoincrement())
+  nom         String
+  code        String   @unique
+
+  articles    ArticleAllergene[]
+}
+
+model ArticleAllergene {
+  articleId     Int
+  allergeneId   Int
+
+  article        Article     @relation(fields: [articleId], references: [id])
+  allergene      Allergene   @relation(fields: [allergeneId], references: [id])
+
+  @@id([articleId, allergeneId])
+}
+
+model ValeurNutritionnelle {
+  articleId            Int   @id
+
+  energie              Float?
+  proteines            Float?
+  glucides             Float?
+  sucres               Float?
+  lipides              Float?
+  acidesGrasSatures    Float?
+  fibres               Float?
+  sel                  Float?
+
+  article              Article @relation(fields: [articleId], references: [id])
+}
+
+model Document {
+  id          Int      @id @default(autoincrement())
+
+  articleId   Int?
+
+  nom         String
+  type        String
+  chemin      String
+
+  createdAt   DateTime @default(now())
+
+  article      Article? @relation(fields: [articleId], references: [id])
+}
+
+model MouvementStock {
+  id          Int      @id @default(autoincrement())
+
+  articleId   Int
+  depotId     Int
+
+  date        DateTime @default(now())
+
+  type        String
+
+  quantite    Float
+
+  motif       String?
+
+  article     Article @relation(fields: [articleId], references: [id])
+  depot       Depot   @relation(fields: [depotId], references: [id])
+
+  @@index([articleId])
+  @@index([depotId])
+}
