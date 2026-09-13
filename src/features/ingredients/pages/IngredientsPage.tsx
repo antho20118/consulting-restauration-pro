@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import IngredientsTable from "../components/IngredientsTable";
 import IngredientForm from "../components/IngredientForm";
+import ImportListingModal from "../components/ImportListingModal";
 import { getIngredients, supprimerIngredient } from "../services/ingredientService";
 import { exporterExcel } from "../../../common/exportExcel";
 import type { Ingredient } from "../types/ingredient";
@@ -9,6 +10,7 @@ export default function IngredientsPage() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [ingredientEnEdition, setIngredientEnEdition] = useState<Ingredient | null>(null);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
+  const [importOuvert, setImportOuvert] = useState(false);
   const [recherche, setRecherche] = useState("");
 
   async function chargerIngredients() {
@@ -77,6 +79,7 @@ export default function IngredientsPage() {
           <button onClick={ouvrirCreation}>
             + Nouvel ingrédient
           </button>
+          <button onClick={() => setImportOuvert(true)}>Importer un listing</button>
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 
@@ -114,6 +117,26 @@ export default function IngredientsPage() {
           <IngredientForm
             ingredient={ingredientEnEdition}
             onClose={() => setFormulaireOuvert(false)}
+            onSave={chargerIngredients}
+          />
+        </div>
+      )}
+
+      {importOuvert && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            overflowY: "auto",
+            padding: "40px 0",
+          }}
+        >
+          <ImportListingModal
+            onClose={() => setImportOuvert(false)}
             onSave={chargerIngredients}
           />
         </div>

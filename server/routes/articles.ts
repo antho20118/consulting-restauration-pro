@@ -2,6 +2,13 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 
 import prisma from "../prisma.js";
+import {
+  extraireQuantiteDesignation,
+  parsePrix,
+  SEUIL_CORRESPONDANCE_DESIGNATION,
+  trouverCorrespondance,
+  type CandidatExistant,
+} from "../utils/importListing.js";
 
 const router = Router();
 
@@ -244,6 +251,174 @@ router.delete("/:id", async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Impossible de supprimer l'article" });
+  }
+});
+
+// Import d'un listing fournisseur (Excel/CSV, déjà parsé côté frontend) : chaque ligne est
+// rapprochée des articles existants (par référence puis par similarité de désignation) ; une
+// correspondance met à jour le tarif (historisé) si le prix/l'unité a changé, sinon crée un
+// nouvel article avec son premier tarif.
+router.post("/import", async (req: Request, res: Response) => {
+  try {
+    const { societeId, fournisseurNom, categorieId, tvaId, type, lignes } = req.body;
+
+    if (!Array.isArray(lignes) || lignes.length === 0) {
+      res.status(400).json({ error: "Aucune ligne à importer" });
+      return;
+    }
+
+    const resultat = await prisma.$transaction(async (tx) => {
+      const fournisseurId = await trouverOuCreerFournisseur(tx, fournisseurNom, societeId);
+
+      const [uniteKg, uniteL, unitePiece, conditionnement, allergenesExistants, articlesExistants] =
+        await Promise.all([
+          tx.unite.findFirst({ where: { symbole: { equals: "kg", mode: "insensitive" } } }),
+          tx.unite.findFirst({ where: { symbole: { equals: "l", mode: "insensitive" } } }),
+          tx.unite.findFirst({ where: { symbole: { equals: "pièce", mode: "insensitive" } } }),
+          tx.conditionnement.findFirst({ orderBy: { id: "asc" } }),
+          tx.allergene.findMany(),
+          tx.article.findMany({
+            where: { societeId, actif: true },
+            select: { id: true, nom: true, reference: true },
+          }),
+        ]);
+
+      const candidats: CandidatExistant[] = articlesExistants.map((a) => ({
+        articleId: a.id,
+        nom: a.nom,
+        reference: a.reference,
+      }));
+
+      let crees = 0;
+      let misesAJour = 0;
+      let inchanges = 0;
+      const erreurs: string[] = [];
+
+      for (const ligne of lignes) {
+        const designation = String(ligne.designation ?? "").trim();
+        if (!designation) continue;
+
+        const reference = ligne.reference ? String(ligne.reference).trim() : null;
+        const prixTotal = parsePrix(ligne.prix);
+        if (prixTotal === null) {
+          erreurs.push(`Prix illisible pour "${designation}"`);
+          continue;
+        }
+
+        // Déduit l'unité de vente (kg/L) et le prix unitaire correspondant à partir de la
+        // désignation/du conditionnement ; à défaut, l'article est considéré vendu à la pièce.
+        const quantiteDetectee = extraireQuantiteDesignation(designation, ligne.conditionnement);
+        let uniteId: number | null = null;
+        let prixHT = prixTotal;
+
+        if (quantiteDetectee && quantiteDetectee.quantite > 0) {
+          const unite = quantiteDetectee.unite === "kg" ? uniteKg : uniteL;
+          if (unite) {
+            uniteId = unite.id;
+            prixHT = Math.round((prixTotal / quantiteDetectee.quantite) * 10000) / 10000;
+          }
+        }
+        if (uniteId === null && unitePiece) {
+          uniteId = unitePiece.id;
+        }
+        if (uniteId === null) {
+          erreurs.push(`Aucune unité disponible pour "${designation}"`);
+          continue;
+        }
+        if (!conditionnement) {
+          erreurs.push(`Aucun conditionnement configuré pour "${designation}"`);
+          continue;
+        }
+
+        const { candidat, score, parReference } = trouverCorrespondance(designation, reference, candidats);
+        const correspondanceValide = candidat && (parReference || score >= SEUIL_CORRESPONDANCE_DESIGNATION);
+
+        if (correspondanceValide && candidat) {
+          const tarifActif = await tx.tarifArticle.findFirst({
+            where: { articleId: candidat.articleId, actif: true },
+            orderBy: { dateDebut: "desc" },
+          });
+
+          const inchange =
+            tarifActif &&
+            tarifActif.uniteId === uniteId &&
+            tarifActif.fournisseurId === fournisseurId &&
+            tarifActif.prixHT === prixHT;
+
+          if (inchange) {
+            inchanges++;
+            continue;
+          }
+
+          if (tarifActif) {
+            await tx.tarifArticle.update({
+              where: { id: tarifActif.id },
+              data: { actif: false, dateFin: new Date() },
+            });
+          }
+
+          await tx.tarifArticle.create({
+            data: {
+              articleId: candidat.articleId,
+              fournisseurId,
+              uniteId,
+              conditionnementId: conditionnement.id,
+              quantiteConditionnement: 1,
+              prixHT,
+            },
+          });
+
+          misesAJour++;
+        } else {
+          const nomsAllergenes = String(ligne.allergenes ?? "")
+            .split(/[,/;]/)
+            .map((m) => m.trim().toLowerCase())
+            .filter(Boolean);
+
+          const allergeneIds = allergenesExistants
+            .filter((a) => nomsAllergenes.includes(a.nom.toLowerCase()))
+            .map((a) => a.id);
+
+          const nouvelArticle = await tx.article.create({
+            data: {
+              nom: designation,
+              reference,
+              categorieId,
+              tvaId,
+              societeId,
+              type: type || "MATIERE_PREMIERE",
+            },
+          });
+
+          if (allergeneIds.length > 0) {
+            await tx.articleAllergene.createMany({
+              data: allergeneIds.map((allergeneId) => ({ articleId: nouvelArticle.id, allergeneId })),
+            });
+          }
+
+          await tx.tarifArticle.create({
+            data: {
+              articleId: nouvelArticle.id,
+              fournisseurId,
+              uniteId,
+              conditionnementId: conditionnement.id,
+              quantiteConditionnement: 1,
+              prixHT,
+            },
+          });
+
+          candidats.push({ articleId: nouvelArticle.id, nom: designation, reference });
+          crees++;
+        }
+      }
+
+      return { crees, misesAJour, inchanges, erreurs };
+    });
+
+    res.json(resultat);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible d'importer le listing" });
   }
 });
 
