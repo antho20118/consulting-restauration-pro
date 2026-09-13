@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import IngredientsTable from "../components/IngredientsTable";
 import IngredientForm from "../components/IngredientForm";
 import { getIngredients, supprimerIngredient } from "../services/ingredientService";
+import { exporterExcel } from "../../../common/exportExcel";
 import type { Ingredient } from "../types/ingredient";
 
 export default function IngredientsPage() {
@@ -43,6 +44,23 @@ export default function IngredientsPage() {
     chargerIngredients();
   }
 
+  function exporter() {
+    exporterExcel(`ingredients_${new Date().toISOString().slice(0, 10)}.xlsx`, [
+      {
+        nom: "Ingrédients",
+        lignes: ingredientsFiltres.map((ingredient) => ({
+          Nom: ingredient.nom,
+          Référence: ingredient.reference ?? "",
+          Catégorie: ingredient.categorie?.nom ?? "",
+          Unité: ingredient.tarifs[0]?.unite.symbole ?? "",
+          Fournisseur: ingredient.tarifs[0]?.fournisseur.nom ?? "",
+          "Prix HT (€)": ingredient.tarifs[0]?.prixHT ?? 0,
+          Stock: ingredient.stocks?.[0]?.quantite ?? 0,
+        })),
+      },
+    ]);
+  }
+
   return (
     <div style={{ padding: 20 }}>
       <h1>🥕 Base ingrédients</h1>
@@ -54,9 +72,12 @@ export default function IngredientsPage() {
           marginBottom: 20,
         }}
       >
-        <button onClick={ouvrirCreation}>
-          + Nouvel ingrédient
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={ouvrirCreation}>
+            + Nouvel ingrédient
+          </button>
+          <button onClick={exporter}>Exporter Excel</button>
+        </div>
 
         <input
           type="text"

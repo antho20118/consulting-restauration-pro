@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import RecettesTable from "../components/RecettesTable";
 import RecetteForm from "../components/RecetteForm";
 import { getRecettes, supprimerRecette } from "../services/recetteService";
+import { exporterExcel } from "../../../common/exportExcel";
 import type { Recette } from "../types/recette";
 
 export default function RecettesPage() {
@@ -41,6 +42,36 @@ export default function RecettesPage() {
     chargerRecettes();
   }
 
+  function exporter() {
+    exporterExcel(`recettes_${new Date().toISOString().slice(0, 10)}.xlsx`, [
+      {
+        nom: "Recettes",
+        lignes: recettesFiltrees.map((recette) => ({
+          Nom: recette.nom,
+          Catégorie: recette.categorie?.nom ?? "",
+          Portions: recette.portions,
+          "Coût total (€)": Number(recette.coutTotal.toFixed(2)),
+          "Coût / portion (€)": Number(recette.coutParPortion.toFixed(2)),
+          "Prix de vente HT (€)": recette.prixVenteHT ?? "",
+          "Food cost (%)": recette.foodCostPct != null ? Number(recette.foodCostPct.toFixed(1)) : "",
+          "Marge HT (€)": recette.margeHT != null ? Number(recette.margeHT.toFixed(2)) : "",
+        })),
+      },
+      {
+        nom: "Ingrédients par recette",
+        lignes: recettesFiltrees.flatMap((recette) =>
+          recette.lignes.map((ligne) => ({
+            Recette: recette.nom,
+            Ingrédient: ligne.article.nom,
+            Quantité: ligne.quantite,
+            Unité: ligne.unite.symbole,
+            "Coût ligne (€)": Number(ligne.coutLigne.toFixed(2)),
+          }))
+        ),
+      },
+    ]);
+  }
+
   return (
     <div style={{ padding: 20 }}>
       <h1>📖 Fiches techniques</h1>
@@ -52,7 +83,10 @@ export default function RecettesPage() {
           marginBottom: 20,
         }}
       >
-        <button onClick={ouvrirCreation}>+ Nouvelle recette</button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={ouvrirCreation}>+ Nouvelle recette</button>
+          <button onClick={exporter}>Exporter Excel</button>
+        </div>
 
         <input
           type="text"
