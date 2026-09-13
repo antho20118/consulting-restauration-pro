@@ -54,7 +54,7 @@ export default function IngredientsTable({ ingredients, onEdit, onDelete }: Prop
       headerName: "Stock",
       width: 120,
       valueGetter: (_value, row) =>
-        row.stocks?.[0]?.quantite ?? 0,
+        row.stocks?.reduce((total, stock) => total + stock.quantite, 0) ?? 0,
     },
 
     {

@@ -11,6 +11,7 @@ import fournisseursRouter from "./routes/fournisseurs.js";
 import tvaRouter from "./routes/tva.js";
 import allergenesRouter from "./routes/allergenes.js";
 import mouvementsRouter from "./routes/mouvements.js";
+import depotsRouter from "./routes/depots.js";
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use("/fournisseurs", fournisseursRouter);
 app.use("/tva", tvaRouter);
 app.use("/allergenes", allergenesRouter);
 app.use("/mouvements", mouvementsRouter);
+app.use("/depots", depotsRouter);
 
 app.get("/", (_req, res) => {
   res.json({
