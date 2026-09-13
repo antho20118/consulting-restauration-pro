@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 const menu = [
   { label: "🏠 Tableau de bord", path: "/" },
   { label: "📖 Fiches techniques", path: "/recettes" },
+  { label: "🍽️ Menus", path: "/menus" },
   { label: "🥕 Base ingrédients", path: "/ingredients" },
   { label: "🚚 Fournisseurs", path: "/fournisseurs" },
   { label: "📦 Mouvements de stock", path: "/mouvements" },
