@@ -1,8 +1,8 @@
-import { API_URL } from "../../../config/api";
+import { API_URL, apiFetch } from "../../../config/api";
 import type { MouvementInput, MouvementStock } from "../types/mouvement";
 
 export async function getMouvements(): Promise<MouvementStock[]> {
-  const response = await fetch(`${API_URL}/mouvements`);
+  const response = await apiFetch(`${API_URL}/mouvements`);
 
   if (!response.ok) {
     throw new Error("Impossible de récupérer les mouvements de stock");
@@ -12,7 +12,7 @@ export async function getMouvements(): Promise<MouvementStock[]> {
 }
 
 export async function creerMouvement(input: MouvementInput): Promise<MouvementStock> {
-  const response = await fetch(`${API_URL}/mouvements`, {
+  const response = await apiFetch(`${API_URL}/mouvements`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),

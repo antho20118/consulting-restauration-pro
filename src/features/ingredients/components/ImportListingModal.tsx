@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { API_URL } from "../../../config/api";
+import { API_URL, apiFetch } from "../../../config/api";
 import { lireFichierImport } from "../../../common/importExcel";
 import { importerListing, type ResultatImport } from "../services/importService";
 
@@ -57,8 +57,8 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
 
   async function chargerListesReference() {
     const [reponseCategories, reponseTva] = await Promise.all([
-      fetch(`${API_URL}/categories`),
-      fetch(`${API_URL}/tva`),
+      apiFetch(`${API_URL}/categories`),
+      apiFetch(`${API_URL}/tva`),
     ]);
     const donneesCategories = await reponseCategories.json();
     const donneesTva = await reponseTva.json();

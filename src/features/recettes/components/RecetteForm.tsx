@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { API_URL } from "../../../config/api";
+import { API_URL, apiFetch } from "../../../config/api";
 import ChampNombre from "../../../common/ChampNombre";
 import { redimensionnerImage } from "../../../common/redimensionnerImage";
 import {
@@ -69,7 +69,7 @@ export default function RecetteForm({ recette, onClose, onSave }: Props) {
   const [unites, setUnites] = useState<UniteRecette[]>([]);
 
   useEffect(() => {
-    fetch(`${API_URL}/categories-recette`)
+    apiFetch(`${API_URL}/categories-recette`)
       .then((r) => r.json())
       .then((data) => {
         setCategories(data);
