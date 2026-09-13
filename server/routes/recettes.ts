@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 
 import prisma from "../prisma.js";
 import { calculerCoutRecette, inclusionsRecette } from "../utils/coutRecette.js";
+import { suggestionsEconomieRecette } from "../utils/suggestionsEconomie.js";
 
 const router = Router();
 
@@ -41,6 +42,21 @@ router.get("/:id", async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Impossible de récupérer la recette" });
+  }
+});
+
+// Suggestions d'économies : articles moins chers de la même catégorie qui feraient baisser le
+// coût de la recette (voir server/utils/suggestionsEconomie.ts).
+router.get("/:id/suggestions-economie", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+
+    const suggestions = await suggestionsEconomieRecette(id);
+
+    res.json(suggestions);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de calculer les suggestions d'économies" });
   }
 });
 

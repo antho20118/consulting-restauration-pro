@@ -1,4 +1,5 @@
 import CalculateurProduction from "./CalculateurProduction";
+import SuggestionsEconomie from "./SuggestionsEconomie";
 import type { Recette } from "../types/recette";
 
 type Props = {
@@ -159,6 +160,7 @@ export default function RecetteDetail({ recette, onClose }: Props) {
       </div>
 
       <div className="fiche-technique-sans-impression">
+        <SuggestionsEconomie recetteId={recette.id} />
         <CalculateurProduction recette={recette} />
       </div>
 
