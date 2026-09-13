@@ -6,6 +6,7 @@ export type LigneImport = {
   conditionnement?: string;
   reference?: string;
   allergenes?: string;
+  categorie?: string;
 };
 
 export type ResultatImport = {

@@ -12,6 +12,7 @@ type Mapping = {
   conditionnement: string;
   reference: string;
   allergenes: string;
+  categorie: string;
 };
 
 const MAPPING_VIDE: Mapping = {
@@ -20,6 +21,7 @@ const MAPPING_VIDE: Mapping = {
   conditionnement: "",
   reference: "",
   allergenes: "",
+  categorie: "",
 };
 
 const CHAMPS_A_MAPPER: { cle: keyof Mapping; label: string }[] = [
@@ -28,6 +30,7 @@ const CHAMPS_A_MAPPER: { cle: keyof Mapping; label: string }[] = [
   { cle: "conditionnement", label: "Conditionnement" },
   { cle: "reference", label: "Référence" },
   { cle: "allergenes", label: "Allergènes" },
+  { cle: "categorie", label: "Catégorie" },
 ];
 
 type Props = {
@@ -97,6 +100,7 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
     const idxCond = entetes.indexOf(mapping.conditionnement);
     const idxRef = entetes.indexOf(mapping.reference);
     const idxAllerg = entetes.indexOf(mapping.allergenes);
+    const idxCategorie = entetes.indexOf(mapping.categorie);
 
     const lignes = lignesBrutes
       .map((ligne) => {
@@ -110,6 +114,7 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
           conditionnement: idxCond >= 0 ? String(ligne[idxCond] ?? "").trim() : "",
           reference: idxRef >= 0 ? String(ligne[idxRef] ?? "").trim() : "",
           allergenes: idxAllerg >= 0 ? String(ligne[idxAllerg] ?? "").trim() : "",
+          categorie: idxCategorie >= 0 ? String(ligne[idxCategorie] ?? "").trim() : "",
         };
       })
       .filter((ligne): ligne is NonNullable<typeof ligne> => ligne !== null);
@@ -175,7 +180,7 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
             style={{ width: "100%", padding: 10, marginBottom: 20 }}
           />
 
-          <label>Catégorie des nouveaux articles</label>
+          <label>Catégorie par défaut (si la colonne "Catégorie" n'est pas mappée ou vide)</label>
           <select
             value={categorieId}
             onChange={(e) => setCategorieId(Number(e.target.value))}

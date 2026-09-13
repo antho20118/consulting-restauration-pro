@@ -23,6 +23,12 @@ async function main() {
     update: {},
     create: { nom: "TVA 20 %", taux: 20 },
   });
+  // Taux particulier applicable en Corse sur certains produits (art. 297 du CGI)
+  await prisma.tVA.upsert({
+    where: { id: 3 },
+    update: {},
+    create: { nom: "TVA 2,1 %", taux: 2.1 },
+  });
 
   // Dépôt par défaut (nécessaire pour enregistrer du stock)
   const depotExistant = await prisma.depot.findFirst({ where: { societeId: societe.id } });
