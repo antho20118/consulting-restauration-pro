@@ -5,6 +5,7 @@ const menu = [
   { label: "📖 Fiches techniques", path: "/recettes" },
   { label: "🥕 Base ingrédients", path: "/ingredients" },
   { label: "🚚 Fournisseurs", path: "/fournisseurs" },
+  { label: "📦 Mouvements de stock", path: "/mouvements" },
   { label: "⚙ Paramètres", path: "/parametres" },
 ];
 
