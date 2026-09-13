@@ -16,9 +16,20 @@ export interface Societe {
   nom: string;
 }
 
+export interface Tva {
+  id: number;
+  nom: string;
+  taux: number;
+}
+
 export type UniteInput = {
   nom: string;
   symbole: string;
   type: string;
   facteurBase: number;
+};
+
+export type TvaInput = {
+  nom: string;
+  taux: number;
 };
