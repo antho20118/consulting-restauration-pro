@@ -22,11 +22,12 @@ router.get("/", async (_req: Request, res: Response) => {
   }
 });
 
-// Enregistre un mouvement (entrée ou sortie) et ajuste le stock du dépôt principal en conséquence.
+// Enregistre un mouvement (entrée ou sortie) et ajuste le stock du dépôt choisi en conséquence.
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const { articleId, type, quantite, motif } = req.body as {
+    const { articleId, depotId, type, quantite, motif } = req.body as {
       articleId: number;
+      depotId: number;
       type: "ENTREE" | "SORTIE";
       quantite: number;
       motif?: string;
@@ -38,17 +39,13 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     const mouvement = await prisma.$transaction(async (tx) => {
-      const article = await tx.article.findUniqueOrThrow({ where: { id: articleId } });
-
-      const depot = await tx.depot.findFirst({ where: { societeId: article.societeId } });
-      if (!depot) {
-        throw new Error("Aucun dépôt configuré pour cette société");
-      }
+      await tx.article.findUniqueOrThrow({ where: { id: articleId } });
+      await tx.depot.findUniqueOrThrow({ where: { id: depotId } });
 
       const delta = type === "ENTREE" ? quantite : -quantite;
 
       const stockActuel = await tx.stock.findUnique({
-        where: { articleId_depotId: { articleId, depotId: depot.id } },
+        where: { articleId_depotId: { articleId, depotId } },
       });
 
       const nouvelleQuantite = (stockActuel?.quantite ?? 0) + delta;
@@ -57,15 +54,15 @@ router.post("/", async (req: Request, res: Response) => {
       }
 
       await tx.stock.upsert({
-        where: { articleId_depotId: { articleId, depotId: depot.id } },
+        where: { articleId_depotId: { articleId, depotId } },
         update: { quantite: nouvelleQuantite },
-        create: { articleId, depotId: depot.id, quantite: nouvelleQuantite },
+        create: { articleId, depotId, quantite: nouvelleQuantite },
       });
 
       return tx.mouvementStock.create({
         data: {
           articleId,
-          depotId: depot.id,
+          depotId,
           type,
           quantite,
           motif: motif || null,

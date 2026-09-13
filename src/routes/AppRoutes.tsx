@@ -6,6 +6,7 @@ import IngredientsPage from "../features/ingredients/pages/IngredientsPage";
 import RecettesPage from "../features/recettes/pages/RecettesPage";
 import FournisseursPage from "../features/fournisseurs/pages/FournisseursPage";
 import MouvementsPage from "../features/mouvements/pages/MouvementsPage";
+import DepotsPage from "../features/depots/pages/DepotsPage";
 import ParametresPage from "../features/parametres/pages/ParametresPage";
 
 export default function AppRoutes() {
@@ -17,6 +18,7 @@ export default function AppRoutes() {
         <Route path="ingredients" element={<IngredientsPage />} />
         <Route path="fournisseurs" element={<FournisseursPage />} />
         <Route path="mouvements" element={<MouvementsPage />} />
+        <Route path="depots" element={<DepotsPage />} />
         <Route path="parametres" element={<ParametresPage />} />
       </Route>
     </Routes>

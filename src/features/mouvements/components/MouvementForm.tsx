@@ -8,6 +8,11 @@ type Article = {
   nom: string;
 };
 
+type Depot = {
+  id: number;
+  nom: string;
+};
+
 type Props = {
   onClose: () => void;
   onSave: () => void;
@@ -16,6 +21,8 @@ type Props = {
 export default function MouvementForm({ onClose, onSave }: Props) {
   const [articles, setArticles] = useState<Article[]>([]);
   const [articleId, setArticleId] = useState(0);
+  const [depots, setDepots] = useState<Depot[]>([]);
+  const [depotId, setDepotId] = useState(0);
   const [type, setType] = useState<TypeMouvement>("ENTREE");
   const [quantite, setQuantite] = useState(0);
   const [motif, setMotif] = useState("");
@@ -27,11 +34,18 @@ export default function MouvementForm({ onClose, onSave }: Props) {
         setArticles(data);
         if (data.length > 0) setArticleId(data[0].id);
       });
+
+    fetch(`${API_URL}/depots`)
+      .then((response) => response.json())
+      .then((data) => {
+        setDepots(data);
+        if (data.length > 0) setDepotId(data[0].id);
+      });
   }, []);
 
   async function enregistrer() {
     try {
-      await creerMouvement({ articleId, type, quantite, motif });
+      await creerMouvement({ articleId, depotId, type, quantite, motif });
       onSave();
       onClose();
     } catch (error) {
@@ -62,6 +76,19 @@ export default function MouvementForm({ onClose, onSave }: Props) {
         {articles.map((article) => (
           <option key={article.id} value={article.id}>
             {article.nom}
+          </option>
+        ))}
+      </select>
+
+      <label>Dépôt</label>
+      <select
+        value={depotId}
+        onChange={(e) => setDepotId(Number(e.target.value))}
+        style={{ width: "100%", padding: 10, marginBottom: 20 }}
+      >
+        {depots.map((depot) => (
+          <option key={depot.id} value={depot.id}>
+            {depot.nom}
           </option>
         ))}
       </select>

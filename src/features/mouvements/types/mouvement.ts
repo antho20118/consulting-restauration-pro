@@ -17,6 +17,7 @@ export interface MouvementStock {
 
 export type MouvementInput = {
   articleId: number;
+  depotId: number;
   type: TypeMouvement;
   quantite: number;
   motif: string;

@@ -55,7 +55,7 @@ export default function IngredientsPage() {
           Unité: ingredient.tarifs[0]?.unite.symbole ?? "",
           Fournisseur: ingredient.tarifs[0]?.fournisseur.nom ?? "",
           "Prix HT (€)": ingredient.tarifs[0]?.prixHT ?? 0,
-          Stock: ingredient.stocks?.[0]?.quantite ?? 0,
+          Stock: ingredient.stocks?.reduce((total, stock) => total + stock.quantite, 0) ?? 0,
           Allergènes: ingredient.allergenes.map((a) => a.allergene.nom).join(", "),
         })),
       },
