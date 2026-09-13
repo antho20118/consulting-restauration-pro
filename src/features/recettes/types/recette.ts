@@ -74,6 +74,20 @@ export type EtapeRecetteInput = {
   controleHACCP: string | null;
 };
 
+export interface IngredientExtrait {
+  texteOriginal: string;
+  nomExtrait: string;
+  quantite: number | null;
+  unite: string | null;
+}
+
+export interface ExtractionRecette {
+  nom: string | null;
+  portions: number | null;
+  ingredients: IngredientExtrait[];
+  etapes: string[];
+}
+
 export interface SuggestionEconomie {
   ligneId: number;
   articleActuel: { id: number; nom: string };

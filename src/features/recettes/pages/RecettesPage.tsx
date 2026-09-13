@@ -2,14 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import RecettesTable from "../components/RecettesTable";
 import RecetteForm from "../components/RecetteForm";
 import RecetteDetail from "../components/RecetteDetail";
+import ImporterRecetteTexteModal from "../components/ImporterRecetteTexteModal";
 import { getRecettes, supprimerRecette } from "../services/recetteService";
 import { exporterExcel } from "../../../common/exportExcel";
-import type { Recette } from "../types/recette";
+import type { LigneRecetteInput, Recette } from "../types/recette";
+
+type BrouillonImport = {
+  nom?: string;
+  portions?: number;
+  lignes: LigneRecetteInput[];
+  etapes: { description: string; pointCritiqueHACCP: boolean; controleHACCP: string | null }[];
+};
 
 export default function RecettesPage() {
   const [recettes, setRecettes] = useState<Recette[]>([]);
   const [recetteEnEdition, setRecetteEnEdition] = useState<Recette | null>(null);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
+  const [brouillonImport, setBrouillonImport] = useState<BrouillonImport | undefined>(undefined);
+  const [importOuvert, setImportOuvert] = useState(false);
   const [recetteConsultee, setRecetteConsultee] = useState<Recette | null>(null);
   const [recherche, setRecherche] = useState("");
 
@@ -30,7 +40,13 @@ export default function RecettesPage() {
 
   function ouvrirCreation() {
     setRecetteEnEdition(null);
+    setBrouillonImport(undefined);
     setFormulaireOuvert(true);
+  }
+
+  function fermerFormulaire() {
+    setFormulaireOuvert(false);
+    setBrouillonImport(undefined);
   }
 
   function ouvrirEdition(recette: Recette) {
@@ -87,6 +103,7 @@ export default function RecettesPage() {
       >
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn-primary" onClick={ouvrirCreation}>+ Nouvelle recette</button>
+          <button onClick={() => setImportOuvert(true)}>Importer depuis un texte</button>
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 
@@ -121,8 +138,34 @@ export default function RecettesPage() {
         >
           <RecetteForm
             recette={recetteEnEdition}
-            onClose={() => setFormulaireOuvert(false)}
+            brouillon={brouillonImport}
+            onClose={fermerFormulaire}
             onSave={chargerRecettes}
+          />
+        </div>
+      )}
+
+      {importOuvert && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            overflowY: "auto",
+            padding: "40px 0",
+          }}
+        >
+          <ImporterRecetteTexteModal
+            onClose={() => setImportOuvert(false)}
+            onExtrait={(brouillon) => {
+              setImportOuvert(false);
+              setRecetteEnEdition(null);
+              setBrouillonImport(brouillon);
+              setFormulaireOuvert(true);
+            }}
           />
         </div>
       )}
