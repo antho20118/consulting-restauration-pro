@@ -30,6 +30,7 @@ model Societe {
   fournisseurs Fournisseur[]
   articles     Article[]
   recettes     Recette[]
+  menus        Menu[]
 }
 
 model Depot {
@@ -74,6 +75,7 @@ model CategorieRecette {
   updatedAt DateTime @updatedAt
 
   recettes Recette[]
+  menus    Menu[]
 }
 
 model TVA {
@@ -298,7 +300,8 @@ model Recette {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lignes RecetteLigne[]
+  lignes       RecetteLigne[]
+  utilisations MenuLigne[]
 
   @@index([nom])
 }
@@ -320,4 +323,47 @@ model RecetteLigne {
 
   @@index([recetteId])
   @@index([articleId])
+}
+
+// Un menu est une formule composée de plusieurs recettes (ex. Entrée + Plat + Dessert), vendue à
+// un prix global ; son coût matière et son food cost se déduisent du coût de chaque recette qui
+// le compose (voir MenuLigne), sur le même principe qu'une recette déduit le sien de ses articles.
+model Menu {
+  id Int @id @default(autoincrement())
+
+  nom         String
+  description String?
+
+  categorieId Int?
+  categorie   CategorieRecette? @relation(fields: [categorieId], references: [id])
+
+  societeId Int
+  societe   Societe @relation(fields: [societeId], references: [id])
+
+  prixVenteHT Float?
+
+  actif Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lignes MenuLigne[]
+
+  @@index([nom])
+}
+
+model MenuLigne {
+  id Int @id @default(autoincrement())
+
+  menuId Int
+  menu   Menu @relation(fields: [menuId], references: [id], onDelete: Cascade)
+
+  recetteId Int
+  recette   Recette @relation(fields: [recetteId], references: [id])
+
+  quantite Float @default(1)
+  ordre    Int   @default(0)
+
+  @@index([menuId])
+  @@index([recetteId])
 }
