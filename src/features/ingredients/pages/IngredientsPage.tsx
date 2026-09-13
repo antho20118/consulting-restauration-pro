@@ -15,7 +15,7 @@ export default function IngredientsPage() {
   }
 
   useEffect(() => {
-    chargerIngredients();
+    getIngredients().then(setIngredients);
   }, []);
 
   const ingredientsFiltres = useMemo(() => {

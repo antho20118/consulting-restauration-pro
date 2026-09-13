@@ -16,7 +16,7 @@ export default function RecettesPage() {
   }
 
   useEffect(() => {
-    chargerRecettes();
+    getRecettes().then(setRecettes);
   }, []);
 
   const recettesFiltrees = useMemo(() => {

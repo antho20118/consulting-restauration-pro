@@ -96,7 +96,7 @@ app.post("/articles", async (req: Request, res: Response) => {
 
       // Tarif (prix + unité + fournisseur) : uniquement si une unité et un prix ont été fournis
       if (uniteId && prixHT !== undefined && prixHT !== null) {
-        let fournisseurId: number | null = null;
+        let fournisseurId: number;
         const nomFournisseur = (fournisseurNom || "").trim();
         if (nomFournisseur) {
           const fournisseurExistant = await tx.fournisseur.findFirst({

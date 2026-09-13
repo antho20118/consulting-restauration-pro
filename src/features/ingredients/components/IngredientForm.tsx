@@ -32,31 +32,20 @@ export default function IngredientForm({ onClose, onSave }: Props) {
   const [uniteId, setUniteId] = useState(0);
 
   useEffect(() => {
-    chargerCategories();
-    chargerUnites();
+    fetch(`${API_URL}/categories`)
+      .then((response) => response.json())
+      .then((data) => {
+        setCategories(data);
+        if (data.length > 0) setCategorieId(data[0].id);
+      });
+
+    fetch(`${API_URL}/unites`)
+      .then((response) => response.json())
+      .then((data) => {
+        setUnites(data);
+        if (data.length > 0) setUniteId(data[0].id);
+      });
   }, []);
-
-  async function chargerCategories() {
-    const response = await fetch(`${API_URL}/categories`);
-    const data = await response.json();
-
-    setCategories(data);
-
-    if (data.length > 0) {
-      setCategorieId(data[0].id);
-    }
-  }
-
-  async function chargerUnites() {
-    const response = await fetch(`${API_URL}/unites`);
-    const data = await response.json();
-
-    setUnites(data);
-
-    if (data.length > 0) {
-      setUniteId(data[0].id);
-    }
-  }
 
   async function enregistrer() {
     const response = await fetch(`${API_URL}/articles`, {
