@@ -44,8 +44,8 @@ export default function IngredientsPage() {
     chargerIngredients();
   }
 
-  function exporter() {
-    exporterExcel(`ingredients_${new Date().toISOString().slice(0, 10)}.xlsx`, [
+  async function exporter() {
+    await exporterExcel(`ingredients_${new Date().toISOString().slice(0, 10)}.xlsx`, [
       {
         nom: "Ingrédients",
         lignes: ingredientsFiltres.map((ingredient) => ({

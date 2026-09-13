@@ -1,12 +1,13 @@
-import * as XLSX from "xlsx";
-
 type Feuille = {
   nom: string;
   lignes: Record<string, string | number>[];
 };
 
 // Génère un classeur .xlsx (une feuille par entrée de `feuilles`) et déclenche son téléchargement.
-export function exporterExcel(nomFichier: string, feuilles: Feuille[]) {
+// xlsx est une grosse dépendance : on la charge à la demande plutôt que dans le bundle principal.
+export async function exporterExcel(nomFichier: string, feuilles: Feuille[]) {
+  const XLSX = await import("xlsx");
+
   const classeur = XLSX.utils.book_new();
 
   for (const feuille of feuilles) {

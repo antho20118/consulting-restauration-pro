@@ -42,8 +42,8 @@ export default function RecettesPage() {
     chargerRecettes();
   }
 
-  function exporter() {
-    exporterExcel(`recettes_${new Date().toISOString().slice(0, 10)}.xlsx`, [
+  async function exporter() {
+    await exporterExcel(`recettes_${new Date().toISOString().slice(0, 10)}.xlsx`, [
       {
         nom: "Recettes",
         lignes: recettesFiltrees.map((recette) => ({
