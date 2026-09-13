@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { Camera } from "lucide-react";
 import toast from "react-hot-toast";
+import { redimensionnerImage } from "../../../common/redimensionnerImage";
 import {
   getArticlesDisponibles,
   getUnitesDisponibles,
@@ -53,16 +55,39 @@ function trouverUnite(symbole: string | null, unites: UniteRecette[]): UniteRece
   return unites.find((u) => normaliser(u.symbole) === normaliser(symbole)) ?? null;
 }
 
-export default function ImporterRecetteTexteModal({ onClose, onExtrait }: Props) {
+export default function ImporterRecetteModal({ onClose, onExtrait }: Props) {
+  const [mode, setMode] = useState<"texte" | "photo">("texte");
   const [texte, setTexte] = useState("");
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
 
+  async function choisirPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const fichier = e.target.files?.[0];
+    if (!fichier) return;
+    try {
+      // Une photo de recette doit rester lisible (texte parfois petit) : une largeur plus
+      // généreuse que celle utilisée pour une simple photo d'illustration du plat.
+      setPhotoDataUrl(await redimensionnerImage(fichier, 1600));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Impossible de traiter cette photo");
+    }
+  }
+
   async function analyser() {
-    if (!texte.trim()) return;
+    const source =
+      mode === "texte"
+        ? texte.trim()
+          ? { texte: texte.trim() }
+          : null
+        : photoDataUrl
+          ? { photoDataUrl }
+          : null;
+    if (!source) return;
+
     setEnCours(true);
     try {
       const [extraction, articles, unites] = await Promise.all([
-        importerRecetteIA(texte),
+        importerRecetteIA(source),
         getArticlesDisponibles(),
         getUnitesDisponibles(),
       ]);
@@ -105,6 +130,8 @@ export default function ImporterRecetteTexteModal({ onClose, onExtrait }: Props)
     }
   }
 
+  const peutAnalyser = mode === "texte" ? texte.trim().length > 0 : photoDataUrl != null;
+
   return (
     <div
       style={{
@@ -115,23 +142,64 @@ export default function ImporterRecetteTexteModal({ onClose, onExtrait }: Props)
         boxShadow: "0 0 20px rgba(0,0,0,.2)",
       }}
     >
-      <h2 style={{ marginTop: 0 }}>Importer une recette depuis un texte</h2>
+      <h2 style={{ marginTop: 0 }}>Importer une recette</h2>
       <p style={{ color: "var(--couleur-texte-attenue)" }}>
-        Colle le texte d'une recette (ingrédients et étapes) : l'IA en extrait automatiquement les
-        informations pour pré-remplir le formulaire de création.
+        Colle le texte d'une recette ou photographie-la (recette manuscrite, page de livre…) : l'IA
+        en extrait automatiquement les informations pour pré-remplir le formulaire de création.
       </p>
 
-      <textarea
-        value={texte}
-        onChange={(e) => setTexte(e.target.value)}
-        placeholder={"Sauté de veau (4 personnes)\n500 g d'épaule de veau\n1 oignon\n...\n1. Faire revenir la viande..."}
-        rows={12}
-        style={{ width: "100%", padding: 10, resize: "vertical", fontFamily: "inherit" }}
-      />
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button
+          className={mode === "texte" ? "btn-primary" : undefined}
+          onClick={() => setMode("texte")}
+        >
+          Coller du texte
+        </button>
+        <button
+          className={mode === "photo" ? "btn-primary" : undefined}
+          onClick={() => setMode("photo")}
+        >
+          <Camera size={16} style={{ verticalAlign: "middle", marginRight: 6 }} />
+          Photographier
+        </button>
+      </div>
+
+      {mode === "texte" ? (
+        <textarea
+          value={texte}
+          onChange={(e) => setTexte(e.target.value)}
+          placeholder={"Sauté de veau (4 personnes)\n500 g d'épaule de veau\n1 oignon\n...\n1. Faire revenir la viande..."}
+          rows={12}
+          style={{ width: "100%", padding: 10, resize: "vertical", fontFamily: "inherit" }}
+        />
+      ) : (
+        <label
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            height: 220,
+            borderRadius: 8,
+            border: "1px dashed var(--couleur-bordure)",
+            cursor: "pointer",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            color: photoDataUrl ? "white" : "var(--couleur-texte-attenue)",
+            textShadow: photoDataUrl ? "0 1px 3px rgba(0,0,0,.6)" : undefined,
+            backgroundImage: photoDataUrl ? `url(${photoDataUrl})` : undefined,
+          }}
+        >
+          <Camera size={22} />
+          {photoDataUrl ? "Changer la photo" : "Prendre ou choisir une photo de la recette"}
+          <input type="file" accept="image/*" capture="environment" hidden onChange={choisirPhoto} />
+        </label>
+      )}
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
         <button onClick={onClose}>Annuler</button>
-        <button className="btn-primary" onClick={analyser} disabled={enCours || !texte.trim()}>
+        <button className="btn-primary" onClick={analyser} disabled={enCours || !peutAnalyser}>
           {enCours ? "Analyse en cours…" : "Analyser"}
         </button>
       </div>

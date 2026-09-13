@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import RecettesTable from "../components/RecettesTable";
 import RecetteForm from "../components/RecetteForm";
 import RecetteDetail from "../components/RecetteDetail";
-import ImporterRecetteTexteModal from "../components/ImporterRecetteTexteModal";
+import ImporterRecetteModal from "../components/ImporterRecetteModal";
 import { getRecettes, supprimerRecette } from "../services/recetteService";
 import { exporterExcel } from "../../../common/exportExcel";
 import type { LigneRecetteInput, Recette } from "../types/recette";
@@ -103,7 +103,7 @@ export default function RecettesPage() {
       >
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn-primary" onClick={ouvrirCreation}>+ Nouvelle recette</button>
-          <button onClick={() => setImportOuvert(true)}>Importer depuis un texte</button>
+          <button onClick={() => setImportOuvert(true)}>Importer une recette</button>
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 
@@ -158,7 +158,7 @@ export default function RecettesPage() {
             padding: "40px 0",
           }}
         >
-          <ImporterRecetteTexteModal
+          <ImporterRecetteModal
             onClose={() => setImportOuvert(false)}
             onExtrait={(brouillon) => {
               setImportOuvert(false);

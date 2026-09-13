@@ -76,11 +76,13 @@ export async function getSuggestionsEconomie(recetteId: number): Promise<Suggest
   return response.json();
 }
 
-export async function importerRecetteIA(texte: string): Promise<ExtractionRecette> {
+export async function importerRecetteIA(
+  source: { texte: string } | { photoDataUrl: string }
+): Promise<ExtractionRecette> {
   const response = await apiFetch(`${API_URL}/recettes/import-ia`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ texte }),
+    body: JSON.stringify(source),
   });
 
   const data = await response.json().catch(() => null);
