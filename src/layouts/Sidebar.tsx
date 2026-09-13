@@ -4,6 +4,7 @@ const menu = [
   { label: "🏠 Tableau de bord", path: "/" },
   { label: "📖 Fiches techniques", path: "/recettes" },
   { label: "🥕 Base ingrédients", path: "/ingredients" },
+  { label: "🚚 Fournisseurs", path: "/fournisseurs" },
   { label: "⚙ Paramètres", path: "/parametres" },
 ];
 

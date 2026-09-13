@@ -7,6 +7,7 @@ import unitesRouter from "./routes/unites.js";
 import recettesRouter from "./routes/recettes.js";
 import dashboardRouter from "./routes/dashboard.js";
 import societeRouter from "./routes/societe.js";
+import fournisseursRouter from "./routes/fournisseurs.js";
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use("/unites", unitesRouter);
 app.use("/recettes", recettesRouter);
 app.use("/dashboard", dashboardRouter);
 app.use("/societe", societeRouter);
+app.use("/fournisseurs", fournisseursRouter);
 
 app.get("/", (_req, res) => {
   res.json({
