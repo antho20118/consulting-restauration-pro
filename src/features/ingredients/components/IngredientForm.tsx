@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { API_URL } from "../../../config/api";
-import { creerIngredient, modifierIngredient } from "../services/ingredientService";
-import type { Ingredient } from "../types/ingredient";
+import { creerIngredient, getAllergenes, modifierIngredient } from "../services/ingredientService";
+import type { Allergene, Ingredient } from "../types/ingredient";
 
 type Categorie = {
   id: number;
@@ -34,6 +34,11 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
   const [unites, setUnites] = useState<Unite[]>([]);
   const [uniteId, setUniteId] = useState(ingredient?.tarifs[0]?.unite.id ?? 0);
 
+  const [allergenes, setAllergenes] = useState<Allergene[]>([]);
+  const [allergeneIds, setAllergeneIds] = useState<number[]>(
+    ingredient?.allergenes.map((a) => a.allergene.id) ?? []
+  );
+
   useEffect(() => {
     fetch(`${API_URL}/categories`)
       .then((response) => response.json())
@@ -48,8 +53,16 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
         setUnites(data);
         if (!ingredient && data.length > 0) setUniteId(data[0].id);
       });
+
+    getAllergenes().then(setAllergenes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function basculerAllergene(id: number) {
+    setAllergeneIds((precedent) =>
+      precedent.includes(id) ? precedent.filter((a) => a !== id) : [...precedent, id]
+    );
+  }
 
   async function enregistrer() {
     const payload = {
@@ -61,6 +74,7 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
       fournisseurNom,
       prixHT,
       stockInitial,
+      allergeneIds,
     };
 
     try {
@@ -199,6 +213,30 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
           marginBottom: 20,
         }}
       />
+
+      <label>Allergènes</label>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "6px 16px",
+          marginBottom: 20,
+        }}
+      >
+        {allergenes.map((allergene) => (
+          <label
+            key={allergene.id}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: "normal" }}
+          >
+            <input
+              type="checkbox"
+              checked={allergeneIds.includes(allergene.id)}
+              onChange={() => basculerAllergene(allergene.id)}
+            />
+            {allergene.nom}
+          </label>
+        ))}
+      </div>
 
       <div
         style={{

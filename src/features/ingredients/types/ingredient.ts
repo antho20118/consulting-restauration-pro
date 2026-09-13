@@ -26,4 +26,18 @@ export interface Ingredient {
   stocks?: {
     quantite: number;
   }[];
+
+  allergenes: {
+    allergene: {
+      id: number;
+      nom: string;
+      code: string;
+    };
+  }[];
+}
+
+export interface Allergene {
+  id: number;
+  nom: string;
+  code: string;
 }

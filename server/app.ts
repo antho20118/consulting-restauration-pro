@@ -9,6 +9,7 @@ import dashboardRouter from "./routes/dashboard.js";
 import societeRouter from "./routes/societe.js";
 import fournisseursRouter from "./routes/fournisseurs.js";
 import tvaRouter from "./routes/tva.js";
+import allergenesRouter from "./routes/allergenes.js";
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use("/dashboard", dashboardRouter);
 app.use("/societe", societeRouter);
 app.use("/fournisseurs", fournisseursRouter);
 app.use("/tva", tvaRouter);
+app.use("/allergenes", allergenesRouter);
 
 app.get("/", (_req, res) => {
   res.json({
