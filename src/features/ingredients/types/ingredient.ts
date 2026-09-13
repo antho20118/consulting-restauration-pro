@@ -18,6 +18,7 @@ export interface Ingredient {
       nom: string;
     };
     unite: {
+      id: number;
       symbole: string;
     };
   }[];

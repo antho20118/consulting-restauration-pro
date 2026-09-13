@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import IngredientsTable from "../components/IngredientsTable";
 import IngredientForm from "../components/IngredientForm";
-import { getIngredients } from "../services/ingredientService";
+import { getIngredients, supprimerIngredient } from "../services/ingredientService";
 import type { Ingredient } from "../types/ingredient";
 
 export default function IngredientsPage() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [open, setOpen] = useState(false);
+  const [ingredientEnEdition, setIngredientEnEdition] = useState<Ingredient | null>(null);
+  const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [recherche, setRecherche] = useState("");
 
   async function chargerIngredients() {
@@ -26,6 +27,22 @@ export default function IngredientsPage() {
     );
   }, [ingredients, recherche]);
 
+  function ouvrirCreation() {
+    setIngredientEnEdition(null);
+    setFormulaireOuvert(true);
+  }
+
+  function ouvrirEdition(ingredient: Ingredient) {
+    setIngredientEnEdition(ingredient);
+    setFormulaireOuvert(true);
+  }
+
+  async function supprimer(ingredient: Ingredient) {
+    if (!confirm(`Supprimer l'ingrédient "${ingredient.nom}" ?`)) return;
+    await supprimerIngredient(ingredient.id);
+    chargerIngredients();
+  }
+
   return (
     <div style={{ padding: 20 }}>
       <h1>🥕 Base ingrédients</h1>
@@ -37,7 +54,7 @@ export default function IngredientsPage() {
           marginBottom: 20,
         }}
       >
-        <button onClick={() => setOpen(true)}>
+        <button onClick={ouvrirCreation}>
           + Nouvel ingrédient
         </button>
 
@@ -53,9 +70,13 @@ export default function IngredientsPage() {
         />
       </div>
 
-      <IngredientsTable ingredients={ingredientsFiltres} />
+      <IngredientsTable
+        ingredients={ingredientsFiltres}
+        onEdit={ouvrirEdition}
+        onDelete={supprimer}
+      />
 
-      {open && (
+      {formulaireOuvert && (
         <div
           style={{
             position: "fixed",
@@ -69,7 +90,8 @@ export default function IngredientsPage() {
           }}
         >
           <IngredientForm
-            onClose={() => setOpen(false)}
+            ingredient={ingredientEnEdition}
+            onClose={() => setFormulaireOuvert(false)}
             onSave={chargerIngredients}
           />
         </div>

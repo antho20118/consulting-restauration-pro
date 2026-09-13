@@ -3,10 +3,12 @@ import type { Ingredient } from "../types/ingredient";
 
 type Props = {
   ingredients: Ingredient[];
+  onEdit: (ingredient: Ingredient) => void;
+  onDelete: (ingredient: Ingredient) => void;
 };
 
-export default function IngredientsTable({ ingredients }: Props) {
-  const columns: GridColDef[] = [
+export default function IngredientsTable({ ingredients, onEdit, onDelete }: Props) {
+  const columns: GridColDef<Ingredient>[] = [
     {
       field: "nom",
       headerName: "Nom",
@@ -53,6 +55,20 @@ export default function IngredientsTable({ ingredients }: Props) {
       width: 120,
       valueGetter: (_value, row) =>
         row.stocks?.[0]?.quantite ?? 0,
+    },
+
+    {
+      field: "actions",
+      headerName: "Actions",
+      width: 160,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => onEdit(params.row)}>Modifier</button>
+          <button onClick={() => onDelete(params.row)}>Supprimer</button>
+        </div>
+      ),
     },
   ];
 

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { API_URL } from "../../../config/api";
+import { creerIngredient, modifierIngredient } from "../services/ingredientService";
+import type { Ingredient } from "../types/ingredient";
 
 type Categorie = {
   id: number;
@@ -13,74 +15,66 @@ type Unite = {
 };
 
 type Props = {
+  ingredient: Ingredient | null;
   onClose: () => void;
   onSave: () => void;
 };
 
-export default function IngredientForm({ onClose, onSave }: Props) {
-  const [nom, setNom] = useState("");
-  const [reference, setReference] = useState("");
-  const [prixHT, setPrixHT] = useState(0);
-  const [stockInitial, setStockInitial] = useState(0);
-  const [rendement, setRendement] = useState(100);
-  const [fournisseurNom, setFournisseurNom] = useState("");
+export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
+  const [nom, setNom] = useState(ingredient?.nom ?? "");
+  const [reference, setReference] = useState(ingredient?.reference ?? "");
+  const [prixHT, setPrixHT] = useState(ingredient?.tarifs[0]?.prixHT ?? 0);
+  const [stockInitial, setStockInitial] = useState(ingredient?.stocks?.[0]?.quantite ?? 0);
+  const [rendement, setRendement] = useState(ingredient?.rendement ?? 100);
+  const [fournisseurNom, setFournisseurNom] = useState(ingredient?.tarifs[0]?.fournisseur.nom ?? "");
 
   const [categories, setCategories] = useState<Categorie[]>([]);
-  const [categorieId, setCategorieId] = useState(0);
+  const [categorieId, setCategorieId] = useState(ingredient?.categorie.id ?? 0);
 
   const [unites, setUnites] = useState<Unite[]>([]);
-  const [uniteId, setUniteId] = useState(0);
+  const [uniteId, setUniteId] = useState(ingredient?.tarifs[0]?.unite.id ?? 0);
 
   useEffect(() => {
     fetch(`${API_URL}/categories`)
       .then((response) => response.json())
       .then((data) => {
         setCategories(data);
-        if (data.length > 0) setCategorieId(data[0].id);
+        if (!ingredient && data.length > 0) setCategorieId(data[0].id);
       });
 
     fetch(`${API_URL}/unites`)
       .then((response) => response.json())
       .then((data) => {
         setUnites(data);
-        if (data.length > 0) setUniteId(data[0].id);
+        if (!ingredient && data.length > 0) setUniteId(data[0].id);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function enregistrer() {
-    const response = await fetch(`${API_URL}/articles`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        nom,
-        reference,
-        categorieId,
-        tvaId: 1,
-        societeId: 1,
-        rendement,
-        type: "MATIERE_PREMIERE",
-        uniteId,
-        fournisseurNom,
-        prixHT,
-        stockInitial,
-      }),
-    });
+    const payload = {
+      nom,
+      reference,
+      categorieId,
+      rendement,
+      uniteId,
+      fournisseurNom,
+      prixHT,
+      stockInitial,
+    };
 
-    const resultat = await response.json();
+    try {
+      if (ingredient) {
+        await modifierIngredient(ingredient.id, payload);
+      } else {
+        await creerIngredient({ ...payload, tvaId: 1, societeId: 1, type: "MATIERE_PREMIERE" });
+      }
 
-    console.log(resultat);
-
-    if (!response.ok) {
-      alert(JSON.stringify(resultat, null, 2));
-      return;
+      onSave();
+      onClose();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Erreur inconnue");
     }
-
-    console.log("Article créé :", resultat);
-
-    onSave();
-    onClose();
   }
 
   return (
@@ -95,7 +89,7 @@ export default function IngredientForm({ onClose, onSave }: Props) {
         overflowY: "auto",
       }}
     >
-      <h2>Nouvel ingrédient</h2>
+      <h2>{ingredient ? "Modifier l'ingrédient" : "Nouvel ingrédient"}</h2>
 
       <label>Nom</label>
       <input
