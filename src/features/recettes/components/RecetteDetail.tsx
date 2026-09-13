@@ -5,9 +5,11 @@ import type { Recette } from "../types/recette";
 type Props = {
   recette: Recette;
   onClose: () => void;
+  onEdit: (recette: Recette) => void;
+  onDelete: (recette: Recette) => void;
 };
 
-export default function RecetteDetail({ recette, onClose }: Props) {
+export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Props) {
   return (
     <div
       className="fiche-technique-impression"
@@ -166,10 +168,18 @@ export default function RecetteDetail({ recette, onClose }: Props) {
 
       <div
         className="fiche-technique-sans-impression"
-        style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}
+        style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
       >
-        <button onClick={onClose}>Fermer</button>
-        <button onClick={() => window.print()}>Imprimer</button>
+        <button className="btn-danger" onClick={() => onDelete(recette)}>
+          Supprimer
+        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose}>Fermer</button>
+          <button onClick={() => window.print()}>Imprimer</button>
+          <button className="btn-primary" onClick={() => onEdit(recette)}>
+            Modifier
+          </button>
+        </div>
       </div>
     </div>
   );
