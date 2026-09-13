@@ -18,7 +18,9 @@ import depotsRouter from "./routes/depots.js";
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+// Limite par défaut d'Express (100kb) trop basse pour un listing fournisseur complet
+// (plusieurs milliers de lignes une fois transformées en JSON par le frontend).
+app.use(express.json({ limit: "10mb" }));
 
 // Préfixées par /api pour ne pas entrer en collision avec les routes du frontend
 // une fois servi par ce même serveur en production (ex. /recettes est une page React).
