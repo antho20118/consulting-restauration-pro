@@ -20,6 +20,7 @@ type RecetteAvecLignes = {
   lignes: {
     quantite: number;
     unite: { facteurBase: number };
+    gainCuissonPct: number;
     article: {
       rendement: number;
       tarifs: { prixHT: number; unite: { facteurBase: number } }[];

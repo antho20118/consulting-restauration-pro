@@ -26,9 +26,11 @@ export interface LigneRecette {
   articleId: number;
   quantite: number;
   uniteId: number;
+  gainCuissonPct: number;
   unite: UniteRecette;
   article: ArticleRecette;
   coutLigne: number;
+  poidsFiniLigneG: number;
 }
 
 export interface EtapeRecette {
@@ -46,6 +48,8 @@ export interface Recette {
   categorieId: number | null;
   categorie: { id: number; nom: string } | null;
   portions: number;
+  poidsPortionG: number | null;
+  poidsAccompagnementG: number | null;
   prixVenteHT: number | null;
   lignes: LigneRecette[];
   etapes: EtapeRecette[];
@@ -54,12 +58,14 @@ export interface Recette {
   coutParPortion: number;
   foodCostPct: number | null;
   margeHT: number | null;
+  poidsFiniTotalG: number;
 }
 
 export type LigneRecetteInput = {
   articleId: number;
   quantite: number;
   uniteId: number;
+  gainCuissonPct: number;
 };
 
 export type EtapeRecetteInput = {
@@ -72,6 +78,8 @@ export type RecetteInput = {
   nom: string;
   categorieId: number | null;
   portions: number;
+  poidsPortionG: number | null;
+  poidsAccompagnementG: number | null;
   prixVenteHT: number | null;
   instructions: string | null;
   photo: string | null;

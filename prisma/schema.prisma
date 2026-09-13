@@ -299,6 +299,12 @@ model Recette {
   portions    Int    @default(1)
   prixVenteHT Float?
 
+  // Poids d'une portion en grammes, accompagnement compris (ex. 350g dont 130g
+  // d'accompagnement) : sert à convertir entre nombre de portions et poids total pour planifier
+  // une production (voir RecetteLigne.gainCuissonPct pour le calcul du poids fini par ingrédient).
+  poidsPortionG        Float?
+  poidsAccompagnementG Float?
+
   actif Boolean @default(true)
 
   createdAt DateTime @default(now())
@@ -342,6 +348,13 @@ model RecetteLigne {
   quantite Float
   uniteId  Int
   unite    Unite @relation(fields: [uniteId], references: [id])
+
+  // Pourcentage de gain de poids à la cuisson pour cet ingrédient dans cette recette (ex. eau ou
+  // sauce absorbée par la viande), en plus du rendement (perte) déjà porté par l'article — utile
+  // pour calculer le poids fini réel et donc les quantités à commander pour une production cible
+  // (ex. produire 100kg de plat fini en sachant qu'on perd 20% de viande mais qu'on gagne 80%
+  // d'eau par rapport à son poids). 0 par défaut : aucun gain, comportement inchangé.
+  gainCuissonPct Float @default(0)
 
   ordre Int @default(0)
 

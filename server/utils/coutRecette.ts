@@ -29,6 +29,12 @@ export const inclusionsRecette = {
 // Déduit aussi la liste des allergènes de la recette par union de ceux de ses ingrédients, plutôt
 // que de les faire ressaisir manuellement (qui pourrait diverger des ingrédients réellement
 // utilisés — une source d'erreur qu'on évite en la calculant).
+//
+// Calcule également le poids fini (cuit) de la recette : chaque ligne contribue
+// quantité × (rendement/100 + gainCuissonPct/100) — le rendement représente ce qui reste de la
+// quantité de la ligne après perte, et gainCuissonPct un gain de poids supplémentaire (ex. eau ou
+// sauce absorbée), exprimé en % de cette même quantité. Sert à planifier une production : combien
+// commander d'ingrédients pour produire une quantité donnée de plat fini (voir RecettesPage).
 export function calculerCoutRecette<
   T extends {
     portions: number;
@@ -36,6 +42,7 @@ export function calculerCoutRecette<
     lignes: {
       quantite: number;
       unite: { facteurBase: number };
+      gainCuissonPct: number;
       article: {
         rendement: number;
         tarifs: { prixHT: number; unite: { facteurBase: number } }[];
@@ -45,21 +52,25 @@ export function calculerCoutRecette<
   },
 >(recette: T) {
   let coutTotal = 0;
+  let poidsFiniTotalG = 0;
 
   const lignes = recette.lignes.map((ligne) => {
     const tarif = ligne.article.tarifs[0];
+    const rendement = ligne.article.rendement || 100;
+    const quantiteBase = ligne.quantite * ligne.unite.facteurBase;
 
     let coutLigne = 0;
     if (tarif) {
       const prixParUniteBase = tarif.prixHT / tarif.unite.facteurBase;
-      const quantiteBase = ligne.quantite * ligne.unite.facteurBase;
-      const rendement = ligne.article.rendement || 100;
       coutLigne = (quantiteBase * prixParUniteBase) / (rendement / 100);
     }
 
-    coutTotal += coutLigne;
+    const poidsFiniLigneG = quantiteBase * (rendement / 100 + ligne.gainCuissonPct / 100);
 
-    return { ...ligne, coutLigne };
+    coutTotal += coutLigne;
+    poidsFiniTotalG += poidsFiniLigneG;
+
+    return { ...ligne, coutLigne, poidsFiniLigneG };
   });
 
   const coutParPortion = recette.portions > 0 ? coutTotal / recette.portions : coutTotal;
@@ -87,5 +98,6 @@ export function calculerCoutRecette<
     foodCostPct,
     margeHT,
     allergenes,
+    poidsFiniTotalG,
   };
 }
