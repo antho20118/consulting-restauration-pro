@@ -1,11 +1,11 @@
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
+
+import prisma from "../prisma.js";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Liste des catégories
-router.get("/", async (_, res) => {
+router.get("/", async (_req, res) => {
   const categories = await prisma.categorie.findMany({
     orderBy: {
       nom: "asc",
@@ -17,15 +17,62 @@ router.get("/", async (_, res) => {
 
 // Création d'une catégorie
 router.post("/", async (req, res) => {
-  const { nom } = req.body;
+  try {
+    const { nom } = req.body;
 
-  const categorie = await prisma.categorie.create({
-    data: {
-      nom,
-    },
-  });
+    const categorie = await prisma.categorie.create({
+      data: {
+        nom,
+      },
+    });
 
-  res.json(categorie);
+    res.status(201).json(categorie);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de créer la catégorie" });
+  }
+});
+
+// Renommage d'une catégorie
+router.put("/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { nom } = req.body;
+
+    const categorie = await prisma.categorie.update({ where: { id }, data: { nom } });
+
+    res.json(categorie);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de modifier la catégorie" });
+  }
+});
+
+// Suppression d'une catégorie : refusée si des articles ou des recettes l'utilisent encore
+router.delete("/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const [nbArticles, nbRecettes] = await Promise.all([
+      prisma.article.count({ where: { categorieId: id } }),
+      prisma.recette.count({ where: { categorieId: id } }),
+    ]);
+
+    if (nbArticles > 0 || nbRecettes > 0) {
+      res.status(400).json({
+        error:
+          "Cette catégorie est utilisée par des ingrédients ou des recettes et ne peut pas être supprimée.",
+      });
+      return;
+    }
+
+    await prisma.categorie.delete({ where: { id } });
+
+    res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de supprimer la catégorie" });
+  }
 });
 
 export default router;
