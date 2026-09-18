@@ -10,6 +10,7 @@ import {
   importerRecetteIA,
 } from "../services/recetteService";
 import { analyseRecetteLocale } from "../utils/analyseRecetteLocale";
+import { estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
 import { extraireTexteDePhoto } from "../utils/ocrPhoto";
 import type {
   AliasIngredient,
@@ -140,12 +141,19 @@ export default function ImporterRecetteModal({ onClose, onExtrait }: Props) {
         extraction = analyseRecetteLocale(await obtenirTexteSource(source));
       }
 
-      const [articles, unites, alias] = await Promise.all([
+      const [articlesTous, unites, alias] = await Promise.all([
         getArticlesDisponibles(),
         getUnitesDisponibles(),
         getAliasIngredients(),
       ]);
       const aliasParTexte = new Map(alias.map((a: AliasIngredient) => [a.texteNormalise, a.articleId]));
+      // Même préférence que dans le formulaire de recette (voir filtreFournisseur.ts) : ne
+      // rapproche automatiquement un ingrédient qu'avec un article fourni par Super U si la
+      // préférence est active, pour éviter un mauvais rapprochement silencieux avec un article
+      // d'un autre fournisseur portant un nom proche.
+      const articles = filtrerSuperUActif()
+        ? articlesTous.filter((a) => estFournisseurSuperU(a))
+        : articlesTous;
 
       const lignes: LigneRecetteInput[] = extraction.ingredients.map((ingredient) => {
         const article = trouverArticle(ingredient.nomExtrait, articles, aliasParTexte);
