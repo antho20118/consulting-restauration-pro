@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ArticleRecette } from "../types/recette";
+import { normaliserTexte } from "../utils/normaliserTexte";
 
 // Un <select> listant des milliers d'articles (après un import fournisseur volumineux) est
 // inutilisable : on lui préfère un champ de recherche qui filtre la liste au fil de la frappe et
@@ -49,9 +50,11 @@ export default function RechercheArticle({ articles, articlesRepli, articleId, o
     return () => document.removeEventListener("mousedown", gererClicExterieur);
   }, [articleSelectionne]);
 
-  const terme = recherche.trim().toLowerCase();
+  // Insensible aux accents (ex. "saute de veau" doit trouver "Sauté de veau"), comme le reste de
+  // l'appli (import, mémoire de correspondance, filtre fournisseur) — voir normaliserTexte.ts.
+  const terme = normaliserTexte(recherche);
   const resultatsPrincipaux = (
-    terme ? articles.filter((a) => a.nom.toLowerCase().includes(terme)) : articles
+    terme ? articles.filter((a) => normaliserTexte(a.nom).includes(terme)) : articles
   ).slice(0, MAX_RESULTATS);
 
   // Rien trouvé dans la liste préférée (ex. Super U uniquement) : on cherche dans la liste
@@ -59,7 +62,7 @@ export default function RechercheArticle({ articles, articlesRepli, articleId, o
   // fournisseur — le nom du fournisseur est alors affiché pour rester transparent sur l'écart.
   const enRepli = terme.length > 0 && resultatsPrincipaux.length === 0 && !!articlesRepli;
   const resultats = enRepli
-    ? articlesRepli!.filter((a) => a.nom.toLowerCase().includes(terme)).slice(0, MAX_RESULTATS)
+    ? articlesRepli!.filter((a) => normaliserTexte(a.nom).includes(terme)).slice(0, MAX_RESULTATS)
     : resultatsPrincipaux;
 
   return (

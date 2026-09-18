@@ -11,6 +11,7 @@ import {
 } from "../services/recetteService";
 import { analyseRecetteLocale } from "../utils/analyseRecetteLocale";
 import { estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
+import { normaliserTexte as normaliser } from "../utils/normaliserTexte";
 import { extraireTexteDePhoto } from "../utils/ocrPhoto";
 import { trouverUniteParDefaut } from "../utils/uniteParDefaut";
 import type {
@@ -30,22 +31,6 @@ type Props = {
     etapes: { description: string; pointCritiqueHACCP: boolean; controleHACCP: string | null }[];
   }) => void;
 };
-
-// Ignore les accents et la casse pour rapprocher un nom d'ingrédient extrait du texte (ex. « Crème
-// fraîche ») du nom exact d'un article du catalogue (ex. « creme fraiche 20cl »).
-const DIACRITIQUES = /[\u0300-\u036f]/g;
-
-// Doit rester identique à normaliserTexte() côté serveur (server/utils/normaliserTexte.ts) : la
-// mémoire de correspondance (AliasIngredientImport) est indexée sur ce même calcul, un écart
-// produirait des clés différentes et l'alias ne serait jamais retrouvé.
-function normaliser(texte: string): string {
-  return texte
-    .normalize("NFD")
-    .replace(DIACRITIQUES, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function trouverArticle(
   nomExtrait: string,
