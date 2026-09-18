@@ -18,6 +18,7 @@ import tvaRouter from "./routes/tva.js";
 import allergenesRouter from "./routes/allergenes.js";
 import mouvementsRouter from "./routes/mouvements.js";
 import depotsRouter from "./routes/depots.js";
+import aliasIngredientsRouter from "./routes/aliasIngredients.js";
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.use("/api/tva", tvaRouter);
 app.use("/api/allergenes", allergenesRouter);
 app.use("/api/mouvements", mouvementsRouter);
 app.use("/api/depots", depotsRouter);
+app.use("/api/alias-ingredients", aliasIngredientsRouter);
 
 app.get("/health", (_req, res) => {
   res.json({

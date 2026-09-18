@@ -1,5 +1,6 @@
 import { API_URL, apiFetch } from "../../../config/api";
 import type {
+  AliasIngredient,
   ArticleRecette,
   ExtractionRecette,
   Recette,
@@ -114,4 +115,32 @@ export async function getUnitesDisponibles(): Promise<UniteRecette[]> {
   }
 
   return response.json();
+}
+
+// Correspondances "texte d'ingrédient -> article" déjà validées par l'utilisateur lors d'un
+// import précédent (voir ImporterRecetteModal.tsx) : consultées avant la recherche approximative
+// habituelle pour retrouver directement le bon article.
+export async function getAliasIngredients(): Promise<AliasIngredient[]> {
+  const response = await apiFetch(`${API_URL}/alias-ingredients`);
+
+  if (!response.ok) {
+    throw new Error("Impossible de récupérer les correspondances d'ingrédients");
+  }
+
+  return response.json();
+}
+
+// Mémorise les correspondances choisies pour les lignes issues d'un import (voir
+// RecetteForm.tsx) : n'échoue jamais bruyamment pour l'utilisateur, la recette elle-même est déjà
+// enregistrée à ce stade — seule la mémoire de correspondance ne serait pas mise à jour cette fois.
+export async function enregistrerAliasIngredients(
+  correspondances: { texte: string; articleId: number }[]
+): Promise<void> {
+  if (correspondances.length === 0) return;
+
+  await apiFetch(`${API_URL}/alias-ingredients`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ correspondances }),
+  }).catch(() => undefined);
 }
