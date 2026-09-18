@@ -5,6 +5,7 @@ import ChampNombre from "../../../common/ChampNombre";
 import { redimensionnerImage } from "../../../common/redimensionnerImage";
 import {
   creerRecette,
+  enregistrerAliasIngredients,
   getArticlesDisponibles,
   getUnitesDisponibles,
   modifierRecette,
@@ -225,6 +226,14 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
       } else {
         await creerRecette({ ...payload, societeId: 1 });
       }
+
+      // Mémorise les choix d'article faits sur des lignes issues d'un import texte/photo (voir
+      // ImporterRecetteModal.tsx), pour que le prochain import retrouve directement le bon
+      // article. Ne bloque jamais l'enregistrement de la recette, déjà acquis à ce stade.
+      const correspondances = lignes
+        .filter((ligne) => ligne.texteIngredientImporte && ligne.articleId)
+        .map((ligne) => ({ texte: ligne.texteIngredientImporte!, articleId: ligne.articleId }));
+      enregistrerAliasIngredients(correspondances);
 
       onSave();
       onClose();

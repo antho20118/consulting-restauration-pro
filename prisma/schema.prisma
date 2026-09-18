@@ -131,10 +131,33 @@ model Article {
   allergenes    ArticleAllergene[]
   mouvements    MouvementStock[]
   lignesRecette RecetteLigne[]
+  aliasImport   AliasIngredientImport[]
 
   @@index([nom])
   @@index([reference])
   @@index([codeBarres])
+}
+
+// Mémorise, pour un texte d'ingrédient donné (ex. « persil plat », extrait d'un import texte/photo
+// ou saisi lors d'une recherche manuelle), l'article déjà choisi la dernière fois — pour que
+// l'import d'une future recette retrouve directement le bon article au lieu de re-proposer une
+// correspondance approximative (voire aucune) à corriger à la main à chaque fois. Alimentée
+// automatiquement à l'enregistrement d'une recette (voir POST/PUT /api/recettes), jamais éditée
+// directement par l'utilisateur.
+model AliasIngredientImport {
+  id Int @id @default(autoincrement())
+
+  // Texte d'ingrédient normalisé (minuscules, sans accents, espaces compactés) : clé de recherche,
+  // volontairement indépendante de la casse/accentuation d'origine pour maximiser les réutilisations.
+  texteNormalise String @unique
+
+  articleId Int
+  article   Article @relation(fields: [articleId], references: [id])
+
+  creeLe DateTime @default(now())
+  majLe  DateTime @updatedAt
+
+  @@index([articleId])
 }
 
 model Fournisseur {

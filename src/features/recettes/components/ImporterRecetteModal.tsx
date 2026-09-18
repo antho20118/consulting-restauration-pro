@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { redimensionnerImage } from "../../../common/redimensionnerImage";
 import {
   ErreurImportIA,
+  getAliasIngredients,
   getArticlesDisponibles,
   getUnitesDisponibles,
   importerRecetteIA,
@@ -11,6 +12,7 @@ import {
 import { analyseRecetteLocale } from "../utils/analyseRecetteLocale";
 import { extraireTexteDePhoto } from "../utils/ocrPhoto";
 import type {
+  AliasIngredient,
   ArticleRecette,
   ExtractionRecette,
   LigneRecetteInput,
@@ -31,13 +33,34 @@ type Props = {
 // fraîche ») du nom exact d'un article du catalogue (ex. « creme fraiche 20cl »).
 const DIACRITIQUES = /[\u0300-\u036f]/g;
 
+// Doit rester identique à normaliserTexte() côté serveur (server/utils/normaliserTexte.ts) : la
+// mémoire de correspondance (AliasIngredientImport) est indexée sur ce même calcul, un écart
+// produirait des clés différentes et l'alias ne serait jamais retrouvé.
 function normaliser(texte: string): string {
-  return texte.normalize("NFD").replace(DIACRITIQUES, "").toLowerCase().trim();
+  return texte
+    .normalize("NFD")
+    .replace(DIACRITIQUES, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function trouverArticle(nomExtrait: string, articles: ArticleRecette[]): ArticleRecette | null {
+function trouverArticle(
+  nomExtrait: string,
+  articles: ArticleRecette[],
+  aliasParTexte: Map<string, number>
+): ArticleRecette | null {
   const cible = normaliser(nomExtrait);
   if (!cible) return null;
+
+  // Une correspondance déjà validée par l'utilisateur lors d'un import précédent (voir
+  // AliasIngredientImport côté serveur) prime sur la recherche approximative ci-dessous : c'est
+  // justement pour corriger les cas où celle-ci se trompait ou ne trouvait rien.
+  const articleIdMemorise = aliasParTexte.get(cible);
+  if (articleIdMemorise) {
+    const article = articles.find((a) => a.id === articleIdMemorise);
+    if (article) return article;
+  }
 
   const exact = articles.find((a) => normaliser(a.nom) === cible);
   if (exact) return exact;
@@ -117,22 +140,26 @@ export default function ImporterRecetteModal({ onClose, onExtrait }: Props) {
         extraction = analyseRecetteLocale(await obtenirTexteSource(source));
       }
 
-      const [articles, unites] = await Promise.all([
+      const [articles, unites, alias] = await Promise.all([
         getArticlesDisponibles(),
         getUnitesDisponibles(),
+        getAliasIngredients(),
       ]);
+      const aliasParTexte = new Map(alias.map((a: AliasIngredient) => [a.texteNormalise, a.articleId]));
 
       const lignes: LigneRecetteInput[] = extraction.ingredients.map((ingredient) => {
-        const article = trouverArticle(ingredient.nomExtrait, articles);
+        const article = trouverArticle(ingredient.nomExtrait, articles, aliasParTexte);
         const unite = trouverUnite(ingredient.unite, unites);
         return {
           // 0 : pas de présélection, cohérent avec une ligne ajoutée manuellement — l'utilisateur
-          // choisit lui-même l'article dans le champ de recherche si l'IA n'a pas trouvé de
-          // correspondance dans le catalogue.
+          // choisit lui-même l'article dans le champ de recherche si rien n'a été trouvé.
           articleId: article?.id ?? 0,
           quantite: ingredient.quantite ?? 0,
           uniteId: unite?.id ?? unites[0]?.id ?? 0,
           gainCuissonPct: 0,
+          // Conservé jusqu'à l'enregistrement de la recette pour mémoriser le choix de
+          // l'utilisateur s'il corrige ou complète l'article (voir RecetteForm.tsx).
+          texteIngredientImporte: ingredient.nomExtrait,
         };
       });
 

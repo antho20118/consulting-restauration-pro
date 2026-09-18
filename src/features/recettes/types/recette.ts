@@ -66,7 +66,17 @@ export type LigneRecetteInput = {
   quantite: number;
   uniteId: number;
   gainCuissonPct: number;
+  // Texte d'ingrédient d'origine (avant rapprochement avec le catalogue), renseigné uniquement
+  // pour une ligne issue d'un import texte/photo — sert à mémoriser la correspondance choisie par
+  // l'utilisateur à l'enregistrement de la recette (voir RecetteForm.tsx), jamais envoyé tel quel
+  // à la création/modification de la recette elle-même.
+  texteIngredientImporte?: string;
 };
+
+export interface AliasIngredient {
+  texteNormalise: string;
+  articleId: number;
+}
 
 export type EtapeRecetteInput = {
   description: string;
