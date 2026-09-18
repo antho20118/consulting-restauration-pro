@@ -12,6 +12,7 @@ import {
 } from "../services/recetteService";
 import { estimerCoutLigne } from "../utils/cout";
 import { definirFiltrerSuperU, estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
+import { trouverUniteParDefaut } from "../utils/uniteParDefaut";
 import RechercheArticle from "./RechercheArticle";
 import type {
   ArticleRecette,
@@ -116,7 +117,7 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
         // que de forcer à effacer le premier article de la liste avant de pouvoir taper.
         articleId: 0,
         quantite: 0,
-        uniteId: unites[0]?.id ?? 0,
+        uniteId: trouverUniteParDefaut(unites)?.id ?? 0,
         gainCuissonPct: 0,
       },
     ]);

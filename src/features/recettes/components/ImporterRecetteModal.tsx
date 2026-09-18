@@ -12,6 +12,7 @@ import {
 import { analyseRecetteLocale } from "../utils/analyseRecetteLocale";
 import { estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
 import { extraireTexteDePhoto } from "../utils/ocrPhoto";
+import { trouverUniteParDefaut } from "../utils/uniteParDefaut";
 import type {
   AliasIngredient,
   ArticleRecette,
@@ -163,7 +164,7 @@ export default function ImporterRecetteModal({ onClose, onExtrait }: Props) {
           // choisit lui-même l'article dans le champ de recherche si rien n'a été trouvé.
           articleId: article?.id ?? 0,
           quantite: ingredient.quantite ?? 0,
-          uniteId: unite?.id ?? unites[0]?.id ?? 0,
+          uniteId: unite?.id ?? trouverUniteParDefaut(unites)?.id ?? 0,
           gainCuissonPct: 0,
           // Conservé jusqu'à l'enregistrement de la recette pour mémoriser le choix de
           // l'utilisateur s'il corrige ou complète l'article (voir RecetteForm.tsx).
