@@ -17,6 +17,7 @@ export interface ArticleRecette {
   tarifs: {
     prixHT: number;
     unite: { symbole: string; facteurBase: number };
+    fournisseur: { id: number; nom: string };
   }[];
   allergenes: { allergene: AllergeneRecette }[];
 }

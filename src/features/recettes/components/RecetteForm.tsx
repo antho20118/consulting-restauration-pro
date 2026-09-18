@@ -11,6 +11,7 @@ import {
   modifierRecette,
 } from "../services/recetteService";
 import { estimerCoutLigne } from "../utils/cout";
+import { definirFiltrerSuperU, estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
 import RechercheArticle from "./RechercheArticle";
 import type {
   ArticleRecette,
@@ -82,6 +83,14 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
   const [categories, setCategories] = useState<CategorieRecette[]>([]);
   const [articles, setArticles] = useState<ArticleRecette[]>([]);
   const [unites, setUnites] = useState<UniteRecette[]>([]);
+  // Restreint la recherche d'ingrédient aux articles fournis par Super U par défaut (voir
+  // filtreFournisseur.ts) ; mémorisé pour ne pas avoir à le redéfinir à chaque recette.
+  const [filtrerSuperU, setFiltrerSuperU] = useState(filtrerSuperUActif);
+
+  function changerFiltrerSuperU(valeur: boolean) {
+    setFiltrerSuperU(valeur);
+    definirFiltrerSuperU(valeur);
+  }
 
   useEffect(() => {
     apiFetch(`${API_URL}/categories-recette`)
@@ -399,10 +408,27 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
         en plus de son rendement — sert au calcul de production (voir la fiche de la recette).
       </p>
 
+      <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <input
+          type="checkbox"
+          checked={filtrerSuperU}
+          onChange={(e) => changerFiltrerSuperU(e.target.checked)}
+        />
+        <span style={{ fontSize: 13, color: "#555" }}>
+          Ne proposer que les articles fournis par Super U dans la recherche d'ingrédient
+        </span>
+      </label>
+
       {lignes.map((ligne, index) => {
         const article = articles.find((a) => a.id === ligne.articleId);
         const unite = unites.find((u) => u.id === ligne.uniteId);
         const cout = estimerCoutLigne(article, ligne.quantite, unite);
+        // L'article déjà sélectionné pour cette ligne reste toujours proposé même s'il ne
+        // correspond pas au filtre, pour ne pas faire disparaître le nom déjà choisi (voir
+        // RechercheArticle.tsx, qui résout l'affichage depuis la liste reçue).
+        const articlesPourLigne = filtrerSuperU
+          ? articles.filter((a) => estFournisseurSuperU(a) || a.id === ligne.articleId)
+          : articles;
 
         return (
           <div
@@ -415,7 +441,7 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
             }}
           >
             <RechercheArticle
-              articles={articles}
+              articles={articlesPourLigne}
               articleId={ligne.articleId}
               onChange={(articleId) => modifierLigne(index, { articleId })}
             />
