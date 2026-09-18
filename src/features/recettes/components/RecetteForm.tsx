@@ -443,6 +443,7 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
           >
             <RechercheArticle
               articles={articlesPourLigne}
+              articlesRepli={filtrerSuperU ? articles : undefined}
               articleId={ligne.articleId}
               onChange={(articleId) => modifierLigne(index, { articleId })}
             />
