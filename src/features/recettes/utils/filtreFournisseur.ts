@@ -1,4 +1,5 @@
 import type { ArticleRecette } from "../types/recette";
+import { normaliserTexte } from "./normaliserTexte";
 
 // Le classeur de coûts de recettes d'origine est bâti sur les produits Super U : de nombreux
 // articles portant un nom proche existent aussi chez d'autres fournisseurs, ce qui rend la
@@ -27,9 +28,5 @@ export function definirFiltrerSuperU(valeur: boolean): void {
 
 export function estFournisseurSuperU(article: ArticleRecette): boolean {
   const nomFournisseur = article.tarifs[0]?.fournisseur?.nom ?? "";
-  return nomFournisseur
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .includes("super u");
+  return normaliserTexte(nomFournisseur).includes("super u");
 }
