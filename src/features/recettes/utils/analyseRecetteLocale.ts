@@ -136,10 +136,11 @@ export function analyseRecetteLocale(texteBrut: string): ExtractionRecette {
     if (nom == null && ingredients.length === 0 && etapes.length === 0) {
       const sansPortions = ligne.replace(RE_PORTIONS, "").trim();
       nom = sansPortions || null;
-    } else if (ingredients.length > 0) {
-      // Toute ligne libre non numérotée après le début des ingrédients est traitée comme une
-      // étape de préparation (pas seulement la première : sans quoi les étapes suivantes seraient
-      // silencieusement perdues).
+    } else {
+      // Toute ligne libre non numérotée après la première ligne (le nom) est traitée comme une
+      // étape de préparation — y compris quand aucun ingrédient n'a été reconnu (ex. un texte qui
+      // ne colle que des techniques de réalisation) : exiger `ingredients.length > 0` faisait
+      // disparaître silencieusement ces étapes.
       etapes.push(extraireEtape(ligne));
     }
   }
