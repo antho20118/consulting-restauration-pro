@@ -28,6 +28,11 @@ type CategorieRecette = {
   nom: string;
 };
 
+type SousCategorieRecette = {
+  id: number;
+  nom: string;
+};
+
 // Pré-remplissage optionnel utilisé uniquement à la création (ex. depuis l'import de recette par
 // IA) : contrairement à `recette`, sa présence ne déclenche jamais une modification (PUT) plutôt
 // qu'une création (POST) — voir enregistrer().
@@ -48,6 +53,7 @@ type Props = {
 export default function RecetteForm({ recette, brouillon, onClose, onSave }: Props) {
   const [nom, setNom] = useState(recette?.nom ?? brouillon?.nom ?? "");
   const [categorieId, setCategorieId] = useState<number>(recette?.categorieId ?? 0);
+  const [sousCategorieId, setSousCategorieId] = useState<number>(recette?.sousCategorieId ?? 0);
   const [portions, setPortions] = useState(recette?.portions ?? brouillon?.portions ?? 1);
   const [poidsPortionG, setPoidsPortionG] = useState(recette?.poidsPortionG ?? 0);
   const [poidsAccompagnementG, setPoidsAccompagnementG] = useState(
@@ -83,6 +89,7 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
   );
 
   const [categories, setCategories] = useState<CategorieRecette[]>([]);
+  const [sousCategories, setSousCategories] = useState<SousCategorieRecette[]>([]);
   const [articles, setArticles] = useState<ArticleRecette[]>([]);
   const [unites, setUnites] = useState<UniteRecette[]>([]);
   const [importTechniquesOuvert, setImportTechniquesOuvert] = useState(false);
@@ -102,6 +109,10 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
         setCategories(data);
         if (!recette && data.length > 0) setCategorieId(data[0].id);
       });
+
+    apiFetch(`${API_URL}/sous-categories-recette`)
+      .then((r) => r.json())
+      .then(setSousCategories);
 
     getArticlesDisponibles().then(setArticles);
 
@@ -222,6 +233,7 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
     const payload = {
       nom,
       categorieId: categorieId || null,
+      sousCategorieId: sousCategorieId || null,
       portions,
       poidsPortionG: poidsPortionG || null,
       poidsAccompagnementG: poidsAccompagnementG || null,
@@ -312,6 +324,22 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
             {categories.map((categorie) => (
               <option key={categorie.id} value={categorie.id}>
                 {categorie.nom}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ flex: 1 }}>
+          <label>Sous-catégorie</label>
+          <select
+            value={sousCategorieId}
+            onChange={(e) => setSousCategorieId(Number(e.target.value))}
+            style={{ width: "100%", padding: 10 }}
+          >
+            <option value={0}>—</option>
+            {sousCategories.map((sousCategorie) => (
+              <option key={sousCategorie.id} value={sousCategorie.id}>
+                {sousCategorie.nom}
               </option>
             ))}
           </select>

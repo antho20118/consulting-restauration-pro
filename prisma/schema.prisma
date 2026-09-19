@@ -88,6 +88,20 @@ model CategorieRecette {
   menus    Menu[]
 }
 
+// Deuxième axe de classement des recettes, indépendant de CategorieRecette (Entrée/Plat/Dessert...)
+// : le type d'ingrédient principal (Viande, Poisson, Pâtes, Riz...), pour filtrer les recettes par
+// ce critère en plus de leur catégorie.
+model SousCategorieRecette {
+  id    Int     @id @default(autoincrement())
+  nom   String  @unique
+  actif Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  recettes Recette[]
+}
+
 model TVA {
   id   Int    @id @default(autoincrement())
   nom  String
@@ -325,6 +339,9 @@ model Recette {
 
   categorieId Int?
   categorie   CategorieRecette? @relation(fields: [categorieId], references: [id])
+
+  sousCategorieId Int?
+  sousCategorie   SousCategorieRecette? @relation(fields: [sousCategorieId], references: [id])
 
   societeId Int
   societe   Societe @relation(fields: [societeId], references: [id])

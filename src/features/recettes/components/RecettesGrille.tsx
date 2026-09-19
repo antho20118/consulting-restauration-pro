@@ -54,7 +54,14 @@ export default function RecettesGrille({ recettes, onOuvrir }: Props) {
               <ChefHat size={32} color="#aab2ba" />
             )}
           </div>
-          <div style={{ padding: "10px 12px", fontWeight: 600 }}>{recette.nom}</div>
+          <div style={{ padding: "10px 12px" }}>
+            <div style={{ fontWeight: 600 }}>{recette.nom}</div>
+            {recette.sousCategorie && (
+              <div style={{ fontSize: 12, color: "var(--couleur-texte-attenue)", marginTop: 2 }}>
+                {recette.sousCategorie.nom}
+              </div>
+            )}
+          </div>
         </button>
       ))}
     </div>

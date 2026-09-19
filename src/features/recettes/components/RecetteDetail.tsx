@@ -45,8 +45,9 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
         <div>
           <h2 style={{ marginBottom: 4 }}>{recette.nom}</h2>
           <div style={{ color: "#666" }}>
-            {recette.categorie?.nom ?? "Sans catégorie"} · {recette.portions} portion
-            {recette.portions > 1 ? "s" : ""}
+            {recette.categorie?.nom ?? "Sans catégorie"}
+            {recette.sousCategorie ? ` · ${recette.sousCategorie.nom}` : ""} · {recette.portions}{" "}
+            portion{recette.portions > 1 ? "s" : ""}
           </div>
         </div>
         {recette.photo && (
