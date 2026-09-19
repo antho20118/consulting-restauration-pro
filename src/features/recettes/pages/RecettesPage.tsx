@@ -6,6 +6,7 @@ import ImporterRecetteModal from "../components/ImporterRecetteModal";
 import { API_URL, apiFetch } from "../../../config/api";
 import { getRecettes, supprimerRecette } from "../services/recetteService";
 import { exporterExcel } from "../../../common/exportExcel";
+import { normaliserTexte } from "../utils/normaliserTexte";
 import type { LigneRecetteInput, Recette } from "../types/recette";
 
 type SousCategorieRecette = {
@@ -69,9 +70,17 @@ export default function RecettesPage() {
   }, [filtreSousCategorieId, sousCategories]);
 
   const recettesFiltrees = useMemo(() => {
-    const terme = recherche.trim().toLowerCase();
+    const terme = normaliserTexte(recherche);
     return recettes.filter((recette) => {
-      if (terme && !recette.nom.toLowerCase().includes(terme)) return false;
+      if (terme) {
+        // Cherche aussi dans les ingrédients de la recette, pas seulement son nom : "saumon" doit
+        // retrouver une recette qui en contient sans que ce soit dans son titre.
+        const correspondNom = normaliserTexte(recette.nom).includes(terme);
+        const correspondIngredient = recette.lignes.some((ligne) =>
+          normaliserTexte(ligne.article.nom).includes(terme)
+        );
+        if (!correspondNom && !correspondIngredient) return false;
+      }
       if (idsSousCategorieFiltre && !idsSousCategorieFiltre.has(recette.sousCategorieId ?? -1)) {
         return false;
       }
