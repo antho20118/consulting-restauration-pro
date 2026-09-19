@@ -11,6 +11,7 @@ import type { LigneRecetteInput, Recette } from "../types/recette";
 type SousCategorieRecette = {
   id: number;
   nom: string;
+  parentId: number | null;
 };
 
 type BrouillonImport = {
@@ -43,14 +44,40 @@ export default function RecettesPage() {
       .then(setSousCategories);
   }, []);
 
+  // Liste plate pour le menu déroulant : racines dans l'ordre, chacune suivie de ses enfants
+  // (indentés) juste après, plutôt que toutes les sous-catégories mélangées par ordre alphabétique.
+  const sousCategoriesOrdonnees = useMemo(() => {
+    const liste: { id: number; nom: string; indent: boolean }[] = [];
+    for (const racine of sousCategories.filter((sc) => sc.parentId === null)) {
+      liste.push({ id: racine.id, nom: racine.nom, indent: false });
+      for (const enfant of sousCategories.filter((sc) => sc.parentId === racine.id)) {
+        liste.push({ id: enfant.id, nom: enfant.nom, indent: true });
+      }
+    }
+    return liste;
+  }, [sousCategories]);
+
+  // Filtrer sur une sous-catégorie racine (ex. Viande) inclut aussi ses enfants (Bœuf, Veau...) :
+  // sinon choisir "Viande" dans le filtre ne montrerait que les recettes non précisées.
+  const idsSousCategorieFiltre = useMemo(() => {
+    if (!filtreSousCategorieId) return null;
+    const ids = new Set([filtreSousCategorieId]);
+    for (const sc of sousCategories) {
+      if (sc.parentId === filtreSousCategorieId) ids.add(sc.id);
+    }
+    return ids;
+  }, [filtreSousCategorieId, sousCategories]);
+
   const recettesFiltrees = useMemo(() => {
     const terme = recherche.trim().toLowerCase();
     return recettes.filter((recette) => {
       if (terme && !recette.nom.toLowerCase().includes(terme)) return false;
-      if (filtreSousCategorieId && recette.sousCategorieId !== filtreSousCategorieId) return false;
+      if (idsSousCategorieFiltre && !idsSousCategorieFiltre.has(recette.sousCategorieId ?? -1)) {
+        return false;
+      }
       return true;
     });
-  }, [recettes, recherche, filtreSousCategorieId]);
+  }, [recettes, recherche, idsSousCategorieFiltre]);
 
   function ouvrirCreation() {
     setRecetteEnEdition(null);
@@ -131,9 +158,9 @@ export default function RecettesPage() {
             style={{ padding: 8 }}
           >
             <option value={0}>Toutes les sous-catégories</option>
-            {sousCategories.map((sousCategorie) => (
+            {sousCategoriesOrdonnees.map((sousCategorie) => (
               <option key={sousCategorie.id} value={sousCategorie.id}>
-                {sousCategorie.nom}
+                {sousCategorie.indent ? `-- ${sousCategorie.nom}` : sousCategorie.nom}
               </option>
             ))}
           </select>
