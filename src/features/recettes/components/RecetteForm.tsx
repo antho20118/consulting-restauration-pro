@@ -13,6 +13,7 @@ import {
 import { estimerCoutLigne } from "../utils/cout";
 import { definirFiltrerSuperU, estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
 import { trouverUniteParDefaut } from "../utils/uniteParDefaut";
+import ImporterTechniquesModal from "./ImporterTechniquesModal";
 import RechercheArticle from "./RechercheArticle";
 import type {
   ArticleRecette,
@@ -84,6 +85,7 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
   const [categories, setCategories] = useState<CategorieRecette[]>([]);
   const [articles, setArticles] = useState<ArticleRecette[]>([]);
   const [unites, setUnites] = useState<UniteRecette[]>([]);
+  const [importTechniquesOuvert, setImportTechniquesOuvert] = useState(false);
   // Restreint la recherche d'ingrédient aux articles fournis par Super U par défaut (voir
   // filtreFournisseur.ts) ; mémorisé pour ne pas avoir à le redéfinir à chaque recette.
   const [filtrerSuperU, setFiltrerSuperU] = useState(filtrerSuperUActif);
@@ -565,9 +567,31 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
         </div>
       ))}
 
-      <button onClick={ajouterEtape} style={{ display: "block", marginBottom: 20 }}>
-        + Ajouter une étape
-      </button>
+      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+        <button onClick={ajouterEtape}>+ Ajouter une étape</button>
+        <button onClick={() => setImportTechniquesOuvert(true)}>Importer des techniques</button>
+      </div>
+
+      {importTechniquesOuvert && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            overflowY: "auto",
+            padding: "40px 0",
+            zIndex: 20,
+          }}
+        >
+          <ImporterTechniquesModal
+            onClose={() => setImportTechniquesOuvert(false)}
+            onEtapesExtraites={(nouvelles) => setEtapes((precedent) => [...precedent, ...nouvelles])}
+          />
+        </div>
+      )}
 
       <label>Notes complémentaires</label>
       <textarea

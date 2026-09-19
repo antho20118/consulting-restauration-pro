@@ -96,7 +96,7 @@ export interface ExtractionRecette {
   nom: string | null;
   portions: number | null;
   ingredients: IngredientExtrait[];
-  etapes: string[];
+  etapes: EtapeRecetteInput[];
 }
 
 export interface SuggestionEconomie {
