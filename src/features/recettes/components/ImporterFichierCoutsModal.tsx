@@ -39,6 +39,9 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
   const [categorieChoisie, setCategorieChoisie] = useState<Record<number, number>>({});
   const [sousCategorieChoisie, setSousCategorieChoisie] = useState<Record<number, number>>({});
   const [statuts, setStatuts] = useState<Record<number, StatutRecette>>({});
+  // Suggestions d'assaisonnement de base cochées par défaut (voir analyserFichierCouts.ts) :
+  // Record<index recette, tableau de booléens dans l'ordre de recette.suggestionsBase>.
+  const [suggestionsCochees, setSuggestionsCochees] = useState<Record<number, boolean[]>>({});
 
   async function gererFichier(e: React.ChangeEvent<HTMLInputElement>) {
     const fichier = e.target.files?.[0];
@@ -62,7 +65,12 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
       }
 
       const codesUniques = [
-        ...new Set(recettesExtraites.flatMap((r) => r.lignes.map((l) => l.code))),
+        ...new Set(
+          recettesExtraites.flatMap((r) => [
+            ...r.lignes.map((l) => l.code),
+            ...r.suggestionsBase.map((l) => l.code),
+          ])
+        ),
       ];
       const trouves = await rechercherArticlesParReferences(codesUniques);
 
@@ -93,6 +101,12 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
       });
       setCategorieChoisie(initCategorie);
       setSousCategorieChoisie(initSousCategorie);
+
+      const initSuggestions: Record<number, boolean[]> = {};
+      recettesExtraites.forEach((recette, index) => {
+        initSuggestions[index] = recette.suggestionsBase.map(() => true);
+      });
+      setSuggestionsCochees(initSuggestions);
     } catch {
       setErreur("Impossible de lire ce fichier. Formats acceptés : .xlsx, .xls, .ods");
     } finally {
@@ -123,15 +137,20 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
           ? `Allergènes (source du fichier importé) : ${recette.allergenesTexte}`
           : null,
         photo: null,
-        lignes: recette.lignes.map((l) => {
-          const article = articlesParCode.get(l.code)!;
-          return {
-            articleId: article.articleId,
-            quantite: l.quantite,
-            uniteId: article.uniteId,
-            gainCuissonPct: 0,
-          };
-        }),
+        lignes: [
+          ...recette.lignes,
+          ...recette.suggestionsBase.filter((_s, i) => suggestionsCochees[index]?.[i]),
+        ]
+          .filter((l) => articlesParCode.has(l.code))
+          .map((l) => {
+            const article = articlesParCode.get(l.code)!;
+            return {
+              articleId: article.articleId,
+              quantite: l.quantite,
+              uniteId: article.uniteId,
+              gainCuissonPct: 0,
+            };
+          }),
         etapes: [],
       });
       setStatuts((s) => ({ ...s, [index]: "importee" }));
@@ -318,6 +337,32 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
                     })}
                   </ul>
                 </details>
+
+                {recette.suggestionsBase.length > 0 && (
+                  <div style={{ fontSize: 13, marginTop: 8 }}>
+                    <div style={{ color: "var(--couleur-texte-attenue)" }}>
+                      Assaisonnement de base détecté dans la majorité des recettes du fichier,
+                      absent de celle-ci — à confirmer :
+                    </div>
+                    {recette.suggestionsBase.map((suggestion, i) => (
+                      <label key={i} style={{ display: "block" }}>
+                        <input
+                          type="checkbox"
+                          checked={suggestionsCochees[index]?.[i] ?? true}
+                          disabled={statut === "importee"}
+                          onChange={(e) =>
+                            setSuggestionsCochees((s) => {
+                              const tableau = [...(s[index] ?? recette.suggestionsBase.map(() => true))];
+                              tableau[i] = e.target.checked;
+                              return { ...s, [index]: tableau };
+                            })
+                          }
+                        />{" "}
+                        {suggestion.quantite} × {suggestion.nomFichier}
+                      </label>
+                    ))}
+                  </div>
+                )}
 
                 <div style={{ marginTop: 8 }}>
                   <button
