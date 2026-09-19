@@ -31,6 +31,7 @@ type CategorieRecette = {
 type SousCategorieRecette = {
   id: number;
   nom: string;
+  parentId: number | null;
 };
 
 // Pré-remplissage optionnel utilisé uniquement à la création (ex. depuis l'import de recette par
@@ -224,6 +225,16 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
     );
   }, [lignes, articles]);
 
+  // Sélection en cascade : sousCategorieId porte la valeur finale (racine ou enfant), mais le
+  // formulaire affiche deux listes — la racine (Viande, Poisson...) puis, si elle a des enfants
+  // (Bœuf, Veau...), une seconde liste pour préciser. Dérivé plutôt que stocké dans un second
+  // état pour ne jamais désynchroniser les deux.
+  const sousCategorieSelectionnee = sousCategories.find((sc) => sc.id === sousCategorieId);
+  const sousCategorieRacineId = sousCategorieSelectionnee?.parentId ?? sousCategorieId;
+  const sousCategoriesRacines = sousCategories.filter((sc) => sc.parentId === null);
+  const sousCategoriesEnfants = sousCategories.filter((sc) => sc.parentId === sousCategorieRacineId);
+  const sousCategorieRacine = sousCategoriesRacines.find((sc) => sc.id === sousCategorieRacineId);
+
   async function enregistrer() {
     if (lignes.some((ligne) => !ligne.articleId)) {
       toast.error("Choisis un ingrédient pour chaque ligne (ou supprime les lignes vides).");
@@ -332,18 +343,36 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
         <div style={{ flex: 1 }}>
           <label>Sous-catégorie</label>
           <select
-            value={sousCategorieId}
+            value={sousCategorieRacineId}
             onChange={(e) => setSousCategorieId(Number(e.target.value))}
             style={{ width: "100%", padding: 10 }}
           >
             <option value={0}>—</option>
-            {sousCategories.map((sousCategorie) => (
+            {sousCategoriesRacines.map((sousCategorie) => (
               <option key={sousCategorie.id} value={sousCategorie.id}>
                 {sousCategorie.nom}
               </option>
             ))}
           </select>
         </div>
+
+        {sousCategoriesEnfants.length > 0 && (
+          <div style={{ flex: 1 }}>
+            <label>Type de {sousCategorieRacine?.nom.toLowerCase()}</label>
+            <select
+              value={sousCategoriesEnfants.some((sc) => sc.id === sousCategorieId) ? sousCategorieId : 0}
+              onChange={(e) => setSousCategorieId(Number(e.target.value) || sousCategorieRacineId)}
+              style={{ width: "100%", padding: 10 }}
+            >
+              <option value={0}>—</option>
+              {sousCategoriesEnfants.map((sousCategorie) => (
+                <option key={sousCategorie.id} value={sousCategorie.id}>
+                  {sousCategorie.nom}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div style={{ width: 180 }}>
           <label>Quantité à produire</label>

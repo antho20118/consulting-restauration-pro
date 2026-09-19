@@ -96,10 +96,19 @@ model SousCategorieRecette {
   nom   String  @unique
   actif Boolean @default(true)
 
+  // Hiérarchie à un niveau : une sous-catégorie racine (ex. Viande) peut avoir des
+  // sous-catégories enfants (ex. Bœuf, Veau, Porc, Agneau) pour préciser encore le
+  // classement sans multiplier les axes de classement.
+  parentId Int?
+  parent   SousCategorieRecette?  @relation("SousCategorieHierarchie", fields: [parentId], references: [id])
+  enfants  SousCategorieRecette[] @relation("SousCategorieHierarchie")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   recettes Recette[]
+
+  @@index([parentId])
 }
 
 model TVA {

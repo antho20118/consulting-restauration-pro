@@ -18,11 +18,12 @@ router.get("/", async (_req, res) => {
 // Création d'une sous-catégorie de recette
 router.post("/", async (req, res) => {
   try {
-    const { nom } = req.body;
+    const { nom, parentId } = req.body as { nom: string; parentId?: number | null };
 
     const sousCategorie = await prisma.sousCategorieRecette.create({
       data: {
         nom,
+        parentId: parentId ?? null,
       },
     });
 
@@ -37,9 +38,12 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { nom } = req.body;
+    const { nom, parentId } = req.body as { nom: string; parentId?: number | null };
 
-    const sousCategorie = await prisma.sousCategorieRecette.update({ where: { id }, data: { nom } });
+    const sousCategorie = await prisma.sousCategorieRecette.update({
+      where: { id },
+      data: { nom, parentId: parentId ?? null },
+    });
 
     res.json(sousCategorie);
   } catch (error) {
