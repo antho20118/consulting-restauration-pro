@@ -4,6 +4,7 @@ import RecetteForm from "../components/RecetteForm";
 import RecetteDetail from "../components/RecetteDetail";
 import ImporterRecetteModal from "../components/ImporterRecetteModal";
 import ImporterFichierCoutsModal from "../components/ImporterFichierCoutsModal";
+import ImporterTechniquesFichierModal from "../components/ImporterTechniquesFichierModal";
 import { API_URL, apiFetch } from "../../../config/api";
 import toast from "react-hot-toast";
 import { getRecettes, supprimerRecette, supprimerToutesLesRecettes } from "../services/recetteService";
@@ -31,6 +32,7 @@ export default function RecettesPage() {
   const [brouillonImport, setBrouillonImport] = useState<BrouillonImport | undefined>(undefined);
   const [importOuvert, setImportOuvert] = useState(false);
   const [importFichierCoutsOuvert, setImportFichierCoutsOuvert] = useState(false);
+  const [importTechniquesFichierOuvert, setImportTechniquesFichierOuvert] = useState(false);
   const [recetteConsultee, setRecetteConsultee] = useState<Recette | null>(null);
   const [recherche, setRecherche] = useState("");
   const [sousCategories, setSousCategories] = useState<SousCategorieRecette[]>([]);
@@ -175,6 +177,7 @@ export default function RecettesPage() {
           <button className="btn-primary" onClick={ouvrirCreation}>+ Nouvelle recette</button>
           <button onClick={() => setImportOuvert(true)}>Importer une recette</button>
           <button onClick={() => setImportFichierCoutsOuvert(true)}>Importer un fichier de coûts</button>
+          <button onClick={() => setImportTechniquesFichierOuvert(true)}>Importer des techniques (fichier)</button>
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 
@@ -277,6 +280,26 @@ export default function RecettesPage() {
         >
           <ImporterFichierCoutsModal
             onClose={() => setImportFichierCoutsOuvert(false)}
+            onImporte={chargerRecettes}
+          />
+        </div>
+      )}
+
+      {importTechniquesFichierOuvert && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            overflowY: "auto",
+            padding: "40px 0",
+          }}
+        >
+          <ImporterTechniquesFichierModal
+            onClose={() => setImportTechniquesFichierOuvert(false)}
             onImporte={chargerRecettes}
           />
         </div>
