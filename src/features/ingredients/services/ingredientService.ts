@@ -70,3 +70,15 @@ export async function supprimerIngredient(id: number): Promise<void> {
     throw new Error("Impossible de supprimer l'article");
   }
 }
+
+export type ResultatSuppressionArticles = { supprimes: number; proteges: number };
+
+export async function supprimerTousLesArticles(): Promise<ResultatSuppressionArticles> {
+  const response = await apiFetch(`${API_URL}/articles`, { method: "DELETE" });
+
+  if (!response.ok) {
+    throw new Error("Impossible de supprimer les articles");
+  }
+
+  return response.json();
+}

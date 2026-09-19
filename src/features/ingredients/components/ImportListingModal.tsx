@@ -13,6 +13,7 @@ type Mapping = {
   reference: string;
   allergenes: string;
   categorie: string;
+  fournisseur: string;
 };
 
 const MAPPING_VIDE: Mapping = {
@@ -22,6 +23,7 @@ const MAPPING_VIDE: Mapping = {
   reference: "",
   allergenes: "",
   categorie: "",
+  fournisseur: "",
 };
 
 const CHAMPS_A_MAPPER: { cle: keyof Mapping; label: string }[] = [
@@ -31,6 +33,7 @@ const CHAMPS_A_MAPPER: { cle: keyof Mapping; label: string }[] = [
   { cle: "reference", label: "Référence" },
   { cle: "allergenes", label: "Allergènes" },
   { cle: "categorie", label: "Catégorie" },
+  { cle: "fournisseur", label: "Fournisseur (si plusieurs dans le fichier)" },
 ];
 
 type Props = {
@@ -86,8 +89,8 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
   }
 
   async function confirmer() {
-    if (!fournisseurNom.trim()) {
-      setErreur("Indique le nom du fournisseur.");
+    if (!fournisseurNom.trim() && !mapping.fournisseur) {
+      setErreur("Indique le nom du fournisseur, ou mappe une colonne Fournisseur.");
       return;
     }
     if (!mapping.designation || !mapping.prix) {
@@ -101,6 +104,7 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
     const idxRef = entetes.indexOf(mapping.reference);
     const idxAllerg = entetes.indexOf(mapping.allergenes);
     const idxCategorie = entetes.indexOf(mapping.categorie);
+    const idxFournisseur = entetes.indexOf(mapping.fournisseur);
 
     const lignes = lignesBrutes
       .map((ligne) => {
@@ -115,6 +119,7 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
           reference: idxRef >= 0 ? String(ligne[idxRef] ?? "").trim() : "",
           allergenes: idxAllerg >= 0 ? String(ligne[idxAllerg] ?? "").trim() : "",
           categorie: idxCategorie >= 0 ? String(ligne[idxCategorie] ?? "").trim() : "",
+          fournisseur: idxFournisseur >= 0 ? String(ligne[idxFournisseur] ?? "").trim() : "",
         };
       })
       .filter((ligne): ligne is NonNullable<typeof ligne> => ligne !== null);
@@ -171,7 +176,7 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
 
       {etape === 2 && (
         <div>
-          <label>Nom du fournisseur</label>
+          <label>Nom du fournisseur (par défaut, si la colonne Fournisseur n'est pas mappée ou vide sur une ligne)</label>
           <input
             type="text"
             placeholder="ex. Metro, Pomona, Transgourmet…"
