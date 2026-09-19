@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import IngredientsTable from "../components/IngredientsTable";
 import IngredientForm from "../components/IngredientForm";
 import ImportListingModal from "../components/ImportListingModal";
-import { getIngredients, supprimerIngredient } from "../services/ingredientService";
+import {
+  getIngredients,
+  supprimerIngredient,
+  supprimerTousLesArticles,
+} from "../services/ingredientService";
 import { exporterExcel } from "../../../common/exportExcel";
 import type { Ingredient } from "../types/ingredient";
 
@@ -43,6 +48,23 @@ export default function IngredientsPage() {
   async function supprimer(ingredient: Ingredient) {
     if (!confirm(`Supprimer l'ingrédient "${ingredient.nom}" ?`)) return;
     await supprimerIngredient(ingredient.id);
+    chargerIngredients();
+  }
+
+  // Suppression définitive (pas la suppression douce individuelle ci-dessus) : les articles déjà
+  // utilisés dans une recette sont protégés côté serveur, mais le reste est vraiment effacé, d'où
+  // une confirmation renforcée plutôt qu'un simple OK/Annuler.
+  async function supprimerTout() {
+    const saisie = prompt(
+      `Supprimer définitivement les ${ingredients.length} article(s) ? Ceux déjà utilisés dans une recette seront conservés. Cette action est irréversible pour les autres.\n\nTape SUPPRIMER pour confirmer.`
+    );
+    if (saisie !== "SUPPRIMER") return;
+
+    const { supprimes, proteges } = await supprimerTousLesArticles();
+    toast.success(
+      `${supprimes} article(s) supprimé(s)` +
+        (proteges > 0 ? `, ${proteges} conservé(s) car utilisé(s) dans une recette.` : ".")
+    );
     chargerIngredients();
   }
 
@@ -94,6 +116,17 @@ export default function IngredientsPage() {
           }}
         />
       </div>
+
+      {ingredients.length > 0 && (
+        <div style={{ textAlign: "right", marginBottom: 10 }}>
+          <button
+            onClick={supprimerTout}
+            style={{ fontSize: 12, color: "#b00020", background: "none", border: "none", cursor: "pointer" }}
+          >
+            Supprimer tous les articles ({ingredients.length})
+          </button>
+        </div>
+      )}
 
       <IngredientsTable
         ingredients={ingredientsFiltres}

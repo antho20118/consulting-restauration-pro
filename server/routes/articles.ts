@@ -240,6 +240,42 @@ router.put("/:id", async (req: Request, res: Response) => {
   }
 });
 
+// Suppression définitive de tous les articles, sauf ceux déjà utilisés dans une recette : les
+// effacer casserait cette recette (RecetteLigne.articleId), ce qui n'est jamais l'intention d'une
+// remise à zéro du catalogue d'ingrédients. Les tables qui référencent un article sans faire
+// obstacle à sa suppression (tarifs, allergènes, nutrition, documents, mouvements de stock,
+// stocks, alias d'import) sont vidées avec lui.
+router.delete("/", async (_req: Request, res: Response) => {
+  try {
+    const utilises = await prisma.recetteLigne.findMany({
+      select: { articleId: true },
+      distinct: ["articleId"],
+    });
+    const idsProteges = new Set(utilises.map((l) => l.articleId));
+
+    const tous = await prisma.article.findMany({ select: { id: true } });
+    const idsASupprimer = tous.map((a) => a.id).filter((id) => !idsProteges.has(id));
+
+    if (idsASupprimer.length > 0) {
+      await prisma.$transaction([
+        prisma.tarifArticle.deleteMany({ where: { articleId: { in: idsASupprimer } } }),
+        prisma.articleAllergene.deleteMany({ where: { articleId: { in: idsASupprimer } } }),
+        prisma.valeurNutritionnelle.deleteMany({ where: { articleId: { in: idsASupprimer } } }),
+        prisma.document.deleteMany({ where: { articleId: { in: idsASupprimer } } }),
+        prisma.mouvementStock.deleteMany({ where: { articleId: { in: idsASupprimer } } }),
+        prisma.stock.deleteMany({ where: { articleId: { in: idsASupprimer } } }),
+        prisma.aliasIngredientImport.deleteMany({ where: { articleId: { in: idsASupprimer } } }),
+        prisma.article.deleteMany({ where: { id: { in: idsASupprimer } } }),
+      ]);
+    }
+
+    res.json({ supprimes: idsASupprimer.length, proteges: idsProteges.size });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de supprimer les articles" });
+  }
+});
+
 // Suppression (douce) d'un article
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
@@ -271,7 +307,11 @@ router.post("/import", async (req: Request, res: Response) => {
     // traiter dans une seule transaction interactive (délai par défaut de 5s chez Prisma, qui
     // se ferme avant la fin d'un import volumineux). Seules les écritures d'une même ligne
     // (clôture + ouverture de tarif, ou création d'article + tarif) sont transactionnelles.
-    const fournisseurId = await trouverOuCreerFournisseur(prisma, fournisseurNom, societeId);
+    const fournisseurIdParDefaut = await trouverOuCreerFournisseur(prisma, fournisseurNom, societeId);
+    // Un fichier combinant plusieurs fournisseurs (une colonne "Fournisseur" par ligne) prime sur
+    // le fournisseur unique choisi dans la modale d'import ; mis en cache pour ne résoudre chaque
+    // nom qu'une fois même s'il revient sur des centaines de lignes.
+    const fournisseurIdParNom = new Map<string, number>();
 
     const [
       uniteKg,
@@ -328,6 +368,19 @@ router.post("/import", async (req: Request, res: Response) => {
     for (const ligne of lignes) {
       const designation = String(ligne.designation ?? "").trim();
       if (!designation) continue;
+
+      const nomFournisseurLigne = ligne.fournisseur ? String(ligne.fournisseur).trim() : "";
+      let fournisseurId = fournisseurIdParDefaut;
+      if (nomFournisseurLigne) {
+        const cleFournisseur = nomFournisseurLigne.toLowerCase();
+        const idConnu = fournisseurIdParNom.get(cleFournisseur);
+        if (idConnu) {
+          fournisseurId = idConnu;
+        } else {
+          fournisseurId = await trouverOuCreerFournisseur(prisma, nomFournisseurLigne, societeId);
+          fournisseurIdParNom.set(cleFournisseur, fournisseurId);
+        }
+      }
 
       const reference = ligne.reference ? String(ligne.reference).trim() : null;
       const prixTotal = parsePrix(ligne.prix);

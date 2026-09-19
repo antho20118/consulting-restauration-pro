@@ -7,6 +7,9 @@ export type LigneImport = {
   reference?: string;
   allergenes?: string;
   categorie?: string;
+  // Fournisseur propre à cette ligne (fichier combinant plusieurs fournisseurs) : prime sur le
+  // fournisseur unique du payload quand renseigné.
+  fournisseur?: string;
 };
 
 export type ResultatImport = {
