@@ -61,6 +61,25 @@ const RE_ETAPE_NUMEROTEE = /^(\d+)[.)»›]\s*(.+)$/;
 
 const RE_PORTIONS = /\(?\s*(\d+)\s*(?:personnes?|portions?|parts?|couverts?)\s*\)?/i;
 
+// Une étape peut porter un point de contrôle HACCP explicite en fin de ligne, ex. :
+// "Cuire à cœur jusqu'à 68°C. [HACCP: sonde de température, ≥68°C à cœur]" — convention utilisée
+// pour les fiches préparées à l'avance (voir la génération des textes à importer), reconnue ici
+// pour remplir automatiquement les champs dédiés plutôt que de laisser l'utilisateur les recopier
+// à la main après l'import.
+const RE_MARQUEUR_HACCP = /\s*\[\s*HACCP\s*:\s*(.+?)\s*\]\s*$/i;
+
+function extraireEtape(ligne: string): ExtractionRecette["etapes"][number] {
+  const correspondance = RE_MARQUEUR_HACCP.exec(ligne);
+  if (!correspondance) {
+    return { description: ligne, pointCritiqueHACCP: false, controleHACCP: null };
+  }
+  return {
+    description: ligne.slice(0, correspondance.index).trim(),
+    pointCritiqueHACCP: true,
+    controleHACCP: correspondance[1].trim(),
+  };
+}
+
 function normaliserLigne(ligne: string): string {
   return ligne.toLowerCase().replace(/[:：]\s*$/, "").trim();
 }
@@ -84,7 +103,7 @@ export function analyseRecetteLocale(texteBrut: string): ExtractionRecette {
   let nom: string | null = null;
   let portions: number | null = null;
   const ingredients: ExtractionRecette["ingredients"] = [];
-  const etapes: string[] = [];
+  const etapes: ExtractionRecette["etapes"] = [];
 
   for (const ligne of lignes) {
     if (MOTS_ENTETE.includes(normaliserLigne(ligne))) continue;
@@ -96,7 +115,7 @@ export function analyseRecetteLocale(texteBrut: string): ExtractionRecette {
 
     const matchEtape = RE_ETAPE_NUMEROTEE.exec(ligne);
     if (matchEtape) {
-      etapes.push(matchEtape[2].trim());
+      etapes.push(extraireEtape(matchEtape[2].trim()));
       continue;
     }
 
@@ -121,7 +140,7 @@ export function analyseRecetteLocale(texteBrut: string): ExtractionRecette {
       // Toute ligne libre non numérotée après le début des ingrédients est traitée comme une
       // étape de préparation (pas seulement la première : sans quoi les étapes suivantes seraient
       // silencieusement perdues).
-      etapes.push(ligne);
+      etapes.push(extraireEtape(ligne));
     }
   }
 

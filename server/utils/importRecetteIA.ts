@@ -18,11 +18,17 @@ export type IngredientExtrait = {
   unite: string | null;
 };
 
+export type EtapeExtraite = {
+  description: string;
+  pointCritiqueHACCP: boolean;
+  controleHACCP: string | null;
+};
+
 export type ExtractionRecette = {
   nom: string | null;
   portions: number | null;
   ingredients: IngredientExtrait[];
-  etapes: string[];
+  etapes: EtapeExtraite[];
 };
 
 // data:image/jpeg;base64,XXXX -> { mediaType: "image/jpeg", data: "XXXX" }
@@ -76,11 +82,31 @@ export async function extraireRecette(
       .describe("L'unité la plus proche parmi celles proposées, ou null si aucune ne correspond"),
   });
 
+  const EtapeSchema = z.object({
+    description: z.string().describe("Le texte de l'étape de préparation, sans la mention HACCP"),
+    pointCritiqueHACCP: z
+      .boolean()
+      .describe(
+        "true si cette étape est un point critique pour la sécurité alimentaire (température de " +
+          "cuisson à cœur, refroidissement, chaîne du froid, remise en température...), d'après les " +
+          "bonnes pratiques d'hygiène habituelles en restauration — pas seulement si le texte source " +
+          "le mentionne explicitement"
+      ),
+    controleHACCP: z
+      .string()
+      .nullable()
+      .describe(
+        "Si pointCritiqueHACCP est true : le contrôle à effectuer, avec un seuil chiffré quand la " +
+          "pratique standard en donne un (ex. « Cuisson à cœur ≥ 63°C, sonde », « Refroidissement de " +
+          "63°C à 10°C en moins de 2h »). Sinon null."
+      ),
+  });
+
   const ExtractionSchema = z.object({
     nom: z.string().nullable().describe("Le nom de la recette si identifiable dans le texte, sinon null"),
     portions: z.number().nullable().describe("Le nombre de portions ou de personnes si indiqué, sinon null"),
     ingredients: z.array(IngredientSchema),
-    etapes: z.array(z.string()).describe("Les étapes de préparation, une par élément, dans l'ordre du texte"),
+    etapes: z.array(EtapeSchema).describe("Les étapes de préparation, une par élément, dans l'ordre du texte"),
   });
 
   const content: Anthropic.MessageParam["content"] =
@@ -112,7 +138,12 @@ export async function extraireRecette(
       "(texte collé ou photo), en français. Pour chaque ingrédient, choisis l'unité la plus proche " +
       "parmi celles fournies dans le schéma ; si aucune ne correspond vraiment, mets null plutôt que " +
       "d'en inventer une. Le champ nomExtrait ne doit contenir que le nom de l'aliment, sans quantité " +
-      "ni unité.",
+      "ni unité. Pour chaque étape de préparation, identifie s'il s'agit d'un point critique pour la " +
+      "sécurité alimentaire (HACCP) d'après les bonnes pratiques d'hygiène habituelles en " +
+      "restauration collective (cuisson à cœur d'une viande/volaille/poisson, refroidissement rapide " +
+      "après cuisson, remise en température, chaîne du froid d'une préparation froide...) — même si " +
+      "le texte source ne le mentionne pas explicitement — et propose un contrôle avec un seuil " +
+      "chiffré quand la pratique standard en donne un.",
     messages: [{ role: "user", content }],
   });
 

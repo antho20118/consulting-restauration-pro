@@ -168,11 +168,7 @@ export default function ImporterRecetteModal({ onClose, onExtrait }: Props) {
         nom: extraction.nom ?? undefined,
         portions: extraction.portions ?? undefined,
         lignes,
-        etapes: extraction.etapes.map((description) => ({
-          description,
-          pointCritiqueHACCP: false,
-          controleHACCP: null,
-        })),
+        etapes: extraction.etapes,
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur inconnue");
