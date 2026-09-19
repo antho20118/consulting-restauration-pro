@@ -324,13 +324,13 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 20, marginBottom: 20 }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: 20 }}>
+        <div style={{ flex: "0 1 auto" }}>
           <label>Catégorie</label>
           <select
             value={categorieId}
             onChange={(e) => setCategorieId(Number(e.target.value))}
-            style={{ width: "100%", padding: 10 }}
+            style={{ width: "auto", maxWidth: "100%", padding: 10 }}
           >
             {categories.map((categorie) => (
               <option key={categorie.id} value={categorie.id}>
@@ -340,12 +340,12 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
           </select>
         </div>
 
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: "0 1 auto" }}>
           <label>Sous-catégorie</label>
           <select
             value={sousCategorieRacineId}
             onChange={(e) => setSousCategorieId(Number(e.target.value))}
-            style={{ width: "100%", padding: 10 }}
+            style={{ width: "auto", maxWidth: "100%", padding: 10 }}
           >
             <option value={0}>—</option>
             {sousCategoriesRacines.map((sousCategorie) => (
@@ -357,12 +357,12 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
         </div>
 
         {sousCategoriesEnfants.length > 0 && (
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: "0 1 auto" }}>
             <label>Type de {sousCategorieRacine?.nom.toLowerCase()}</label>
             <select
               value={sousCategoriesEnfants.some((sc) => sc.id === sousCategorieId) ? sousCategorieId : 0}
               onChange={(e) => setSousCategorieId(Number(e.target.value) || sousCategorieRacineId)}
-              style={{ width: "100%", padding: 10 }}
+              style={{ width: "auto", maxWidth: "100%", padding: 10 }}
             >
               <option value={0}>—</option>
               {sousCategoriesEnfants.map((sousCategorie) => (
