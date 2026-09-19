@@ -477,6 +477,51 @@ router.post("/import", async (req: Request, res: Response) => {
   }
 });
 
+// Rapprochement par code article (référence), pour l'import d'un fichier de coûts de recettes
+// (voir ImporterFichierCoutsModal.tsx) : contrairement à l'import de listing fournisseur
+// ci-dessus, ici on veut une correspondance exacte, jamais une approximation par nom — c'est
+// précisément le point de départ de la demande ("se servir des codes articles"). Une référence
+// sans article actif, ou avec un article sans tarif actif (donc sans unité fiable), n'apparaît
+// pas dans la réponse : le client la traite comme non trouvée.
+router.post("/rechercher-par-reference", async (req: Request, res: Response) => {
+  try {
+    const { references } = req.body as { references: string[] };
+
+    if (!Array.isArray(references) || references.length === 0) {
+      res.json({ trouves: [] });
+      return;
+    }
+
+    const refsNettoyees = [...new Set(references.map((r) => String(r).trim()).filter(Boolean))];
+
+    const articles = await prisma.article.findMany({
+      where: { reference: { in: refsNettoyees }, actif: true },
+      include: {
+        tarifs: {
+          where: { actif: true },
+          orderBy: { dateDebut: "desc" },
+          take: 1,
+        },
+      },
+    });
+
+    const trouves = articles
+      .filter((article) => article.tarifs.length > 0)
+      .map((article) => ({
+        reference: article.reference as string,
+        articleId: article.id,
+        nom: article.nom,
+        uniteId: article.tarifs[0].uniteId,
+        prixHT: article.tarifs[0].prixHT,
+      }));
+
+    res.json({ trouves });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de rapprocher les codes articles" });
+  }
+});
+
 async function trouverOuCreerFournisseur(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
   fournisseurNom: string | undefined,

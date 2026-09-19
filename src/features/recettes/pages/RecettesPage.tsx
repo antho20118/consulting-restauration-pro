@@ -3,6 +3,7 @@ import RecettesGrille from "../components/RecettesGrille";
 import RecetteForm from "../components/RecetteForm";
 import RecetteDetail from "../components/RecetteDetail";
 import ImporterRecetteModal from "../components/ImporterRecetteModal";
+import ImporterFichierCoutsModal from "../components/ImporterFichierCoutsModal";
 import { API_URL, apiFetch } from "../../../config/api";
 import { getRecettes, supprimerRecette } from "../services/recetteService";
 import { exporterExcel } from "../../../common/exportExcel";
@@ -28,6 +29,7 @@ export default function RecettesPage() {
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [brouillonImport, setBrouillonImport] = useState<BrouillonImport | undefined>(undefined);
   const [importOuvert, setImportOuvert] = useState(false);
+  const [importFichierCoutsOuvert, setImportFichierCoutsOuvert] = useState(false);
   const [recetteConsultee, setRecetteConsultee] = useState<Recette | null>(null);
   const [recherche, setRecherche] = useState("");
   const [sousCategories, setSousCategories] = useState<SousCategorieRecette[]>([]);
@@ -157,6 +159,7 @@ export default function RecettesPage() {
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn-primary" onClick={ouvrirCreation}>+ Nouvelle recette</button>
           <button onClick={() => setImportOuvert(true)}>Importer une recette</button>
+          <button onClick={() => setImportFichierCoutsOuvert(true)}>Importer un fichier de coûts</button>
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 
@@ -229,6 +232,26 @@ export default function RecettesPage() {
               setBrouillonImport(brouillon);
               setFormulaireOuvert(true);
             }}
+          />
+        </div>
+      )}
+
+      {importFichierCoutsOuvert && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            overflowY: "auto",
+            padding: "40px 0",
+          }}
+        >
+          <ImporterFichierCoutsModal
+            onClose={() => setImportFichierCoutsOuvert(false)}
+            onImporte={chargerRecettes}
           />
         </div>
       )}

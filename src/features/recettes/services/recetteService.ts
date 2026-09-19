@@ -144,3 +144,33 @@ export async function enregistrerAliasIngredients(
     body: JSON.stringify({ correspondances }),
   }).catch(() => undefined);
 }
+
+export type ArticleTrouveParReference = {
+  reference: string;
+  articleId: number;
+  nom: string;
+  uniteId: number;
+  prixHT: number;
+};
+
+// Rapprochement exact par code article (voir ImporterFichierCoutsModal.tsx) : pour un import de
+// fichier de coûts, où l'on veut retrouver l'article précis désigné par son code plutôt qu'une
+// approximation par nom.
+export async function rechercherArticlesParReferences(
+  references: string[]
+): Promise<ArticleTrouveParReference[]> {
+  if (references.length === 0) return [];
+
+  const response = await apiFetch(`${API_URL}/articles/rechercher-par-reference`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ references }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Impossible de rapprocher les codes articles");
+  }
+
+  const data = await response.json();
+  return data.trouves;
+}
