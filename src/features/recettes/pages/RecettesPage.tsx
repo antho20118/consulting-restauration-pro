@@ -5,7 +5,8 @@ import RecetteDetail from "../components/RecetteDetail";
 import ImporterRecetteModal from "../components/ImporterRecetteModal";
 import ImporterFichierCoutsModal from "../components/ImporterFichierCoutsModal";
 import { API_URL, apiFetch } from "../../../config/api";
-import { getRecettes, supprimerRecette } from "../services/recetteService";
+import toast from "react-hot-toast";
+import { getRecettes, supprimerRecette, supprimerToutesLesRecettes } from "../services/recetteService";
 import { exporterExcel } from "../../../common/exportExcel";
 import { normaliserTexte } from "../utils/normaliserTexte";
 import type { LigneRecetteInput, Recette } from "../types/recette";
@@ -114,6 +115,20 @@ export default function RecettesPage() {
     chargerRecettes();
   }
 
+  // Action rarement utilisée et irréversible pour l'utilisateur (même si les données restent
+  // techniquement en base, "supprimée" en pratique) : un simple confirm() serait trop facile à
+  // valider par réflexe vu le nombre de recettes concernées, on demande de taper un mot précis.
+  async function supprimerTout() {
+    const saisie = prompt(
+      `Supprimer les ${recettes.length} recette(s) ? Cette action est irréversible depuis l'application.\n\nTape SUPPRIMER pour confirmer.`
+    );
+    if (saisie !== "SUPPRIMER") return;
+
+    const supprimees = await supprimerToutesLesRecettes();
+    toast.success(`${supprimees} recette(s) supprimée(s).`);
+    chargerRecettes();
+  }
+
   async function exporter() {
     await exporterExcel(`recettes_${new Date().toISOString().slice(0, 10)}.xlsx`, [
       {
@@ -186,6 +201,17 @@ export default function RecettesPage() {
           />
         </div>
       </div>
+
+      {recettes.length > 0 && (
+        <div style={{ textAlign: "right", marginBottom: 10 }}>
+          <button
+            onClick={supprimerTout}
+            style={{ fontSize: 12, color: "#b00020", background: "none", border: "none", cursor: "pointer" }}
+          >
+            Supprimer toutes les recettes ({recettes.length})
+          </button>
+        </div>
+      )}
 
       <RecettesGrille recettes={recettesFiltrees} onOuvrir={setRecetteConsultee} />
 

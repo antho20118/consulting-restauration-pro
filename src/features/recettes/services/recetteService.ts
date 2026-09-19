@@ -57,6 +57,17 @@ export async function supprimerRecette(id: number): Promise<void> {
   }
 }
 
+export async function supprimerToutesLesRecettes(): Promise<number> {
+  const response = await apiFetch(`${API_URL}/recettes`, { method: "DELETE" });
+
+  if (!response.ok) {
+    throw new Error("Impossible de supprimer les recettes");
+  }
+
+  const data = await response.json();
+  return data.supprimees;
+}
+
 export async function getArticlesDisponibles(): Promise<ArticleRecette[]> {
   const response = await apiFetch(`${API_URL}/articles`);
 
