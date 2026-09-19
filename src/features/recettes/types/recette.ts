@@ -48,6 +48,8 @@ export interface Recette {
   photo: string | null;
   categorieId: number | null;
   categorie: { id: number; nom: string } | null;
+  sousCategorieId: number | null;
+  sousCategorie: { id: number; nom: string } | null;
   portions: number;
   poidsPortionG: number | null;
   poidsAccompagnementG: number | null;
@@ -111,6 +113,7 @@ export interface SuggestionEconomie {
 export type RecetteInput = {
   nom: string;
   categorieId: number | null;
+  sousCategorieId: number | null;
   portions: number;
   poidsPortionG: number | null;
   poidsAccompagnementG: number | null;

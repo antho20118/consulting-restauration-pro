@@ -1,5 +1,6 @@
 export const inclusionsRecette = {
   categorie: true,
+  sousCategorie: true,
   etapes: {
     orderBy: { ordre: "asc" as const },
   },

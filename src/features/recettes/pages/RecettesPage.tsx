@@ -3,9 +3,15 @@ import RecettesGrille from "../components/RecettesGrille";
 import RecetteForm from "../components/RecetteForm";
 import RecetteDetail from "../components/RecetteDetail";
 import ImporterRecetteModal from "../components/ImporterRecetteModal";
+import { API_URL, apiFetch } from "../../../config/api";
 import { getRecettes, supprimerRecette } from "../services/recetteService";
 import { exporterExcel } from "../../../common/exportExcel";
 import type { LigneRecetteInput, Recette } from "../types/recette";
+
+type SousCategorieRecette = {
+  id: number;
+  nom: string;
+};
 
 type BrouillonImport = {
   nom?: string;
@@ -22,6 +28,8 @@ export default function RecettesPage() {
   const [importOuvert, setImportOuvert] = useState(false);
   const [recetteConsultee, setRecetteConsultee] = useState<Recette | null>(null);
   const [recherche, setRecherche] = useState("");
+  const [sousCategories, setSousCategories] = useState<SousCategorieRecette[]>([]);
+  const [filtreSousCategorieId, setFiltreSousCategorieId] = useState(0);
 
   async function chargerRecettes() {
     const data = await getRecettes();
@@ -30,13 +38,19 @@ export default function RecettesPage() {
 
   useEffect(() => {
     getRecettes().then(setRecettes);
+    apiFetch(`${API_URL}/sous-categories-recette`)
+      .then((r) => r.json())
+      .then(setSousCategories);
   }, []);
 
   const recettesFiltrees = useMemo(() => {
     const terme = recherche.trim().toLowerCase();
-    if (!terme) return recettes;
-    return recettes.filter((recette) => recette.nom.toLowerCase().includes(terme));
-  }, [recettes, recherche]);
+    return recettes.filter((recette) => {
+      if (terme && !recette.nom.toLowerCase().includes(terme)) return false;
+      if (filtreSousCategorieId && recette.sousCategorieId !== filtreSousCategorieId) return false;
+      return true;
+    });
+  }, [recettes, recherche, filtreSousCategorieId]);
 
   function ouvrirCreation() {
     setRecetteEnEdition(null);
@@ -69,6 +83,7 @@ export default function RecettesPage() {
         lignes: recettesFiltrees.map((recette) => ({
           Nom: recette.nom,
           Catégorie: recette.categorie?.nom ?? "",
+          "Sous-catégorie": recette.sousCategorie?.nom ?? "",
           Portions: recette.portions,
           "Coût total (€)": Number(recette.coutTotal.toFixed(2)),
           "Coût / portion (€)": Number(recette.coutParPortion.toFixed(2)),
@@ -109,13 +124,28 @@ export default function RecettesPage() {
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 
-        <input
-          type="text"
-          placeholder="Rechercher..."
-          value={recherche}
-          onChange={(e) => setRecherche(e.target.value)}
-          style={{ width: 300, padding: 8 }}
-        />
+        <div style={{ display: "flex", gap: 10 }}>
+          <select
+            value={filtreSousCategorieId}
+            onChange={(e) => setFiltreSousCategorieId(Number(e.target.value))}
+            style={{ padding: 8 }}
+          >
+            <option value={0}>Toutes les sous-catégories</option>
+            {sousCategories.map((sousCategorie) => (
+              <option key={sousCategorie.id} value={sousCategorie.id}>
+                {sousCategorie.nom}
+              </option>
+            ))}
+          </select>
+
+          <input
+            type="text"
+            placeholder="Rechercher..."
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+            style={{ width: 300, padding: 8 }}
+          />
+        </div>
       </div>
 
       <RecettesGrille recettes={recettesFiltrees} onOuvrir={setRecetteConsultee} />

@@ -97,6 +97,7 @@ router.post("/", async (req: Request, res: Response) => {
     const {
       nom,
       categorieId,
+      sousCategorieId,
       societeId,
       portions,
       prixVenteHT,
@@ -109,6 +110,7 @@ router.post("/", async (req: Request, res: Response) => {
     } = req.body as {
       nom: string;
       categorieId?: number | null;
+      sousCategorieId?: number | null;
       societeId: number;
       portions?: number;
       prixVenteHT?: number | null;
@@ -124,6 +126,7 @@ router.post("/", async (req: Request, res: Response) => {
       data: {
         nom,
         categorieId: categorieId ?? null,
+        sousCategorieId: sousCategorieId ?? null,
         societeId,
         portions: portions ?? 1,
         prixVenteHT: prixVenteHT ?? null,
@@ -167,6 +170,7 @@ router.put("/:id", async (req: Request, res: Response) => {
     const {
       nom,
       categorieId,
+      sousCategorieId,
       portions,
       prixVenteHT,
       instructions,
@@ -178,6 +182,7 @@ router.put("/:id", async (req: Request, res: Response) => {
     } = req.body as {
       nom: string;
       categorieId?: number | null;
+      sousCategorieId?: number | null;
       portions?: number;
       prixVenteHT?: number | null;
       instructions?: string | null;
@@ -197,6 +202,7 @@ router.put("/:id", async (req: Request, res: Response) => {
         data: {
           nom,
           categorieId: categorieId ?? null,
+          sousCategorieId: sousCategorieId ?? null,
           portions: portions ?? 1,
           prixVenteHT: prixVenteHT ?? null,
           instructions: instructions ?? null,
