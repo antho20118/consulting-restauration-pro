@@ -238,6 +238,23 @@ router.put("/:id", async (req: Request, res: Response) => {
   }
 });
 
+// Suppression (douce) de toutes les recettes actives : même principe que la suppression
+// individuelle ci-dessous (actif: false, rien n'est effacé), pour repartir d'une liste vide sans
+// perdre irréversiblement les données en cas d'erreur.
+router.delete("/", async (_req: Request, res: Response) => {
+  try {
+    const { count } = await prisma.recette.updateMany({
+      where: { actif: true },
+      data: { actif: false },
+    });
+
+    res.json({ supprimees: count });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de supprimer les recettes" });
+  }
+});
+
 // Suppression (douce) d'une recette
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
