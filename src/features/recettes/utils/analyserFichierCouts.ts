@@ -14,6 +14,10 @@ export type RecetteCoutsExtraite = {
   sousCategorieParDefaut: string | null;
   lignes: LigneCoutsExtraite[];
   allergenesTexte: string | null;
+  // Assaisonnements de base (sel, poivre...) détectés comme quasi systématiques dans les autres
+  // recettes du même fichier, mais absents de celle-ci : proposés à l'import (voir
+  // ImporterFichierCoutsModal.tsx), jamais ajoutés automatiquement sans confirmation.
+  suggestionsBase: LigneCoutsExtraite[];
 };
 
 // Catégorie/sous-catégorie proposées par défaut selon la feuille d'origine (éditables ensuite
@@ -102,6 +106,7 @@ function extraireRecettesFeuille(lignes: unknown[][], nomFeuille: string): Recet
           sousCategorieParDefaut,
           lignes: lignesExtraites,
           allergenesTexte,
+          suggestionsBase: [],
         });
       }
     });
@@ -127,7 +132,93 @@ export async function analyserFichierCouts(fichier: File): Promise<RecetteCoutsE
     recettes.push(...extraireRecettesFeuille(lignesBrutes, nomFeuille.trim()));
   }
 
+  ajouterSuggestionsBase(recettes);
+
   return recettes;
+}
+
+// Familles d'assaisonnement de base repérées par mot-clé (peu importe le conditionnement précis,
+// ex. "sel" matche aussi bien "SEL FIN 10KG" que "SEL FIN SAL EINVILLE PXM 750G"). Liste courte et
+// explicite plutôt que déduite automatiquement, pour rester vérifiable par l'utilisateur.
+const FAMILLES_ASSAISONNEMENT_BASE = ["sel", "poivre", "huile", "ail", "oignon", "persil", "laurier", "thym"];
+
+// Une famille n'est proposée comme "de base" que si elle apparaît dans une nette majorité des
+// recettes de référence : sinon (ex. huile, ail — souvent absents de plus de la moitié des
+// recettes, même dans les feuilles de référence) l'ajouter partout serait faux plus souvent
+// qu'utile. Une moyenne calculée sur tout le fichier dilue ce signal (les feuilles où l'ingrédient
+// manque justement tirent la moyenne vers le bas), d'où l'usage d'un sous-ensemble de référence.
+const SEUIL_PRESENCE_BASE = 0.7;
+
+// Feuilles dont les recettes servent de référence pour ce qu'est un assaisonnement "de base" :
+// repérées par mot-clé dans leur nom (insensible aux underscores/accents/casse), plutôt qu'une
+// liste figée de noms exacts, pour rester robuste à une légère variation de nommage d'un fichier
+// à l'autre.
+const MOTS_CLES_FEUILLES_REFERENCE = ["plat", "sauce", "accompagnement"];
+
+function estFeuilleReference(nomFeuille: string): boolean {
+  const n = normaliserTexte(nomFeuille);
+  return MOTS_CLES_FEUILLES_REFERENCE.some((mot) => n.includes(mot));
+}
+
+function familleDe(nomIngredient: string): string | undefined {
+  const n = normaliserTexte(nomIngredient);
+  return FAMILLES_ASSAISONNEMENT_BASE.find((famille) => n.includes(famille));
+}
+
+function mediane(valeurs: number[]): number {
+  const triees = [...valeurs].sort((a, b) => a - b);
+  const milieu = Math.floor(triees.length / 2);
+  return triees.length % 2 === 0 ? (triees[milieu - 1] + triees[milieu]) / 2 : triees[milieu];
+}
+
+// Calcule, pour chaque famille suffisamment répandue dans le fichier, une ligne canonique
+// (code/nom le plus fréquent, quantité médiane observée) puis l'ajoute en suggestion à chaque
+// recette qui n'a aucun ingrédient de cette famille. Modifie `recettes` en place.
+function ajouterSuggestionsBase(recettes: RecetteCoutsExtraite[]): void {
+  const recettesReference = recettes.filter((r) => estFeuilleReference(r.feuille));
+  // Sans feuille de référence identifiable (fichier structuré différemment), on ne devine rien :
+  // pas de recettes de référence, pas de suggestion.
+  if (recettesReference.length === 0) return;
+
+  const occurrencesParFamille = new Map<string, LigneCoutsExtraite[]>();
+  for (const recette of recettesReference) {
+    for (const ligne of recette.lignes) {
+      const famille = familleDe(ligne.nomFichier);
+      if (!famille) continue;
+      if (!occurrencesParFamille.has(famille)) occurrencesParFamille.set(famille, []);
+      occurrencesParFamille.get(famille)!.push(ligne);
+    }
+  }
+
+  const suggestionParFamille = new Map<string, LigneCoutsExtraite>();
+  for (const [famille, occurrences] of occurrencesParFamille) {
+    const nbRecettesAvec = recettesReference.filter((r) =>
+      r.lignes.some((l) => familleDe(l.nomFichier) === famille)
+    ).length;
+    if (nbRecettesAvec / recettesReference.length < SEUIL_PRESENCE_BASE) continue;
+
+    const compteParCode = new Map<string, number>();
+    for (const o of occurrences) compteParCode.set(o.code, (compteParCode.get(o.code) ?? 0) + 1);
+    const [codeCanonique] = [...compteParCode.entries()].sort((a, b) => b[1] - a[1])[0];
+    const referenceCanonique = occurrences.find((o) => o.code === codeCanonique)!;
+
+    const quantites = occurrences.filter((o) => o.quantite > 0).map((o) => o.quantite);
+    suggestionParFamille.set(famille, {
+      code: codeCanonique,
+      nomFichier: referenceCanonique.nomFichier,
+      prixFichier: referenceCanonique.prixFichier,
+      quantite: mediane(quantites),
+    });
+  }
+
+  for (const recette of recettes) {
+    const famillesPresentes = new Set(
+      recette.lignes.map((l) => familleDe(l.nomFichier)).filter((f): f is string => !!f)
+    );
+    recette.suggestionsBase = [...suggestionParFamille.entries()]
+      .filter(([famille]) => !famillesPresentes.has(famille))
+      .map(([, suggestion]) => suggestion);
+  }
 }
 
 export type ArticleCatalogue = {
