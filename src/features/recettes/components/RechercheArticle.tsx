@@ -52,17 +52,20 @@ export default function RechercheArticle({ articles, articlesRepli, articleId, o
 
   // Insensible aux accents (ex. "saute de veau" doit trouver "Sauté de veau"), comme le reste de
   // l'appli (import, mémoire de correspondance, filtre fournisseur) — voir normaliserTexte.ts.
+  // Cherche aussi dans le code article (référence), pour retrouver un ingrédient directement par
+  // son code — pratique avec une fiche de coûts fournisseur sous les yeux.
   const terme = normaliserTexte(recherche);
-  const resultatsPrincipaux = (
-    terme ? articles.filter((a) => normaliserTexte(a.nom).includes(terme)) : articles
-  ).slice(0, MAX_RESULTATS);
+  function correspond(a: ArticleRecette): boolean {
+    return normaliserTexte(a.nom).includes(terme) || normaliserTexte(a.reference ?? "").includes(terme);
+  }
+  const resultatsPrincipaux = (terme ? articles.filter(correspond) : articles).slice(0, MAX_RESULTATS);
 
   // Rien trouvé dans la liste préférée (ex. Super U uniquement) : on cherche dans la liste
   // complète plutôt que de laisser "Aucun résultat" alors que l'ingrédient existe chez un autre
   // fournisseur — le nom du fournisseur est alors affiché pour rester transparent sur l'écart.
   const enRepli = terme.length > 0 && resultatsPrincipaux.length === 0 && !!articlesRepli;
   const resultats = enRepli
-    ? articlesRepli!.filter((a) => normaliserTexte(a.nom).includes(terme)).slice(0, MAX_RESULTATS)
+    ? articlesRepli!.filter(correspond).slice(0, MAX_RESULTATS)
     : resultatsPrincipaux;
 
   return (
@@ -75,7 +78,7 @@ export default function RechercheArticle({ articles, articlesRepli, articleId, o
           setRecherche(e.target.value);
           setOuvert(true);
         }}
-        placeholder="Rechercher un article…"
+        placeholder="Rechercher un article (nom ou code)…"
         style={{ width: "100%", padding: 8, boxSizing: "border-box" }}
       />
       {ouvert && (
@@ -113,6 +116,7 @@ export default function RechercheArticle({ articles, articlesRepli, articleId, o
               style={{ padding: 8, cursor: "pointer" }}
             >
               {a.nom}
+              {a.reference && <span style={{ color: "#888", fontSize: 12 }}> (code {a.reference})</span>}
               {enRepli && a.tarifs[0]?.fournisseur && (
                 <span style={{ color: "#888", fontSize: 12 }}> — {a.tarifs[0].fournisseur.nom}</span>
               )}

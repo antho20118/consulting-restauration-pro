@@ -13,6 +13,7 @@ export interface AllergeneRecette {
 export interface ArticleRecette {
   id: number;
   nom: string;
+  reference: string | null;
   rendement: number;
   tarifs: {
     prixHT: number;
