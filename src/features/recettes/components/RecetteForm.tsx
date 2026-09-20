@@ -582,11 +582,19 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <span style={{ fontWeight: "bold", paddingTop: 8 }}>{index + 1}.</span>
             <textarea
+              ref={(el) => {
+                // Hauteur recalculée à chaque rendu (frappe, import de techniques, chargement
+                // d'une recette existante…) plutôt qu'une hauteur fixe qui tronquerait un texte
+                // long derrière une barre de défilement.
+                if (!el) return;
+                el.style.height = "auto";
+                el.style.height = `${el.scrollHeight}px`;
+              }}
               value={etape.description}
               onChange={(e) => modifierEtape(index, { description: e.target.value })}
               placeholder="Description de l'étape (geste, technique à mettre en œuvre…)"
               rows={2}
-              style={{ flex: 1, padding: 8, boxSizing: "border-box" }}
+              style={{ flex: 1, padding: 8, boxSizing: "border-box", resize: "none", overflow: "hidden" }}
             />
             <button onClick={() => retirerEtape(index)}>✕</button>
           </div>
