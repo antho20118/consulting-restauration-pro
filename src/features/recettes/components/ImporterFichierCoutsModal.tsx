@@ -42,6 +42,11 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
   // Suggestions d'assaisonnement de base cochées par défaut (voir analyserFichierCouts.ts) :
   // Record<index recette, tableau de booléens dans l'ordre de recette.suggestionsBase>.
   const [suggestionsCochees, setSuggestionsCochees] = useState<Record<number, boolean[]>>({});
+  // Code article corrigé à la main par l'utilisateur pour une ligne d'ingrédient donnée, quand le
+  // code extrait du fichier est absent ou mal rapproché : clé "indexRecette:indexLigne". Permet de
+  // vérifier/choisir l'ingrédient exact avant import plutôt que de dépendre uniquement du
+  // rapprochement automatique par code.
+  const [codesCorriges, setCodesCorriges] = useState<Record<string, string>>({});
 
   async function gererFichier(e: React.ChangeEvent<HTMLInputElement>) {
     const fichier = e.target.files?.[0];
@@ -114,13 +119,29 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
     }
   }
 
-  function estPrete(recette: RecetteCoutsExtraite): boolean {
-    return recette.lignes.every((l) => articlesParCode.has(l.code));
+  // Code effectivement retenu pour une ligne d'ingrédient : la correction manuelle de
+  // l'utilisateur si elle existe, sinon le code extrait du fichier.
+  function codeEffectif(index: number, i: number, codeFichier: string): string {
+    return codesCorriges[`${index}:${i}`] ?? codeFichier;
+  }
+
+  // Rapproche un code tapé à la main par l'utilisateur, s'il n'est pas déjà connu.
+  async function verifierCode(code: string) {
+    if (!code || articlesParCode.has(code)) return;
+    const trouves = await rechercherArticlesParReferences([code]);
+    if (trouves.length > 0) {
+      setArticlesParCode((m) => new Map(m).set(trouves[0].reference, trouves[0]));
+    }
+  }
+
+  function estPrete(index: number): boolean {
+    const recette = recettes[index];
+    return recette.lignes.every((l, i) => articlesParCode.has(codeEffectif(index, i, l.code)));
   }
 
   async function importerRecette(index: number) {
     const recette = recettes[index];
-    if (!estPrete(recette)) return;
+    if (!estPrete(index)) return;
 
     setStatuts((s) => ({ ...s, [index]: "en_cours" }));
     try {
@@ -138,7 +159,7 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
           : null,
         photo: null,
         lignes: [
-          ...recette.lignes,
+          ...recette.lignes.map((l, i) => ({ ...l, code: codeEffectif(index, i, l.code) })),
           ...recette.suggestionsBase.filter((_s, i) => suggestionsCochees[index]?.[i]),
         ]
           .filter((l) => articlesParCode.has(l.code))
@@ -164,7 +185,7 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
   async function importerToutesLesRecettesPretes() {
     const indexPrets = recettes
       .map((_r, i) => i)
-      .filter((i) => estPrete(recettes[i]) && statuts[i] !== "importee");
+      .filter((i) => estPrete(i) && statuts[i] !== "importee");
     for (const index of indexPrets) {
       await importerRecette(index);
     }
@@ -175,21 +196,22 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
   // utilisent : pour prioriser la création des articles manquants les plus utiles en premier.
   const codesManquants = (() => {
     const compte = new Map<string, { code: string; nom: string; nbRecettes: number }>();
-    for (const recette of recettes) {
+    recettes.forEach((recette, index) => {
       const codesVus = new Set<string>();
-      for (const ligne of recette.lignes) {
-        if (articlesParCode.has(ligne.code) || codesVus.has(ligne.code)) continue;
-        codesVus.add(ligne.code);
-        const entree = compte.get(ligne.code);
-        const nom = catalogue.get(ligne.code)?.denomination ?? ligne.nomFichier;
+      recette.lignes.forEach((ligne, i) => {
+        const code = codeEffectif(index, i, ligne.code);
+        if (articlesParCode.has(code) || codesVus.has(code)) return;
+        codesVus.add(code);
+        const entree = compte.get(code);
+        const nom = catalogue.get(code)?.denomination ?? ligne.nomFichier;
         if (entree) entree.nbRecettes += 1;
-        else compte.set(ligne.code, { code: ligne.code, nom, nbRecettes: 1 });
-      }
-    }
+        else compte.set(code, { code, nom, nbRecettes: 1 });
+      });
+    });
     return [...compte.values()].sort((a, b) => b.nbRecettes - a.nbRecettes);
   })();
 
-  const nbPretes = recettes.filter((r) => estPrete(r)).length;
+  const nbPretes = recettes.filter((_r, index) => estPrete(index)).length;
 
   return (
     <div
@@ -266,8 +288,11 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
           )}
 
           {recettes.map((recette, index) => {
-            const prete = estPrete(recette);
+            const prete = estPrete(index);
             const statut = statuts[index] ?? "attente";
+            const nbSansCode = recette.lignes.filter(
+              (l, i) => !articlesParCode.has(codeEffectif(index, i, l.code))
+            ).length;
             return (
               <div
                 key={index}
@@ -285,7 +310,7 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
                       ? "Importée ✓"
                       : prete
                         ? "Prête"
-                        : `${recette.lignes.filter((l) => !articlesParCode.has(l.code)).length} ingrédient(s) sans code trouvé`}
+                        : `${nbSansCode} ingrédient(s) sans code trouvé`}
                   </span>
                 </div>
 
@@ -325,13 +350,40 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
                   <summary style={{ cursor: "pointer", fontSize: 13 }}>
                     {recette.lignes.length} ingrédient(s)
                   </summary>
-                  <ul style={{ fontSize: 13 }}>
+                  <p style={{ fontSize: 12, color: "var(--couleur-texte-attenue)", margin: "4px 0" }}>
+                    Vérifie chaque code article : corrige-le directement si le rapprochement est
+                    manquant ou ne correspond pas à l'ingrédient attendu.
+                  </p>
+                  <ul style={{ fontSize: 13, listStyle: "none", padding: 0 }}>
                     {recette.lignes.map((ligne, i) => {
-                      const article = articlesParCode.get(ligne.code);
+                      const code = codeEffectif(index, i, ligne.code);
+                      const article = articlesParCode.get(code);
                       return (
-                        <li key={i} style={{ color: article ? undefined : "#b00020" }}>
-                          {ligne.quantite} × {ligne.nomFichier} (code {ligne.code})
-                          {article ? ` → ${article.nom}` : " → code introuvable"}
+                        <li
+                          key={i}
+                          style={{
+                            color: article ? undefined : "#b00020",
+                            marginBottom: 6,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <span>
+                            {ligne.quantite} × {ligne.nomFichier} — code
+                          </span>
+                          <input
+                            type="text"
+                            value={code}
+                            onChange={(e) =>
+                              setCodesCorriges((s) => ({ ...s, [`${index}:${i}`]: e.target.value.trim() }))
+                            }
+                            onBlur={(e) => verifierCode(e.target.value.trim())}
+                            disabled={statut === "importee"}
+                            style={{ width: 100, fontSize: 12, padding: "2px 4px" }}
+                          />
+                          <span>{article ? `→ ${article.nom}` : "→ code introuvable"}</span>
                         </li>
                       );
                     })}

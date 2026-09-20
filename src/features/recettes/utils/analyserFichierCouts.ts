@@ -48,7 +48,48 @@ function estColonneEntete(valeurCode: unknown, valeurProduit: unknown): boolean 
     normaliserTexte(String(valeurProduit ?? "")) === "produits";
 }
 
-function extraireRecettesFeuille(lignes: unknown[][], nomFeuille: string): RecetteCoutsExtraite[] {
+type Fusion = { s: { r: number; c: number }; e: { r: number; c: number } };
+
+// Résout le titre d'un bloc-recette en cherchant, sur la ligne au-dessus de son en-tête, la
+// cellule dont la portée (fusionnée ou non) recouvre au moins une des colonnes du bloc : plus
+// fiable que d'apparier les titres à l'en-tête par simple ordre d'apparition sur la ligne, qui se
+// dérègle dès qu'un titre est vide ou qu'une fusion déborde sur le bloc voisin (une seule cellule
+// de titre mal alignée décale alors tous les titres suivants de la ligne).
+function trouverTitreBloc(
+  lignes: unknown[][],
+  fusions: Fusion[],
+  ligneTitre: number,
+  colDebut: number,
+  colFin: number
+): string {
+  if (ligneTitre < 0) return "";
+
+  for (const fusion of fusions) {
+    if (
+      fusion.s.r <= ligneTitre &&
+      ligneTitre <= fusion.e.r &&
+      fusion.s.c <= colFin &&
+      fusion.e.c >= colDebut
+    ) {
+      const valeur = String(lignes[fusion.s.r]?.[fusion.s.c] ?? "").trim();
+      if (valeur) return valeur;
+    }
+  }
+
+  const ligne = lignes[ligneTitre] ?? [];
+  for (let c = colDebut; c <= colFin; c++) {
+    const valeur = String(ligne[c] ?? "").trim();
+    if (valeur) return valeur;
+  }
+
+  return "";
+}
+
+function extraireRecettesFeuille(
+  lignes: unknown[][],
+  fusions: Fusion[],
+  nomFeuille: string
+): RecetteCoutsExtraite[] {
   const recettes: RecetteCoutsExtraite[] = [];
   const categorieParDefaut = CATEGORIE_PAR_FEUILLE[nomFeuille] ?? "Plat";
   const sousCategorieParDefaut = SOUS_CATEGORIE_PAR_FEUILLE[nomFeuille] ?? null;
@@ -63,16 +104,9 @@ function extraireRecettesFeuille(lignes: unknown[][], nomFeuille: string): Recet
     }
     if (colonnesEntete.length === 0) continue;
 
-    // Titres trouvés sur la ligne au-dessus, appariés par ordre d'apparition aux en-têtes de
-    // blocs : dans ce fichier, les cellules de titre fusionnées ne s'alignent pas toujours
-    // exactement avec le début de leur bloc, l'ordre est plus fiable que la position.
-    const ligneTitres = lignes[r - 1] ?? [];
-    const titres = ligneTitres
-      .map((v) => String(v ?? "").trim())
-      .filter((v) => v !== "");
-
     colonnesEntete.forEach((c, index) => {
-      const titre = titres[index] ?? "";
+      const colFin = index + 1 < colonnesEntete.length ? colonnesEntete[index + 1] - 1 : ligne.length - 1;
+      const titre = trouverTitreBloc(lignes, fusions, r - 1, c, colFin);
       if (!titre) return;
 
       const lignesExtraites: LigneCoutsExtraite[] = [];
@@ -80,18 +114,24 @@ function extraireRecettesFeuille(lignes: unknown[][], nomFeuille: string): Recet
 
       for (let i = r + 1; i < Math.min(lignes.length, r + 60); i++) {
         const ligneProduit = lignes[i];
-        const code = ligneProduit[c];
+        const code = String(ligneProduit[c] ?? "").trim();
         const nomFichier = String(ligneProduit[c + 1] ?? "").trim();
 
-        if (estColonneEntete(code, ligneProduit[c + 1])) break; // bloc-recette suivant
-        if (normaliserTexte(String(code ?? "")) === "allergenes") {
-          allergenesTexte = String(ligneProduit[c + 1] ?? "").trim() || null;
+        if (estColonneEntete(ligneProduit[c], ligneProduit[c + 1])) break; // bloc-recette suivant
+        if (normaliserTexte(code) === "allergenes") {
+          allergenesTexte = nomFichier || null;
           break;
         }
-        if (!nomFichier) continue; // ligne vide du gabarit, on continue de chercher plus bas
+        // Une vraie ligne d'ingrédient a toujours un code (c'est le principe même de ce fichier :
+        // rapprocher chaque ingrédient par son code article). Sans code, la cellule "produit" de
+        // cette ligne n'est pas un ingrédient : c'est le titre de la recette suivante, dont la
+        // cellule fusionnée déborde dans cette colonne au-dessus de son propre bloc — le confondre
+        // avec un ingrédient ajoutait silencieusement à chaque recette une fausse ligne "0 × <nom
+        // de la recette suivante>". On continue de chercher plus bas (gabarit avec lignes vides).
+        if (!code || !nomFichier) continue;
 
         lignesExtraites.push({
-          code: String(code ?? "").trim(),
+          code,
           nomFichier,
           prixFichier: Number(ligneProduit[c + 2]) || 0,
           quantite: Number(ligneProduit[c + 3]) || 0,
@@ -129,7 +169,8 @@ export async function analyserFichierCouts(fichier: File): Promise<RecetteCoutsE
 
     const feuille = classeur.Sheets[nomFeuille];
     const lignesBrutes: unknown[][] = XLSX.utils.sheet_to_json(feuille, { header: 1, defval: "" });
-    recettes.push(...extraireRecettesFeuille(lignesBrutes, nomFeuille.trim()));
+    const fusions = feuille["!merges"] ?? [];
+    recettes.push(...extraireRecettesFeuille(lignesBrutes, fusions, nomFeuille.trim()));
   }
 
   ajouterSuggestionsBase(recettes);
