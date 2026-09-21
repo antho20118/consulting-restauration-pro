@@ -23,7 +23,7 @@ type RecetteAvecLignes = {
     gainCuissonPct: number;
     article: {
       rendement: number;
-      tarifs: { prixHT: number; unite: { facteurBase: number } }[];
+      tarifs: { prixHT: number; quantiteConditionnement: number; unite: { facteurBase: number } }[];
       allergenes: { allergene: { id: number; nom: string } }[];
     };
   }[];
@@ -63,4 +63,19 @@ export function calculerCoutMenu<
     foodCostPct,
     margeHT,
   };
+}
+
+// Pour une LISTE de menus : une recette invalide dans un seul menu ne doit pas faire échouer
+// l'affichage de tous les autres (même raisonnement que calculerCoutsRecettesSansErreur).
+export function calculerCoutsMenusSansErreur<T extends Parameters<typeof calculerCoutMenu>[0]>(
+  menus: T[]
+): ReturnType<typeof calculerCoutMenu<T>>[] {
+  return menus.flatMap((menu) => {
+    try {
+      return [calculerCoutMenu(menu)];
+    } catch (error) {
+      console.error(`Menu invalide ignoré dans la liste (id ${(menu as { id?: unknown }).id})`, error);
+      return [];
+    }
+  });
 }
