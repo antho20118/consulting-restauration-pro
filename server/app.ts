@@ -23,6 +23,7 @@ import aliasIngredientsRouter from "./routes/aliasIngredients.js";
 import achatsRouter from "./routes/achats.js";
 import productionRouter from "./routes/production.js";
 import haccpRouter from "./routes/haccp.js";
+import consultingRouter from "./routes/consulting.js";
 
 const app = express();
 
@@ -57,6 +58,7 @@ app.use("/api/alias-ingredients", aliasIngredientsRouter);
 app.use("/api/achats", achatsRouter);
 app.use("/api/production", productionRouter);
 app.use("/api/haccp", haccpRouter);
+app.use("/api/consulting", consultingRouter);
 
 app.get("/health", (_req, res) => {
   res.json({
