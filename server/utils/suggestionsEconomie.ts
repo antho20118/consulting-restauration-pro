@@ -19,14 +19,17 @@ export type ArticleAvecTarif = {
 // recettes (voir coutRecette.ts), ce qui permet de comparer équitablement deux articles vendus
 // dans des unités différentes (ex. le kg contre la pièce).
 //
-// Un candidat sans tarif actif ou avec un rendement invalide (<= 0) est écarté (null) plutôt que
-// de retomber sur une valeur par défaut supposée (comme le fait calculerCoutRecette pour la
-// recette elle-même, en throw) : un seul mauvais candidat de substitution ne doit pas empêcher de
-// calculer des suggestions pour les autres.
+// Un candidat sans tarif actif ou avec un rendement invalide (<= 0 ou > 1000, même borne que
+// rendementValide() dans coutRecette.ts) est écarté (null) plutôt que de retomber sur une valeur
+// par défaut supposée (comme le fait calculerCoutRecette pour la recette elle-même, en throw) : un
+// seul mauvais candidat de substitution ne doit pas empêcher de calculer des suggestions pour les
+// autres. Sans cette borne haute, un article au rendement aberrant (ex. saisi à 5000 au lieu de
+// 100, une erreur de saisie plausible) produirait un coût effectif artificiellement bas et serait
+// suggéré comme substitution moins chère sur la seule foi d'une donnée corrompue.
 export function coutEffectifParUniteBase(article: ArticleAvecTarif): number | null {
   const tarif = article.tarifs[0];
   if (!tarif) return null;
-  if (!Number.isFinite(article.rendement) || article.rendement <= 0) return null;
+  if (!Number.isFinite(article.rendement) || article.rendement <= 0 || article.rendement > 1000) return null;
 
   const prixParUniteBase =
     tarif.prixHT / (tarif.quantiteConditionnement * tarif.unite.facteurBase);

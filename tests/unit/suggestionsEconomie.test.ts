@@ -32,3 +32,23 @@ test("retourne null pour un rendement invalide (0) plutôt que de retomber sur 1
 test("retourne null pour un rendement négatif", () => {
   assert.equal(coutEffectifParUniteBase(article({ rendement: -10 })), null);
 });
+
+test("accepte un rendement de 100 (nominal)", () => {
+  assert.notEqual(coutEffectifParUniteBase(article({ rendement: 100 })), null);
+});
+
+test("accepte un rendement de 1000 (borne haute incluse, même borne que rendementValide() dans coutRecette.ts)", () => {
+  assert.notEqual(coutEffectifParUniteBase(article({ rendement: 1000 })), null);
+});
+
+test("retourne null pour un rendement de 1001 (juste au-dessus de la borne haute)", () => {
+  assert.equal(coutEffectifParUniteBase(article({ rendement: 1001 })), null);
+});
+
+test("retourne null pour un rendement de 5000 plutôt que de produire un coût effectif artificiellement bas", () => {
+  // C'est exactement le scénario relevé par l'audit : sans cette borne haute, un article au
+  // rendement aberrant (saisi à 5000 au lieu de 100, par erreur) obtenait un coût effectif très
+  // bas et pouvait être suggéré comme substitution moins chère sur la seule foi d'une donnée
+  // corrompue, sans jamais être écarté.
+  assert.equal(coutEffectifParUniteBase(article({ rendement: 5000 })), null);
+});
