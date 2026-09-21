@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import { z } from "zod";
 
 import prisma from "../prisma.js";
 import { creerToken, hacherCode, verifierCode } from "../utils/auth.js";
@@ -7,15 +8,50 @@ import { requireAuth } from "../middleware/requireAuth.js";
 
 const router = Router();
 
+const schemaLogin = z.object({
+  identifiant: z.string().trim().min(1).max(100),
+  code: z.string().min(1).max(200),
+});
+const schemaChangement = z.object({
+  codeActuel: z.string().min(1).max(200),
+  nouvelIdentifiant: z.string().trim().min(1).max(100),
+  nouveauCode: z.string().min(6).max(200),
+});
+
+// Limitation simple des tentatives de connexion par IP : un identifiant/code partagé par toute
+// l'équipe est une cible facile pour un essai automatisé exhaustif, sans avoir à cibler un compte
+// nominatif précis. Volontairement en mémoire (pas de dépendance ajoutée) : suffisant pour une
+// seule instance de serveur, se réinitialise à un redémarrage.
+const tentativesParIp = new Map<string, { compte: number; expire: number }>();
+const FENETRE_MS = 15 * 60_000;
+const MAX_TENTATIVES = 10;
+
+function autoriseTentative(ip: string): boolean {
+  const maintenant = Date.now();
+  const entree = tentativesParIp.get(ip);
+  if (!entree || entree.expire <= maintenant) {
+    tentativesParIp.set(ip, { compte: 1, expire: maintenant + FENETRE_MS });
+    return true;
+  }
+  if (entree.compte >= MAX_TENTATIVES) return false;
+  entree.compte += 1;
+  return true;
+}
+
 // Connexion : un seul identifiant/code partagé pour toute l'équipe (pas de compte nominatif).
 router.post("/login", async (req: Request, res: Response) => {
   try {
-    const { identifiant, code } = req.body as { identifiant?: string; code?: string };
+    if (!autoriseTentative(req.ip ?? "inconnu")) {
+      res.status(429).json({ error: "Trop de tentatives. Réessaie dans quelques minutes." });
+      return;
+    }
 
-    if (!identifiant || !code) {
+    const analyse = schemaLogin.safeParse(req.body);
+    if (!analyse.success) {
       res.status(400).json({ error: "Identifiant et code requis" });
       return;
     }
+    const { identifiant, code } = analyse.data;
 
     const acces = await prisma.accesApplication.findFirst();
 
@@ -35,16 +71,12 @@ router.post("/login", async (req: Request, res: Response) => {
 // et de confirmer le code actuel.
 router.put("/identifiants", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { codeActuel, nouvelIdentifiant, nouveauCode } = req.body as {
-      codeActuel?: string;
-      nouvelIdentifiant?: string;
-      nouveauCode?: string;
-    };
-
-    if (!codeActuel || !nouvelIdentifiant || !nouveauCode) {
-      res.status(400).json({ error: "Tous les champs sont requis" });
+    const analyse = schemaChangement.safeParse(req.body);
+    if (!analyse.success) {
+      res.status(400).json({ error: "Tous les champs sont requis (le nouveau code doit faire au moins 6 caractères)" });
       return;
     }
+    const { codeActuel, nouvelIdentifiant, nouveauCode } = analyse.data;
 
     const acces = await prisma.accesApplication.findFirst();
 
