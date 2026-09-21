@@ -6,7 +6,7 @@ import { calculerCoutRecette, inclusionsRecette } from "./coutRecette.js";
 const ECONOMIE_MIN_PCT = 10;
 const NB_SUGGESTIONS_MAX = 5;
 
-type ArticleAvecTarif = {
+export type ArticleAvecTarif = {
   id: number;
   nom: string;
   categorieId: number;
@@ -18,13 +18,19 @@ type ArticleAvecTarif = {
 // (perte à la préparation) pris en compte — la même métrique que celle utilisée pour le coût des
 // recettes (voir coutRecette.ts), ce qui permet de comparer équitablement deux articles vendus
 // dans des unités différentes (ex. le kg contre la pièce).
-function coutEffectifParUniteBase(article: ArticleAvecTarif): number | null {
+//
+// Un candidat sans tarif actif ou avec un rendement invalide (<= 0) est écarté (null) plutôt que
+// de retomber sur une valeur par défaut supposée (comme le fait calculerCoutRecette pour la
+// recette elle-même, en throw) : un seul mauvais candidat de substitution ne doit pas empêcher de
+// calculer des suggestions pour les autres.
+export function coutEffectifParUniteBase(article: ArticleAvecTarif): number | null {
   const tarif = article.tarifs[0];
   if (!tarif) return null;
-  const rendement = article.rendement || 100;
+  if (!Number.isFinite(article.rendement) || article.rendement <= 0) return null;
+
   const prixParUniteBase =
     tarif.prixHT / (tarif.quantiteConditionnement * tarif.unite.facteurBase);
-  return prixParUniteBase / (rendement / 100);
+  return prixParUniteBase / (article.rendement / 100);
 }
 
 export type SuggestionEconomie = {
@@ -90,12 +96,11 @@ export async function suggestionsEconomieRecette(recetteId: number): Promise<Sug
     const quantiteBase = ligne.quantite * ligne.unite.facteurBase;
     const nouveauCoutLigne = quantiteBase * meilleurCout;
     const economieTotale = ligne.coutLigne - nouveauCoutLigne;
-    const economieParPortion =
-      recette.portions > 0 ? economieTotale / recette.portions : economieTotale;
+    // recette.portions est garanti > 0 : calculerCoutRecette() a déjà validé la recette ci-dessus.
+    const economieParPortion = economieTotale / recette.portions;
 
     const nouveauCoutTotal = recetteCalculee.coutTotal - economieTotale;
-    const nouveauCoutParPortion =
-      recette.portions > 0 ? nouveauCoutTotal / recette.portions : nouveauCoutTotal;
+    const nouveauCoutParPortion = nouveauCoutTotal / recette.portions;
     const nouveauFoodCostPct =
       recette.prixVenteHT && recette.prixVenteHT > 0
         ? (nouveauCoutParPortion / recette.prixVenteHT) * 100
