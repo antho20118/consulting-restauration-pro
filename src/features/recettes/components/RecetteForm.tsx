@@ -12,6 +12,7 @@ import {
 } from "../services/recetteService";
 import { estimerCoutLigne } from "../utils/cout";
 import { definirFiltrerSuperU, estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
+import { POINTS_CRITIQUES_HACCP } from "../utils/pointsCritiquesHACCP";
 import {
   modeApresChangementPoidsPortion,
   peutPasserEnModeKg,
@@ -663,20 +664,37 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
           </label>
 
           {etape.pointCritiqueHACCP && (
-            <input
-              type="text"
-              value={etape.controleHACCP ?? ""}
-              onChange={(e) => modifierEtape(index, { controleHACCP: e.target.value })}
-              placeholder="Ex. Refroidissement à <10°C en moins de 2h, remise en température +3°C→+63°C en moins d'1h…"
-              style={{
-                width: "100%",
-                padding: 8,
-                marginTop: 8,
-                boxSizing: "border-box",
-                border: "1px solid #b3261e",
-                borderRadius: 4,
-              }}
-            />
+            <>
+              <select
+                value=""
+                onChange={(e) => {
+                  const point = POINTS_CRITIQUES_HACCP.find((p) => p.titre === e.target.value);
+                  if (point) modifierEtape(index, { controleHACCP: point.description });
+                }}
+                style={{ width: "100%", padding: 8, marginTop: 8 }}
+              >
+                <option value="">— Choisir un point critique HACCP —</option>
+                {POINTS_CRITIQUES_HACCP.map((point) => (
+                  <option key={point.titre} value={point.titre}>
+                    {point.titre}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={etape.controleHACCP ?? ""}
+                onChange={(e) => modifierEtape(index, { controleHACCP: e.target.value })}
+                placeholder="Ex. Refroidissement à <10°C en moins de 2h, remise en température +3°C→+63°C en moins d'1h…"
+                style={{
+                  width: "100%",
+                  padding: 8,
+                  marginTop: 8,
+                  boxSizing: "border-box",
+                  border: "1px solid #b3261e",
+                  borderRadius: 4,
+                }}
+              />
+            </>
           )}
         </div>
       ))}
