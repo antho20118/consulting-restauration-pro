@@ -11,7 +11,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "db:seed": "tsx prisma/seed.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "typecheck": "tsc -b --pretty false",
+    "test": "node --import tsx --test tests/unit/*.test.ts",
+    "verify": "npm run typecheck && npm test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
