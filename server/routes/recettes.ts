@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 
 import prisma from "../prisma.js";
-import { calculerCoutRecette, inclusionsRecette } from "../utils/coutRecette.js";
+import { calculerCoutRecette, calculerCoutsRecettesSansErreur, inclusionsRecette } from "../utils/coutRecette.js";
 import { suggestionsEconomieRecette } from "../utils/suggestionsEconomie.js";
 import { extraireRecette, ImportIANonConfigureError } from "../utils/importRecetteIA.js";
 
@@ -17,7 +17,7 @@ router.get("/", async (_req: Request, res: Response) => {
       orderBy: { nom: "asc" },
     });
 
-    res.json(recettes.map(calculerCoutRecette));
+    res.json(calculerCoutsRecettesSansErreur(recettes));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Impossible de récupérer les recettes" });
