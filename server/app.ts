@@ -21,6 +21,7 @@ import mouvementsRouter from "./routes/mouvements.js";
 import depotsRouter from "./routes/depots.js";
 import aliasIngredientsRouter from "./routes/aliasIngredients.js";
 import haccpRouter from "./routes/haccp.js";
+import consultingRouter from "./routes/consulting.js";
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use("/api/mouvements", mouvementsRouter);
 app.use("/api/depots", depotsRouter);
 app.use("/api/alias-ingredients", aliasIngredientsRouter);
 app.use("/api/haccp", haccpRouter);
+app.use("/api/consulting", consultingRouter);
 
 app.get("/health", (_req, res) => {
   res.json({
