@@ -17,6 +17,7 @@ export interface ArticleRecette {
   rendement: number;
   tarifs: {
     prixHT: number;
+    quantiteConditionnement: number;
     unite: { symbole: string; facteurBase: number };
     fournisseur: { id: number; nom: string };
   }[];

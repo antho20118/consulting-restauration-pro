@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 
 import prisma from "../prisma.js";
-import { calculerCoutRecette, inclusionsRecette } from "../utils/coutRecette.js";
+import { calculerCoutsRecettesSansErreur, inclusionsRecette } from "../utils/coutRecette.js";
 
 const router = Router();
 
@@ -22,7 +22,7 @@ router.get("/", async (_req: Request, res: Response) => {
       }),
     ]);
 
-    const recettes = recettesBrutes.map(calculerCoutRecette);
+    const recettes = calculerCoutsRecettesSansErreur(recettesBrutes);
 
     const valeurStock = stocks.reduce((total, stock) => {
       const tarif = stock.article.tarifs[0];

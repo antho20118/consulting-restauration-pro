@@ -10,9 +10,13 @@ export function estimerCoutLigne(
   const tarif = article?.tarifs[0];
   if (!tarif || !unite) return 0;
 
-  const prixParUniteBase = tarif.prixHT / tarif.unite.facteurBase;
+  if (tarif.quantiteConditionnement <= 0 || tarif.unite.facteurBase <= 0) return 0;
+  if (article.rendement <= 0) return 0;
+
+  const prixParUniteBase =
+    tarif.prixHT / (tarif.quantiteConditionnement * tarif.unite.facteurBase);
   const quantiteBase = quantite * unite.facteurBase;
-  const rendement = article.rendement || 100;
+  const rendement = article.rendement;
 
   return (quantiteBase * prixParUniteBase) / (rendement / 100);
 }

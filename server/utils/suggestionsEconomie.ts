@@ -11,7 +11,7 @@ type ArticleAvecTarif = {
   nom: string;
   categorieId: number;
   rendement: number;
-  tarifs: { prixHT: number; unite: { facteurBase: number } }[];
+  tarifs: { prixHT: number; quantiteConditionnement: number; unite: { facteurBase: number } }[];
 };
 
 // Coût réel supporté par gramme (ou mL, ou pièce...) de base d'un article, une fois le rendement
@@ -22,7 +22,8 @@ function coutEffectifParUniteBase(article: ArticleAvecTarif): number | null {
   const tarif = article.tarifs[0];
   if (!tarif) return null;
   const rendement = article.rendement || 100;
-  const prixParUniteBase = tarif.prixHT / tarif.unite.facteurBase;
+  const prixParUniteBase =
+    tarif.prixHT / (tarif.quantiteConditionnement * tarif.unite.facteurBase);
   return prixParUniteBase / (rendement / 100);
 }
 
