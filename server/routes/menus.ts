@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 
 import prisma from "../prisma.js";
-import { calculerCoutMenu, inclusionsMenu } from "../utils/coutMenu.js";
+import { calculerCoutMenu, calculerCoutsMenusSansErreur, inclusionsMenu } from "../utils/coutMenu.js";
 
 const router = Router();
 
@@ -15,7 +15,7 @@ router.get("/", async (_req: Request, res: Response) => {
       orderBy: { nom: "asc" },
     });
 
-    res.json(menus.map(calculerCoutMenu));
+    res.json(calculerCoutsMenusSansErreur(menus));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Impossible de récupérer les menus" });
