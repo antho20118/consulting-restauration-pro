@@ -251,3 +251,11 @@ test("refuse un rendement nul ou négatif", () => {
     /Rendement article invalide/
   );
 });
+
+test("refuse une recette à 0 portion (et n'utilise jamais le coût total comme coût par portion)", () => {
+  assert.throws(() => calculerCoutRecette(recette({ portions: 0 })), /Nombre de portions invalide/);
+});
+
+test("refuse une recette à un nombre de portions négatif", () => {
+  assert.throws(() => calculerCoutRecette(recette({ portions: -1 })), /Nombre de portions invalide/);
+});

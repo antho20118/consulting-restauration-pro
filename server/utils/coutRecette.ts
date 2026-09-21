@@ -89,7 +89,7 @@ export function calculerCoutRecette<
   let coutTotal = 0;
   let poidsFiniTotalG = 0;
 
-  if (!Number.isFinite(recette.portions) || recette.portions < 0) {
+  if (!Number.isFinite(recette.portions) || recette.portions <= 0) {
     throw new Error("Nombre de portions invalide");
   }
 
@@ -120,7 +120,8 @@ export function calculerCoutRecette<
     return { ...ligne, coutLigne, poidsFiniLigneG };
   });
 
-  const coutParPortion = recette.portions > 0 ? coutTotal / recette.portions : coutTotal;
+  // recette.portions est garanti > 0 par la validation ci-dessus.
+  const coutParPortion = coutTotal / recette.portions;
   const foodCostPct =
     recette.prixVenteHT && recette.prixVenteHT > 0
       ? (coutParPortion / recette.prixVenteHT) * 100

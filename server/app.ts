@@ -20,6 +20,8 @@ import allergenesRouter from "./routes/allergenes.js";
 import mouvementsRouter from "./routes/mouvements.js";
 import depotsRouter from "./routes/depots.js";
 import aliasIngredientsRouter from "./routes/aliasIngredients.js";
+import achatsRouter from "./routes/achats.js";
+import productionRouter from "./routes/production.js";
 import haccpRouter from "./routes/haccp.js";
 import consultingRouter from "./routes/consulting.js";
 
@@ -53,6 +55,8 @@ app.use("/api/allergenes", allergenesRouter);
 app.use("/api/mouvements", mouvementsRouter);
 app.use("/api/depots", depotsRouter);
 app.use("/api/alias-ingredients", aliasIngredientsRouter);
+app.use("/api/achats", achatsRouter);
+app.use("/api/production", productionRouter);
 app.use("/api/haccp", haccpRouter);
 app.use("/api/consulting", consultingRouter);
 
