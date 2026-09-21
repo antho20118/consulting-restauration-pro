@@ -1,3 +1,5 @@
+import { versUniteBase } from "./uniteConversion.js";
+
 export const inclusionsRecette = {
   categorie: true,
   sousCategorie: true,
@@ -94,16 +96,9 @@ export function calculerCoutRecette<
   }
 
   const lignes = recette.lignes.map((ligne) => {
-    if (!Number.isFinite(ligne.quantite) || ligne.quantite < 0) {
-      throw new Error("Quantité de ligne invalide");
-    }
-    if (!Number.isFinite(ligne.unite.facteurBase) || ligne.unite.facteurBase <= 0) {
-      throw new Error("Facteur d'unité de recette invalide");
-    }
-
     const tarif = ligne.article.tarifs[0];
     const rendement = rendementValide(ligne.article.rendement);
-    const quantiteBase = ligne.quantite * ligne.unite.facteurBase;
+    const quantiteBase = versUniteBase(ligne.quantite, ligne.unite);
 
     let coutLigne = 0;
     if (tarif) {

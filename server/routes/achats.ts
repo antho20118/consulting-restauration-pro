@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import prisma from "../prisma.js";
+import { versUniteBase } from "../utils/uniteConversion.js";
 
 const router = Router();
 
@@ -89,7 +90,7 @@ router.post("/proposition", async (req, res) => {
     const besoinBaseParArticle = new Map<number, number>();
     for (const besoin of besoins) {
       const cumul = besoinBaseParArticle.get(besoin.articleId) ?? 0;
-      besoinBaseParArticle.set(besoin.articleId, cumul + besoin.quantite * besoin.facteurUniteRecette);
+      besoinBaseParArticle.set(besoin.articleId, cumul + versUniteBase(besoin.quantite, besoin.facteurUniteRecette));
     }
 
     const lignes: LigneAchat[] = [...besoinBaseParArticle.entries()].map(([articleId, besoinBase]) => {
