@@ -1,5 +1,6 @@
 import prisma from "../prisma.js";
 import { calculerCoutRecette, inclusionsRecette } from "./coutRecette.js";
+import { versUniteBase } from "./uniteConversion.js";
 
 // En dessous de ce seuil, l'écart de prix entre deux articles est trop faible pour valoir une
 // suggestion (bruit d'arrondi ou différence négligeable) plutôt qu'une vraie économie exploitable.
@@ -96,7 +97,7 @@ export async function suggestionsEconomieRecette(recetteId: number): Promise<Sug
     const economiePct = ((coutActuelParUniteBase - meilleurCout) / coutActuelParUniteBase) * 100;
     if (economiePct < ECONOMIE_MIN_PCT) continue;
 
-    const quantiteBase = ligne.quantite * ligne.unite.facteurBase;
+    const quantiteBase = versUniteBase(ligne.quantite, ligne.unite);
     const nouveauCoutLigne = quantiteBase * meilleurCout;
     const economieTotale = ligne.coutLigne - nouveauCoutLigne;
     // recette.portions est garanti > 0 : calculerCoutRecette() a déjà validé la recette ci-dessus.

@@ -1,5 +1,6 @@
 import prisma from "../prisma.js";
 import { calculerCoutRecette, inclusionsRecette } from "./coutRecette.js";
+import { versUniteBase } from "./uniteConversion.js";
 
 export type CibleProduction =
   | { mode: "portions"; valeur: number }
@@ -25,13 +26,12 @@ export async function planifierProduction(recetteId: number, cible: CibleProduct
 
   const lignes = calculee.lignes.map((ligne) => {
     // ligne.quantite est exprimée dans l'unité choisie pour cette ligne de recette (ligne.unite),
-    // pas dans l'unité de base — exactement comme dans coutRecette.ts, qui doit la convertir via
-    // le même facteurBase avant de calculer un coût. Le stock, lui, est toujours en unité de base
-    // (voir Stock.quantite). Sans cette conversion, quantiteProduction et besoinNet seraient faux
-    // d'un facteur facteurBase dès qu'une ligne n'est pas déjà exprimée dans l'unité de base
-    // (ex. kg au lieu de g, L au lieu de mL) — valide quel que soit facteurBase, pas seulement
-    // pour kg/g.
-    const quantiteBase = ligne.quantite * ligne.unite.facteurBase;
+    // pas dans l'unité de base — voir server/utils/uniteConversion.ts pour la règle de conversion
+    // (source unique, aussi utilisée par coutRecette.ts, suggestionsEconomie.ts et achats.ts). Le
+    // stock, lui, est toujours en unité de base (voir Stock.quantite). ligne.quantite ici est bien
+    // la quantité brute d'origine (calculerCoutRecette ne réexpose jamais sa propre quantiteBase
+    // sur l'objet ligne) : cet appel est donc l'unique conversion appliquée, pas une seconde.
+    const quantiteBase = versUniteBase(ligne.quantite, ligne.unite);
     const quantite = quantiteBase * echelle;
     const stockDisponible = stockByArticle.get(ligne.articleId) ?? 0;
     const besoinNet = Math.max(0, quantite - stockDisponible);
