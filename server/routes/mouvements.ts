@@ -1,9 +1,18 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import { z } from "zod";
 
 import prisma from "../prisma.js";
 
 const router = Router();
+
+const schemaMouvement = z.object({
+  articleId: z.number().int().positive(),
+  depotId: z.number().int().positive(),
+  type: z.enum(["ENTREE", "SORTIE"]),
+  quantite: z.number().finite().positive(),
+  motif: z.string().trim().max(500).optional(),
+});
 
 router.get("/", async (_req: Request, res: Response) => {
   try {
@@ -25,18 +34,12 @@ router.get("/", async (_req: Request, res: Response) => {
 // Enregistre un mouvement (entrée ou sortie) et ajuste le stock du dépôt choisi en conséquence.
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const { articleId, depotId, type, quantite, motif } = req.body as {
-      articleId: number;
-      depotId: number;
-      type: "ENTREE" | "SORTIE";
-      quantite: number;
-      motif?: string;
-    };
-
-    if (quantite <= 0) {
-      res.status(400).json({ error: "La quantité doit être supérieure à zéro" });
+    const analyse = schemaMouvement.safeParse(req.body);
+    if (!analyse.success) {
+      res.status(400).json({ error: "Mouvement de stock invalide", details: analyse.error.flatten() });
       return;
     }
+    const { articleId, depotId, type, quantite, motif } = analyse.data;
 
     const mouvement = await prisma.$transaction(async (tx) => {
       await tx.article.findUniqueOrThrow({ where: { id: articleId } });

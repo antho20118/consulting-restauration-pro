@@ -27,7 +27,16 @@ import consultingRouter from "./routes/consulting.js";
 
 const app = express();
 
-app.use(cors());
+// Sans CORS_ORIGIN, comportement inchangé (toutes origines acceptées) : ne restreint que si
+// l'opérateur choisit explicitement de le faire (liste d'origines séparées par des virgules).
+const corsOrigin = process.env.CORS_ORIGIN;
+app.use(
+  cors(
+    corsOrigin
+      ? { origin: corsOrigin.split(",").map((v) => v.trim()).filter(Boolean) }
+      : undefined
+  )
+);
 // Limite par défaut d'Express (100kb) trop basse pour un listing fournisseur complet
 // (plusieurs milliers de lignes une fois transformées en JSON par le frontend).
 app.use(express.json({ limit: "10mb" }));
