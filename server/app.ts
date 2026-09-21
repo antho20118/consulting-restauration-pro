@@ -20,6 +20,7 @@ import allergenesRouter from "./routes/allergenes.js";
 import mouvementsRouter from "./routes/mouvements.js";
 import depotsRouter from "./routes/depots.js";
 import aliasIngredientsRouter from "./routes/aliasIngredients.js";
+import haccpRouter from "./routes/haccp.js";
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.use("/api/allergenes", allergenesRouter);
 app.use("/api/mouvements", mouvementsRouter);
 app.use("/api/depots", depotsRouter);
 app.use("/api/alias-ingredients", aliasIngredientsRouter);
+app.use("/api/haccp", haccpRouter);
 
 app.get("/health", (_req, res) => {
   res.json({
