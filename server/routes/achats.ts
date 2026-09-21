@@ -90,7 +90,7 @@ router.post("/proposition", async (req, res) => {
     const besoinBaseParArticle = new Map<number, number>();
     for (const besoin of besoins) {
       const cumul = besoinBaseParArticle.get(besoin.articleId) ?? 0;
-      besoinBaseParArticle.set(besoin.articleId, cumul + versUniteBase(besoin.quantite, besoin.facteurUniteRecette));
+      besoinBaseParArticle.set(besoin.articleId, cumul + versUniteBase(besoin.quantite, { facteurBase: besoin.facteurUniteRecette }));
     }
 
     const lignes: LigneAchat[] = [...besoinBaseParArticle.entries()].map(([articleId, besoinBase]) => {

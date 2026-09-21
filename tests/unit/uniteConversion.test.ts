@@ -56,19 +56,27 @@ test("[7] quantité invalide : rejette négatif, NaN et Infinity", () => {
   assert.equal(versUniteBase(0, { facteurBase: 1000 }), 0);
 });
 
-test("[8] facteur invalide : rejette zéro, négatif, NaN et Infinity — objet Unite ou nombre brut", () => {
+test("[8] facteur invalide : rejette zéro, négatif, NaN et Infinity", () => {
   assert.throws(() => versUniteBase(1, { facteurBase: 0 }), /Facteur d'unité invalide/);
   assert.throws(() => versUniteBase(1, { facteurBase: -1000 }), /Facteur d'unité invalide/);
   assert.throws(() => versUniteBase(1, { facteurBase: NaN }), /Facteur d'unité invalide/);
   assert.throws(() => versUniteBase(1, { facteurBase: Infinity }), /Facteur d'unité invalide/);
-  // Même validation quand le facteur est passé comme nombre brut (cas de achats.ts, qui ne charge
-  // jamais d'entité Unite complète — voir facteurUniteRecette dans server/routes/achats.ts).
-  assert.throws(() => versUniteBase(1, 0), /Facteur d'unité invalide/);
-  assert.throws(() => versUniteBase(1, -5), /Facteur d'unité invalide/);
 });
 
-test("[8bis] accepte un facteur brut (nombre) identique à un facteur porté par une entité Unite", () => {
-  assert.equal(versUniteBase(7, 1000), versUniteBase(7, { facteurBase: 1000 }));
+test("[8bis] verrouille l'API : le second paramètre doit être un objet { facteurBase }, un nombre brut n'est plus accepté (suite à l'audit de conception de PR #56)", () => {
+  assert.throws(() => {
+    // @ts-expect-error — un nombre brut ne doit plus être assignable au second paramètre de
+    // versUniteBase. Si cette directive devient superflue (« Unused '@ts-expect-error'
+    // directive »), c'est que la signature a régressé vers l'ancienne forme
+    // number | { facteurBase }, que l'audit de conception a explicitement demandé de retirer :
+    // le typecheck échoue alors sur cette ligne, verrouillant l'API à chaque build.
+    //
+    // La directive supprime seulement l'erreur de compilation, pas l'exécution : l'appel a bien
+    // lieu à l'exécution du test, mais échoue quand même au niveau runtime, puisqu'un nombre brut
+    // n'a pas de propriété .facteurBase (donc undefined, rejeté par la validation). Double
+    // verrouillage : au typecheck et à l'exécution.
+    versUniteBase(1, 1000);
+  }, /Facteur d'unité invalide/);
 });
 
 test("[9] scénario recette réel : calculerCoutRecette() utilise bien versUniteBase() pour chaque ligne, avec des unités mixtes (g et kg)", () => {
@@ -295,7 +303,7 @@ test("[11] scénario production → achats réel : le besoinNet centralisé (700
   const resultatAchats = await reponseAchats.json();
   const ligneAchat = resultatAchats.lignes[0];
 
-  assert.equal(ligneAchat.besoinBase, 7000, "versUniteBase(7000, 1) = 7000 : aucune conversion supplémentaire");
+  assert.equal(ligneAchat.besoinBase, 7000, "versUniteBase(7000, { facteurBase: 1 }) = 7000 : aucune conversion supplémentaire");
   assert.equal(ligneAchat.conditionnements, 2);
   assert.equal(ligneAchat.quantiteCommandeeBase, 10000);
   assert.equal(ligneAchat.coutCommandeHT, 100);
