@@ -123,40 +123,51 @@ router.post("/", async (req: Request, res: Response) => {
       etapes?: { description: string; pointCritiqueHACCP: boolean; controleHACCP: string | null }[];
     };
 
-    const recette = await prisma.recette.create({
-      data: {
-        nom,
-        categorieId: categorieId ?? null,
-        sousCategorieId: sousCategorieId ?? null,
-        societeId,
-        portions: portions ?? 1,
-        prixVenteHT: prixVenteHT ?? null,
-        instructions: instructions ?? null,
-        photo: photo ?? null,
-        poidsPortionG: poidsPortionG ?? null,
-        poidsAccompagnementG: poidsAccompagnementG ?? null,
-        lignes: {
-          create: (lignes ?? []).map((ligne, index) => ({
-            articleId: ligne.articleId,
-            quantite: ligne.quantite,
-            uniteId: ligne.uniteId,
-            gainCuissonPct: ligne.gainCuissonPct ?? 0,
-            ordre: index,
-          })),
+    // calculerCoutRecette valide au passage les données de la recette (portions > 0, rendement de
+    // chaque article, etc.) et lève une exception sinon — elle doit donc être appelée DANS la même
+    // transaction que l'écriture, pour que Prisma annule automatiquement la création si elle
+    // échoue. Avant ce correctif, l'appel avait lieu après la création : une recette invalide (ex.
+    // portions=0) était bel et bien enregistrée en base malgré la réponse 500 renvoyée au client
+    // (voir l'audit de l'agent Consulting, qui a découvert ce cas en la rendant impossible à
+    // analyser par la suite).
+    const recette = await prisma.$transaction(async (tx) => {
+      const creee = await tx.recette.create({
+        data: {
+          nom,
+          categorieId: categorieId ?? null,
+          sousCategorieId: sousCategorieId ?? null,
+          societeId,
+          portions: portions ?? 1,
+          prixVenteHT: prixVenteHT ?? null,
+          instructions: instructions ?? null,
+          photo: photo ?? null,
+          poidsPortionG: poidsPortionG ?? null,
+          poidsAccompagnementG: poidsAccompagnementG ?? null,
+          lignes: {
+            create: (lignes ?? []).map((ligne, index) => ({
+              articleId: ligne.articleId,
+              quantite: ligne.quantite,
+              uniteId: ligne.uniteId,
+              gainCuissonPct: ligne.gainCuissonPct ?? 0,
+              ordre: index,
+            })),
+          },
+          etapes: {
+            create: (etapes ?? []).map((etape, index) => ({
+              description: etape.description,
+              pointCritiqueHACCP: etape.pointCritiqueHACCP,
+              controleHACCP: etape.controleHACCP,
+              ordre: index,
+            })),
+          },
         },
-        etapes: {
-          create: (etapes ?? []).map((etape, index) => ({
-            description: etape.description,
-            pointCritiqueHACCP: etape.pointCritiqueHACCP,
-            controleHACCP: etape.controleHACCP,
-            ordre: index,
-          })),
-        },
-      },
-      include: inclusionsRecette,
+        include: inclusionsRecette,
+      });
+
+      return calculerCoutRecette(creee);
     });
 
-    res.status(201).json(calculerCoutRecette(recette));
+    res.status(201).json(recette);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Impossible de créer la recette" });
@@ -194,11 +205,15 @@ router.put("/:id", async (req: Request, res: Response) => {
       etapes?: { description: string; pointCritiqueHACCP: boolean; controleHACCP: string | null }[];
     };
 
+    // calculerCoutRecette (qui valide au passage portions > 0, le rendement de chaque article,
+    // etc.) doit être appelée DANS cette même transaction, pour que Prisma annule aussi le
+    // remplacement des lignes/étapes déjà effectué si elle échoue — même correctif et même raison
+    // que pour la création ci-dessus (voir son commentaire).
     const recette = await prisma.$transaction(async (tx) => {
       await tx.recetteLigne.deleteMany({ where: { recetteId: id } });
       await tx.recetteEtape.deleteMany({ where: { recetteId: id } });
 
-      return tx.recette.update({
+      const miseAJour = await tx.recette.update({
         where: { id },
         data: {
           nom,
@@ -230,9 +245,11 @@ router.put("/:id", async (req: Request, res: Response) => {
         },
         include: inclusionsRecette,
       });
+
+      return calculerCoutRecette(miseAJour);
     });
 
-    res.json(calculerCoutRecette(recette));
+    res.json(recette);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Impossible de mettre à jour la recette" });
