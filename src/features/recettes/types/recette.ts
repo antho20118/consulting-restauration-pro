@@ -138,6 +138,25 @@ export interface EvaluationHACCP {
   etapes: EtapeEvalueeHACCP[];
 }
 
+// Analyse déterministe de l'agent Consulting (voir server/routes/consulting.ts) : aucun appel à un
+// modèle de langage, seulement les mêmes indicateurs et la même évaluation HACCP que le reste de
+// l'application, plus des alertes calculées à partir de règles en dur. `indicateurs` reprend des
+// champs déjà présents sur `Recette` (coutTotal, coutParPortion, foodCostPct...) — la valeur
+// propre à cet appel est `alertes`, disponible nulle part ailleurs dans l'app.
+export interface AnalyseConsulting {
+  recetteId: number;
+  recetteNom: string;
+  indicateurs: {
+    coutTotal: number;
+    coutParPortion: number;
+    foodCostPct: number | null;
+    margeHT: number | null;
+    poidsFiniTotalG: number;
+  };
+  alertes: string[];
+  haccp: EtapeEvalueeHACCP[];
+}
+
 // Changement de fournisseur pour un même article déjà utilisé dans la recette — jamais un
 // remplacement d'un article par un autre (voir server/utils/suggestionsEconomie.ts).
 export interface SuggestionFournisseur {
