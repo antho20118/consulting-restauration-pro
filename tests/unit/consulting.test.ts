@@ -150,7 +150,7 @@ after(async () => {
   });
 });
 
-test("relève les 3 alertes attendues : coût nul, tarif manquant, HACCP à valider (et aucune alerte food cost sans prix de vente)", async () => {
+test("relève les 4 alertes attendues : coût nul, tarif manquant, HACCP à valider, food cost non évaluable sans prix de vente", async () => {
   const recette = await creerRecette({
     nom: "CONSULTING TEST recette 3 alertes",
     societeId,
@@ -173,11 +173,45 @@ test("relève les 3 alertes attendues : coût nul, tarif manquant, HACCP à vali
   assert.equal(resultat.indicateurs.foodCostPct, null);
   assert.deepEqual(
     [...resultat.alertes].sort(),
-    ["Au moins un ingrédient n'a pas de tarif actif", "Coût matière nul ou non tarifé", "Des étapes nécessitent une validation HACCP"].sort()
+    [
+      "Au moins un ingrédient n'a pas de tarif actif",
+      "Coût matière nul ou non tarifé",
+      "Des étapes nécessitent une validation HACCP",
+      "Food cost non évaluable : prix de vente non renseigné (ou nul)",
+    ].sort()
   );
   assert.equal(resultat.haccp.length, 1);
   assert.equal(resultat.haccp[0].aValider, true);
   assert.ok(resultat.haccp[0].reglesDetectees.some((r: { code: string }) => r.code === "CUISSON"));
+});
+
+// Constat A3 de l'audit fonctionnel de l'agent Consulting : un coût matière élevé sans prix de
+// vente renseigné ne déclenchait auparavant AUCUNE alerte (foodCostPct null neutralisait
+// silencieusement la seule règle liée au coût) — indiscernable d'une recette réellement saine.
+// Isolé ici sur une recette par ailleurs propre (article tarifé, pas d'étape HACCP) pour ne
+// vérifier que ce point précis.
+test("A3 : un coût matière élevé SANS prix de vente déclenche 'food cost non évaluable', jamais un silence total", async () => {
+  const recette = await creerRecette({
+    nom: "CONSULTING TEST A3 cout eleve sans prix de vente",
+    societeId,
+    categorieId: categorieRecetteId,
+    portions: 1,
+    // Pas de prixVenteHT : c'est précisément le cas que l'audit a trouvé silencieux.
+    lignes: [{ articleId: articleAvecTarifId, quantite: 1, uniteId: uniteKgId }],
+    etapes: [{ description: "Dresser l'assiette", pointCritiqueHACCP: false, controleHACCP: null }],
+  });
+
+  const reponse = await fetch(`${baseUrl}/api/consulting/analyser-recette`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ recetteId: recette.id }),
+  });
+  assert.equal(reponse.status, 200);
+  const resultat = await reponse.json();
+
+  assert.equal(resultat.indicateurs.coutParPortion, 50, "coût matière réellement élevé (50€/portion)");
+  assert.equal(resultat.indicateurs.foodCostPct, null);
+  assert.deepEqual(resultat.alertes, ["Food cost non évaluable : prix de vente non renseigné (ou nul)"]);
 });
 
 test("relève l'alerte food cost > 35 % quand le coût matière est élevé par rapport au prix de vente", async () => {
