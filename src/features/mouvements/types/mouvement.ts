@@ -9,6 +9,7 @@ export interface MouvementStock {
   article: {
     id: number;
     nom: string;
+    uniteBase: string;
   };
   depot: {
     nom: string;

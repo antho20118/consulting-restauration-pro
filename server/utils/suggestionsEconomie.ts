@@ -1,19 +1,11 @@
 import prisma from "../prisma.js";
 import { calculerCoutRecette, inclusionsRecette, prixParUniteBase } from "./coutRecette.js";
-import { versUniteBase } from "./uniteConversion.js";
+import { libelleUniteBase, versUniteBase } from "./uniteConversion.js";
 
 // En dessous de ce seuil, l'écart de prix entre deux tarifs est trop faible pour valoir une
 // suggestion (bruit d'arrondi ou différence négligeable) plutôt qu'une vraie économie exploitable.
 const ECONOMIE_MIN_PCT = 10;
 const NB_SUGGESTIONS_MAX = 5;
-
-// Libellé humain de l'unité de base d'une famille d'unités (voir Unite.type dans le schéma et le
-// même principe déjà documenté dans coutRecette.ts) : le gramme pour un poids, le mL pour un
-// volume, la pièce pour un dénombrable. N'existe pas comme entité en base (Unite.facteurBase est
-// juste un nombre) ; ce mapping reprend uniquement la convention déjà en vigueur dans tout le
-// projet (voir prisma/seed.ts : les unités de facteurBase=1 s'appellent explicitement "Gramme"/g,
-// "Millilitre"/mL, "Pièce"/pièce), sans en inventer une nouvelle.
-const LIBELLE_UNITE_BASE: Record<string, string> = { poids: "g", volume: "mL", unite: "unité" };
 
 export type TarifPourComparaison = {
   id: number;
@@ -167,7 +159,7 @@ export async function suggestionsEconomieRecette(recetteId: number): Promise<Sug
       },
       prixActuelParUniteBase: meilleur.prixActuelParUniteBase,
       prixAlternatifParUniteBase: meilleur.prixAlternatifParUniteBase,
-      uniteBase: LIBELLE_UNITE_BASE[meilleur.tarifActuel.unite.type] ?? "unité de base",
+      uniteBase: libelleUniteBase(meilleur.tarifActuel.unite.type),
       conditionnementActuel: {
         nom: meilleur.tarifActuel.conditionnement.nom,
         quantiteConditionnement: meilleur.tarifActuel.quantiteConditionnement,

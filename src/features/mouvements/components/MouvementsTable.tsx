@@ -34,8 +34,9 @@ export default function MouvementsTable({ mouvements }: Props) {
     {
       field: "quantite",
       headerName: "Quantité",
-      width: 110,
+      width: 130,
       valueGetter: (_value, row) => (row.type === "ENTREE" ? row.quantite : -row.quantite),
+      valueFormatter: (value: number, row) => `${value} ${row.article.uniteBase}`,
     },
     {
       field: "motif",

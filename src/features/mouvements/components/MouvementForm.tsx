@@ -7,12 +7,26 @@ import type { TypeMouvement } from "../types/mouvement";
 type Article = {
   id: number;
   nom: string;
+  tarifs: { unite: { type: string } }[];
 };
 
 type Depot = {
   id: number;
   nom: string;
 };
+
+// Même convention que côté serveur (voir server/utils/uniteConversion.ts) : le gramme pour un
+// poids, le mL pour un volume, la pièce pour un dénombrable — dupliquée ici car aucun module n'est
+// partagé entre le client et le serveur dans ce projet.
+const LIBELLE_UNITE_BASE: Record<string, string> = { poids: "g", volume: "mL", unite: "unité" };
+
+// Stock.quantite (et donc la quantité d'un mouvement) est toujours exprimée dans l'unité de base
+// de l'article, jamais dans son unité d'achat (ex. « carton de 6kg ») — c'est cette unité de base
+// qu'il faut afficher pour que la saisie ne soit jamais ambiguë.
+function uniteBaseArticle(article: Article | undefined): string {
+  const type = article?.tarifs[0]?.unite.type;
+  return (type && LIBELLE_UNITE_BASE[type]) ?? "unité de base";
+}
 
 type Props = {
   onClose: () => void;
@@ -104,7 +118,9 @@ export default function MouvementForm({ onClose, onSave }: Props) {
         <option value="SORTIE">Sortie</option>
       </select>
 
-      <label>Quantité</label>
+      <label>
+        Quantité ({uniteBaseArticle(articles.find((article) => article.id === articleId))})
+      </label>
       <input
         type="number"
         step="0.01"
