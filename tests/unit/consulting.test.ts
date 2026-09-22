@@ -261,7 +261,7 @@ test("A3 (suite) : coefficient configuré -> simulation de prix explicite, aucun
   }
 });
 
-test("relève l'alerte food cost > 35 % quand le coût matière est élevé par rapport au prix de vente", async () => {
+test("relève l'alerte food cost critique (> 35 %) quand le coût matière est élevé par rapport au prix de vente", async () => {
   // 1kg à 0,05€/g = 50€ de coût matière pour 1 portion, prix de vente 100€ HT → food cost 50 %.
   const recette = await creerRecette({
     nom: "CONSULTING TEST recette food cost eleve",
@@ -283,7 +283,46 @@ test("relève l'alerte food cost > 35 % quand le coût matière est élevé par 
 
   assert.equal(resultat.indicateurs.coutParPortion, 50);
   assert.equal(resultat.indicateurs.foodCostPct, 50);
-  assert.deepEqual(resultat.alertes, ["Food cost supérieur à 35 %"]);
+  assert.deepEqual(resultat.alertes, ["Food cost critique : supérieur à 35 %"]);
+  assert.equal(resultat.simulation, null, "prix de vente réel renseigné : jamais de simulation");
+});
+
+// Cohérence de règle métier trouvée en revue après la fusion de PR #66 : le tableau de bord
+// (src/features/dashboard/utils/statutFoodCost.ts, server/routes/dashboard.ts) définit trois
+// paliers — Bon (≤28 %), À surveiller (28-35 %), Critique (>35 %) — mais Consulting n'alertait
+// jusqu'ici qu'au palier Critique, laissant le palier "À surveiller" invisible sur la fiche recette
+// alors qu'il est affiché en orange ailleurs dans l'application pour la même donnée. Vérifie que
+// Consulting relève désormais ce palier intermédiaire, avec un libellé distinct du palier critique
+// (voir server/utils/seuilsFoodCost.ts).
+test("relève l'alerte food cost à surveiller (entre 28 % et 35 %), distincte de l'alerte critique", async () => {
+  // 0,6kg à 50€/kg = 30€ de coût matière pour 1 portion, prix de vente 100€ HT → food cost 30 %
+  // (dans l'intervalle 28-35 %, palier "à surveiller").
+  const recette = await creerRecette({
+    nom: "CONSULTING TEST recette food cost a surveiller",
+    societeId,
+    categorieId: categorieRecetteId,
+    portions: 1,
+    prixVenteHT: 100,
+    lignes: [{ articleId: articleAvecTarifId, quantite: 0.6, uniteId: uniteKgId }],
+    etapes: [{ description: "Dresser l'assiette", pointCritiqueHACCP: false, controleHACCP: null }],
+  });
+
+  const reponse = await fetch(`${baseUrl}/api/consulting/analyser-recette`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ recetteId: recette.id }),
+  });
+  assert.equal(reponse.status, 200);
+  const resultat = await reponse.json();
+
+  assert.equal(resultat.indicateurs.coutParPortion, 30);
+  assert.equal(resultat.indicateurs.foodCostPct, 30);
+  assert.deepEqual(resultat.alertes, ["Food cost à surveiller : compris entre 28 % et 35 %"]);
+  assert.notEqual(
+    resultat.alertes[0],
+    "Food cost critique : supérieur à 35 %",
+    "le libellé doit rester distinct de l'alerte critique"
+  );
   assert.equal(resultat.simulation, null, "prix de vente réel renseigné : jamais de simulation");
 });
 

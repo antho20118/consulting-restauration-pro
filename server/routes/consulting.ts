@@ -3,6 +3,7 @@ import { z } from "zod";
 import prisma from "../prisma.js";
 import { calculerCoutRecette, inclusionsRecette } from "../utils/coutRecette.js";
 import { evaluerEtapesHACCP } from "../utils/haccp.js";
+import { SEUIL_BON, SEUIL_ATTENTION, niveauFoodCost } from "../utils/seuilsFoodCost.js";
 
 const router = Router();
 const schema = z.object({ recetteId: z.number().int().positive() });
@@ -38,7 +39,11 @@ router.post("/analyser-recette", async (req, res) => {
 
     // Trois cas, jamais un silence pour les deux derniers (voir l'audit de l'agent Consulting,
     // constat A3, et la discussion qui a suivi la correction initiale en PR #65) :
-    // 1. Prix de vente réel renseigné -> food cost réel, comparé au seuil comme avant.
+    // 1. Prix de vente réel renseigné -> food cost réel, comparé aux mêmes seuils que le tableau
+    //    de bord (voir server/utils/seuilsFoodCost.ts — auparavant Consulting n'alertait qu'au
+    //    palier "Critique" en dur, ignorant silencieusement le palier "À surveiller" affiché
+    //    partout ailleurs pour la même donnée : incohérence trouvée en revue après la fusion de
+    //    PR #66, corrigée ici sans changer les valeurs de seuil elles-mêmes).
     // 2. Prix absent mais un coefficient multiplicateur est configuré pour la société (voir
     //    Societe.coefficientMultiplicateur, jamais de valeur par défaut) -> on simule un prix de
     //    vente et un food cost théorique, explicitement marqués comme une estimation — jamais une
@@ -46,7 +51,13 @@ router.post("/analyser-recette", async (req, res) => {
     // 3. Prix absent et aucun coefficient configuré -> on ne peut réellement rien évaluer, et on
     //    le dit, plutôt que de laisser un tableau d'alertes vide se faire passer pour "vérifié".
     if (calcule.foodCostPct != null) {
-      if (calcule.foodCostPct > 35) alertes.push("Food cost supérieur à 35 %");
+      const niveau = niveauFoodCost(calcule.foodCostPct);
+      if (niveau === "critique") {
+        alertes.push(`Food cost critique : supérieur à ${SEUIL_ATTENTION} %`);
+      } else if (niveau === "attention") {
+        alertes.push(`Food cost à surveiller : compris entre ${SEUIL_BON} % et ${SEUIL_ATTENTION} %`);
+      }
+      // niveau === "bon" : aucune alerte, comportement inchangé.
     } else {
       const societe = await prisma.societe.findUnique({
         where: { id: recette.societeId },
