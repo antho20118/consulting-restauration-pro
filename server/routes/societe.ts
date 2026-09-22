@@ -18,9 +18,26 @@ router.get("/", async (_req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { nom } = req.body;
+    const { nom, coefficientMultiplicateur } = req.body as {
+      nom: string;
+      coefficientMultiplicateur?: number | null;
+    };
 
-    const societe = await prisma.societe.update({ where: { id }, data: { nom } });
+    // Nullable, jamais de valeur par défaut : tant que ce champ n'est pas explicitement saisi (ou
+    // explicitement effacé, en renvoyant null), l'agent Consulting ne doit simuler aucun prix de
+    // vente ni food cost théorique — voir server/routes/consulting.ts.
+    if (
+      coefficientMultiplicateur != null &&
+      (!Number.isFinite(coefficientMultiplicateur) || coefficientMultiplicateur <= 0)
+    ) {
+      res.status(400).json({ error: "Coefficient multiplicateur invalide" });
+      return;
+    }
+
+    const societe = await prisma.societe.update({
+      where: { id },
+      data: { nom, coefficientMultiplicateur: coefficientMultiplicateur ?? null },
+    });
 
     res.json(societe);
   } catch (error) {

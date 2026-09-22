@@ -142,7 +142,7 @@ export interface EvaluationHACCP {
 // modèle de langage, seulement les mêmes indicateurs et la même évaluation HACCP que le reste de
 // l'application, plus des alertes calculées à partir de règles en dur. `indicateurs` reprend des
 // champs déjà présents sur `Recette` (coutTotal, coutParPortion, foodCostPct...) — la valeur
-// propre à cet appel est `alertes`, disponible nulle part ailleurs dans l'app.
+// propre à cet appel est `alertes` (et `simulation`), disponibles nulle part ailleurs dans l'app.
 export interface AnalyseConsulting {
   recetteId: number;
   recetteNom: string;
@@ -153,6 +153,11 @@ export interface AnalyseConsulting {
     margeHT: number | null;
     poidsFiniTotalG: number;
   };
+  // Non null uniquement quand foodCostPct est null (pas de prix de vente réel) ET qu'un
+  // coefficient multiplicateur est configuré pour la société — jamais un vrai prix de vente,
+  // toujours une estimation. À afficher avec une étiquette explicite, jamais avec la même mise en
+  // forme qu'une donnée réelle (voir AlertesConsulting.tsx).
+  simulation: { coefficient: number; prixVenteEstimeHT: number; foodCostTheoriquePct: number } | null;
   alertes: string[];
   haccp: EtapeEvalueeHACCP[];
 }

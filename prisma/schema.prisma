@@ -33,6 +33,15 @@ model Societe {
   siret String? @unique
   actif Boolean @default(true)
 
+  // Coefficient multiplicateur (prix de vente conseillé = coût matière × coefficient — méthode de
+  // tarification standard en restauration : coefficient 3 = food cost visé 33 %, 4 = 25 %, etc.).
+  // Nullable et sans valeur par défaut délibérément : tant qu'aucun coefficient n'a été saisi
+  // explicitement par l'utilisateur (voir Paramètres), l'agent Consulting ne simule aucun prix ni
+  // food cost théorique — voir l'audit fonctionnel de l'agent Consulting, constat A3, et la
+  // discussion qui a suivi sa correction (PR #65) : un coefficient par défaut imposerait une
+  // hypothèse commerciale à un restaurant qui ne l'a pas choisie.
+  coefficientMultiplicateur Float?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

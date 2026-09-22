@@ -115,11 +115,15 @@ export async function getSociete(): Promise<Societe> {
   return response.json();
 }
 
-export async function modifierSociete(id: number, nom: string): Promise<Societe> {
+export async function modifierSociete(
+  id: number,
+  nom: string,
+  coefficientMultiplicateur: number | null
+): Promise<Societe> {
   const response = await apiFetch(`${API_URL}/societe/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nom }),
+    body: JSON.stringify({ nom, coefficientMultiplicateur }),
   });
   await verifierReponse(response, "Impossible de modifier la société");
   return response.json();

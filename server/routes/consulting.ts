@@ -34,15 +34,37 @@ router.post("/analyser-recette", async (req, res) => {
     const haccp = evaluerEtapesHACCP(recette.etapes);
 
     const alertes: string[] = [];
-    // Toujours un signal explicite sur le food cost, jamais un silence : sans prix de vente
-    // renseigné, foodCostPct est null et la comparaison à 35 % ne peut mathématiquement pas avoir
-    // lieu — mais l'absence d'alerte ne doit jamais se confondre avec "vérifié, food cost correct"
-    // (voir l'audit de l'agent Consulting, constat A3 : un coût matière élevé sans prix de vente
-    // ne déclenchait auparavant aucune alerte du tout).
-    if (calcule.foodCostPct == null) {
-      alertes.push("Food cost non évaluable : prix de vente non renseigné (ou nul)");
-    } else if (calcule.foodCostPct > 35) {
-      alertes.push("Food cost supérieur à 35 %");
+    let simulation: { coefficient: number; prixVenteEstimeHT: number; foodCostTheoriquePct: number } | null = null;
+
+    // Trois cas, jamais un silence pour les deux derniers (voir l'audit de l'agent Consulting,
+    // constat A3, et la discussion qui a suivi la correction initiale en PR #65) :
+    // 1. Prix de vente réel renseigné -> food cost réel, comparé au seuil comme avant.
+    // 2. Prix absent mais un coefficient multiplicateur est configuré pour la société (voir
+    //    Societe.coefficientMultiplicateur, jamais de valeur par défaut) -> on simule un prix de
+    //    vente et un food cost théorique, explicitement marqués comme une estimation — jamais une
+    //    alerte, ce n'est pas un problème mais une information.
+    // 3. Prix absent et aucun coefficient configuré -> on ne peut réellement rien évaluer, et on
+    //    le dit, plutôt que de laisser un tableau d'alertes vide se faire passer pour "vérifié".
+    if (calcule.foodCostPct != null) {
+      if (calcule.foodCostPct > 35) alertes.push("Food cost supérieur à 35 %");
+    } else {
+      const societe = await prisma.societe.findUnique({
+        where: { id: recette.societeId },
+        select: { coefficientMultiplicateur: true },
+      });
+      const coefficient = societe?.coefficientMultiplicateur;
+
+      if (coefficient) {
+        simulation = {
+          coefficient,
+          prixVenteEstimeHT: calcule.coutParPortion * coefficient,
+          foodCostTheoriquePct: 100 / coefficient,
+        };
+      } else {
+        alertes.push(
+          "Food cost non évaluable : prix de vente non renseigné et aucun coefficient multiplicateur configuré (voir Paramètres)"
+        );
+      }
     }
     if (calcule.coutParPortion <= 0) alertes.push("Coût matière nul ou non tarifé");
     if (haccp.some((e) => e.aValider)) alertes.push("Des étapes nécessitent une validation HACCP");
@@ -60,6 +82,7 @@ router.post("/analyser-recette", async (req, res) => {
         margeHT: calcule.margeHT,
         poidsFiniTotalG: calcule.poidsFiniTotalG,
       },
+      simulation,
       alertes,
       haccp,
     });
