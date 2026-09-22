@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tests.tsbuildinfo",
+    "target": "ES2023",
+    // DOM (comme tsconfig.app.json) plutôt que le seul typage fetch/Response de @types/node : ce
+    // dernier type Response.json() en Promise<unknown>, ce qui aurait forcé une assertion de type
+    // sur chaque appel dans chaque test HTTP existant. Le fetch de Node est la même interface
+    // WHATWG que celle de DOM — ce n'est pas un mensonge de typage, juste la définition la plus
+    // permissive des deux pour un usage qui ne l'exploite jamais dans le navigateur.
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "skipLibCheck": true,
+
+    // "bundler" plutôt que "NodeNext" (contrairement à tsconfig.node.json) : les tests importent à
+    // la fois depuis server/ (imports relatifs avec extension .js, convention NodeNext) et depuis
+    // src/ (imports relatifs sans extension, convention bundler de tsconfig.app.json) — voir
+    // ligneImportee.test.ts et validationLignes.test.ts. "bundler" résout correctement les deux
+    // sans qu'aucun fichier existant n'ait à changer sa propre convention d'import.
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["tests/**/*.ts"]
+}

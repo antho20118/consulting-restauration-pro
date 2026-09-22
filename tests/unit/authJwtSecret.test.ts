@@ -35,7 +35,7 @@ function importerModuleAuth(env: Record<string, string | undefined>): { code: nu
 }
 
 test("NODE_ENV=production sans JWT_SECRET : le serveur refuse de démarrer (module refusé, pas de secret par défaut)", () => {
-  const env = { ...process.env, NODE_ENV: "production" };
+  const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: "production" };
   delete env.JWT_SECRET;
 
   const { stdout } = importerModuleAuth(env);
@@ -53,7 +53,7 @@ test("NODE_ENV=production avec JWT_SECRET défini : le serveur démarre normalem
 });
 
 test("NODE_ENV=development sans JWT_SECRET : le serveur démarre avec le secret de développement local (pas de blocage hors production)", () => {
-  const env = { ...process.env, NODE_ENV: "development" };
+  const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: "development" };
   delete env.JWT_SECRET;
 
   const { stdout } = importerModuleAuth(env);
