@@ -34,10 +34,17 @@ router.put("/:id", async (req, res) => {
       return;
     }
 
-    const societe = await prisma.societe.update({
-      where: { id },
-      data: { nom, coefficientMultiplicateur: coefficientMultiplicateur ?? null },
-    });
+    // Trois états distincts à ne jamais confondre : champ absent du corps de requête (un appelant
+    // qui ne connaît pas ce champ, ex. un ancien client) doit laisser la valeur déjà en base
+    // intacte ; coefficientMultiplicateur: null doit explicitement la désactiver ; une valeur
+    // numérique doit la remplacer. `?? null` confondait auparavant absent et null : un simple
+    // PUT { nom } effaçait silencieusement un coefficient déjà configuré.
+    const donnees: { nom: string; coefficientMultiplicateur?: number | null } = { nom };
+    if ("coefficientMultiplicateur" in req.body) {
+      donnees.coefficientMultiplicateur = coefficientMultiplicateur;
+    }
+
+    const societe = await prisma.societe.update({ where: { id }, data: donnees });
 
     res.json(societe);
   } catch (error) {

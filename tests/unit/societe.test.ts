@@ -14,6 +14,7 @@ let server: Server;
 let baseUrl: string;
 let token: string;
 let societeId: number;
+let nomOrigine: string;
 let coefficientOrigine: number | null;
 
 before(async () => {
@@ -43,11 +44,12 @@ before(async () => {
 
   const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
+  nomOrigine = societe.nom;
   coefficientOrigine = societe.coefficientMultiplicateur;
 });
 
 after(async () => {
-  await prisma.societe.update({ where: { id: societeId }, data: { coefficientMultiplicateur: coefficientOrigine } });
+  await prisma.societe.update({ where: { id: societeId }, data: { nom: nomOrigine, coefficientMultiplicateur: coefficientOrigine } });
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
   });
@@ -91,4 +93,36 @@ test("refuse un coefficient négatif (400)", async () => {
     body: JSON.stringify({ nom: "Société de test", coefficientMultiplicateur: -2 }),
   });
   assert.equal(reponse.status, 400);
+});
+
+// Régression trouvée en revue avant fusion de PR #66 : `coefficientMultiplicateur ?? null` dans
+// l'implémentation initiale traitait "champ absent du corps de requête" exactement comme
+// "coefficientMultiplicateur: null" — un simple PUT { nom } (ex. un appelant qui ne connaît pas ce
+// champ) effaçait donc silencieusement un coefficient déjà configuré. Auto-contenu (ne dépend pas
+// de l'ordre des tests précédents) : configure explicitement un coefficient, puis envoie un PUT
+// dont le corps ne contient QUE nom, et vérifie que le coefficient survit intact.
+test("un PUT ne contenant que { nom } conserve un coefficient déjà configuré (ne l'efface pas silencieusement)", async () => {
+  const configuration = await fetch(`${baseUrl}/api/societe/${societeId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ nom: "Société de test", coefficientMultiplicateur: 4.5 }),
+  });
+  assert.equal(configuration.status, 200);
+  assert.equal((await configuration.json()).coefficientMultiplicateur, 4.5);
+
+  // Corps sans coefficientMultiplicateur du tout — pas même `undefined` explicite, la clé est
+  // absente, exactement comme un ancien client qui ignorerait ce champ.
+  const reponse = await fetch(`${baseUrl}/api/societe/${societeId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ nom: "Société de test (renommée)" }),
+  });
+  assert.equal(reponse.status, 200);
+  const resultat = await reponse.json();
+  assert.equal(resultat.nom, "Société de test (renommée)");
+  assert.equal(resultat.coefficientMultiplicateur, 4.5, "le coefficient ne doit pas avoir été effacé");
+
+  // Vérifie aussi directement en base, pas seulement la réponse HTTP.
+  const enBase = await prisma.societe.findUniqueOrThrow({ where: { id: societeId } });
+  assert.equal(enBase.coefficientMultiplicateur, 4.5);
 });
