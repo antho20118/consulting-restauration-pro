@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import CalculateurProduction from "./CalculateurProduction";
 import SuggestionsEconomie from "./SuggestionsEconomie";
-import type { Recette } from "../types/recette";
+import { getEvaluationHACCP } from "../services/recetteService";
+import type { EtapeEvalueeHACCP, Recette } from "../types/recette";
 
 type Props = {
   recette: Recette;
@@ -10,6 +12,14 @@ type Props = {
 };
 
 export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Props) {
+  const [evaluationHACCP, setEvaluationHACCP] = useState<EtapeEvalueeHACCP[] | null>(null);
+
+  useEffect(() => {
+    getEvaluationHACCP(recette.id)
+      .then((res) => setEvaluationHACCP(res.etapes))
+      .catch(() => setEvaluationHACCP(null));
+  }, [recette.id]);
+
   return (
     <div
       className="fiche-technique-impression"
@@ -107,29 +117,59 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
 
       <h3>Procédé pas à pas</h3>
       {recette.etapes.length === 0 && <p style={{ color: "#888" }}>Aucune étape renseignée.</p>}
-      {recette.etapes.map((etape, index) => (
-        <div key={etape.id} style={{ marginBottom: 14 }}>
-          <div style={{ display: "flex", gap: 10 }}>
-            <span style={{ fontWeight: "bold" }}>{index + 1}.</span>
-            <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{etape.description}</p>
-          </div>
-          {etape.pointCritiqueHACCP && (
-            <div
-              style={{
-                marginTop: 6,
-                marginLeft: 20,
-                background: "#fff4e5",
-                border: "1px solid #f0b429",
-                borderRadius: 6,
-                padding: "8px 12px",
-              }}
-            >
-              <strong>⚠ Point critique HACCP</strong>
-              {etape.controleHACCP && <div>{etape.controleHACCP}</div>}
+      {recette.etapes.map((etape, index) => {
+        // evaluationHACCP est une suggestion automatique (mots-clés + signal humain
+        // pointCritiqueHACCP, voir server/utils/haccp.ts) — jamais une preuve de conformité.
+        const evaluation = evaluationHACCP?.find((e) => e.id === etape.id);
+        const controleManquant = etape.pointCritiqueHACCP && evaluation?.aValider;
+        const suggestionNonDeclaree = !etape.pointCritiqueHACCP && evaluation != null && evaluation.aValider;
+
+        return (
+          <div key={etape.id} style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", gap: 10 }}>
+              <span style={{ fontWeight: "bold" }}>{index + 1}.</span>
+              <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{etape.description}</p>
             </div>
-          )}
-        </div>
-      ))}
+            {etape.pointCritiqueHACCP && (
+              <div
+                style={{
+                  marginTop: 6,
+                  marginLeft: 20,
+                  background: "#fff4e5",
+                  border: "1px solid #f0b429",
+                  borderRadius: 6,
+                  padding: "8px 12px",
+                }}
+              >
+                <strong>⚠ Point critique HACCP</strong>
+                {etape.controleHACCP && <div>{etape.controleHACCP}</div>}
+                {controleManquant && (
+                  <div style={{ color: "#b3261e", fontWeight: 600, marginTop: 4 }}>
+                    Contrôle non documenté — précisez la limite critique respectée.
+                  </div>
+                )}
+              </div>
+            )}
+            {suggestionNonDeclaree && (
+              <div
+                style={{
+                  marginTop: 6,
+                  marginLeft: 20,
+                  background: "#eef2ff",
+                  border: "1px solid #a5b4fc",
+                  borderRadius: 6,
+                  padding: "8px 12px",
+                  fontSize: 13,
+                }}
+              >
+                <strong>🔍 Point HACCP potentiel détecté</strong> (
+                {evaluation!.reglesDetectees.map((r) => r.nom).join(", ")}) — vérifiez si cette étape doit
+                être marquée « point critique » et son contrôle documenté.
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       {recette.instructions && (
         <>

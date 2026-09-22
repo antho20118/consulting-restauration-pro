@@ -2,6 +2,7 @@ import { API_URL, apiFetch } from "../../../config/api";
 import type {
   AliasIngredient,
   ArticleRecette,
+  EvaluationHACCP,
   ExtractionRecette,
   Recette,
   RecetteInput,
@@ -83,6 +84,16 @@ export async function getSuggestionsEconomie(recetteId: number): Promise<Suggest
 
   if (!response.ok) {
     throw new Error("Impossible de calculer les suggestions d'économies");
+  }
+
+  return response.json();
+}
+
+export async function getEvaluationHACCP(recetteId: number): Promise<EvaluationHACCP> {
+  const response = await apiFetch(`${API_URL}/haccp/evaluer/${recetteId}`);
+
+  if (!response.ok) {
+    throw new Error("Impossible d'évaluer les points HACCP de la recette");
   }
 
   return response.json();
