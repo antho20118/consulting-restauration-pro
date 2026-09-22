@@ -1,5 +1,17 @@
 export type UniteAvecFacteurBase = { facteurBase: number };
 
+// Libellé humain de l'unité de base d'une famille d'unités (voir Unite.type dans le schéma) : le
+// gramme pour un poids, le mL pour un volume, la pièce pour un dénombrable. N'existe pas comme
+// entité en base (Unite.facteurBase est juste un nombre) ; ce mapping reprend uniquement la
+// convention déjà en vigueur dans tout le projet (voir prisma/seed.ts : les unités de
+// facteurBase=1 s'appellent explicitement "Gramme"/g, "Millilitre"/mL, "Pièce"/pièce), sans en
+// inventer une nouvelle.
+export const LIBELLE_UNITE_BASE: Record<string, string> = { poids: "g", volume: "mL", unite: "unité" };
+
+export function libelleUniteBase(type: string | undefined): string {
+  return (type && LIBELLE_UNITE_BASE[type]) ?? "unité de base";
+}
+
 // Source unique de conversion d'une quantité de recette (ligne d'ingrédient, besoin d'achat...)
 // vers l'unité de base de sa famille (le gramme pour un poids, le mL pour un volume, la
 // pièce/l'unité pour un dénombrable) — voir Unite.facteurBase.
