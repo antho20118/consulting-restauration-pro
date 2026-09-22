@@ -177,9 +177,10 @@ test("relève les 4 alertes attendues : coût nul, tarif manquant, HACCP à vali
       "Au moins un ingrédient n'a pas de tarif actif",
       "Coût matière nul ou non tarifé",
       "Des étapes nécessitent une validation HACCP",
-      "Food cost non évaluable : prix de vente non renseigné (ou nul)",
+      "Food cost non évaluable : prix de vente non renseigné et aucun coefficient multiplicateur configuré (voir Paramètres)",
     ].sort()
   );
+  assert.equal(resultat.simulation, null);
   assert.equal(resultat.haccp.length, 1);
   assert.equal(resultat.haccp[0].aValider, true);
   assert.ok(resultat.haccp[0].reglesDetectees.some((r: { code: string }) => r.code === "CUISSON"));
@@ -211,7 +212,53 @@ test("A3 : un coût matière élevé SANS prix de vente déclenche 'food cost no
 
   assert.equal(resultat.indicateurs.coutParPortion, 50, "coût matière réellement élevé (50€/portion)");
   assert.equal(resultat.indicateurs.foodCostPct, null);
-  assert.deepEqual(resultat.alertes, ["Food cost non évaluable : prix de vente non renseigné (ou nul)"]);
+  assert.deepEqual(resultat.alertes, [
+    "Food cost non évaluable : prix de vente non renseigné et aucun coefficient multiplicateur configuré (voir Paramètres)",
+  ]);
+  assert.equal(resultat.simulation, null);
+});
+
+// Suite du constat A3 : une fois qu'un coefficient multiplicateur est configuré pour la société,
+// une recette sans prix de vente réel n'est plus "non évaluable" du tout — elle obtient une
+// simulation explicite (prix estimé + food cost théorique), jamais une alerte (ce n'est pas un
+// problème, c'est une information). Coefficient restauré à sa valeur d'origine (null, partagée
+// avec les autres fichiers de test) dans un `finally`, pour ne jamais laisser fuiter cet état.
+test("A3 (suite) : coefficient configuré -> simulation de prix explicite, aucune alerte food cost", async () => {
+  const societeAvant = await prisma.societe.findUniqueOrThrow({ where: { id: societeId } });
+  await prisma.societe.update({ where: { id: societeId }, data: { coefficientMultiplicateur: 4 } });
+
+  try {
+    const recette = await creerRecette({
+      nom: "CONSULTING TEST A3 coefficient configure",
+      societeId,
+      categorieId: categorieRecetteId,
+      portions: 1,
+      lignes: [{ articleId: articleAvecTarifId, quantite: 1, uniteId: uniteKgId }],
+      etapes: [{ description: "Dresser l'assiette", pointCritiqueHACCP: false, controleHACCP: null }],
+    });
+
+    const reponse = await fetch(`${baseUrl}/api/consulting/analyser-recette`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ recetteId: recette.id }),
+    });
+    assert.equal(reponse.status, 200);
+    const resultat = await reponse.json();
+
+    assert.equal(resultat.indicateurs.coutParPortion, 50);
+    assert.equal(resultat.indicateurs.foodCostPct, null, "toujours null : pas de vrai prix de vente");
+    assert.deepEqual(resultat.simulation, {
+      coefficient: 4,
+      prixVenteEstimeHT: 200, // 50€ × 4
+      foodCostTheoriquePct: 25, // 100 / 4
+    });
+    assert.equal(resultat.alertes.length, 0, "aucune alerte : une simulation n'est pas un problème");
+  } finally {
+    await prisma.societe.update({
+      where: { id: societeId },
+      data: { coefficientMultiplicateur: societeAvant.coefficientMultiplicateur },
+    });
+  }
 });
 
 test("relève l'alerte food cost > 35 % quand le coût matière est élevé par rapport au prix de vente", async () => {
@@ -237,6 +284,7 @@ test("relève l'alerte food cost > 35 % quand le coût matière est élevé par 
   assert.equal(resultat.indicateurs.coutParPortion, 50);
   assert.equal(resultat.indicateurs.foodCostPct, 50);
   assert.deepEqual(resultat.alertes, ["Food cost supérieur à 35 %"]);
+  assert.equal(resultat.simulation, null, "prix de vente réel renseigné : jamais de simulation");
 });
 
 test("ne relève aucune alerte pour une recette correctement tarifée, au food cost maîtrisé et à l'étape HACCP déjà contrôlée", async () => {

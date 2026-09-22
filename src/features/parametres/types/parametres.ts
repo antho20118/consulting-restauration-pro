@@ -19,6 +19,12 @@ export interface Unite {
 export interface Societe {
   id: number;
   nom: string;
+  // Coefficient multiplicateur (prix de vente = coût matière × coefficient) utilisé par l'agent
+  // Consulting pour simuler un prix de vente et un food cost théorique quand une recette n'a pas
+  // de prix de vente réel renseigné. Nullable et sans valeur par défaut délibérément : tant que ce
+  // champ n'est pas explicitement configuré, Consulting ne simule rien (voir
+  // server/routes/consulting.ts et l'audit de l'agent Consulting, constat A3).
+  coefficientMultiplicateur: number | null;
 }
 
 export interface Tva {
