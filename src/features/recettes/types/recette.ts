@@ -68,6 +68,14 @@ export interface Recette {
 
 export type LigneRecetteInput = {
   articleId: number;
+  // false uniquement pour un article rapproché automatiquement à l'import (IA/OCR) et pas encore
+  // revu par l'utilisateur dans le formulaire — voir construireLigneImportee() dans
+  // ligneImportee.ts et l'audit qui a motivé ce champ (un rapprochement automatique ne doit
+  // jamais avoir l'air d'un choix humain confirmé, en particulier pour les allergènes qui en
+  // dépendent). true pour une ligne ajoutée manuellement (rien d'automatique à signaler) et pour
+  // une ligne d'une recette déjà enregistrée (déjà validée une première fois lors de cet
+  // enregistrement). Purement local au formulaire : jamais envoyé au serveur.
+  articleConfirme: boolean;
   quantite: number;
   uniteId: number;
   gainCuissonPct: number;

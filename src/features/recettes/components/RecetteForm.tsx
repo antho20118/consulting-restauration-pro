@@ -13,6 +13,7 @@ import {
 import { estimerCoutLigne } from "../utils/cout";
 import { definirFiltrerSuperU, estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
 import { trouverUniteParDefaut } from "../utils/uniteParDefaut";
+import { calculerAllergenesAvecStatut, ligneIncomplete } from "../utils/validationLignes";
 import ImporterTechniquesModal from "./ImporterTechniquesModal";
 import RechercheArticle from "./RechercheArticle";
 import type {
@@ -74,6 +75,10 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
   const [lignes, setLignes] = useState<LigneRecetteInput[]>(
     recette?.lignes.map((ligne) => ({
       articleId: ligne.articleId,
+      // Ligne d'une recette déjà enregistrée : l'article a déjà été validé une première fois par
+      // un humain lors de cet enregistrement, contrairement à une ligne fraîchement importée par
+      // IA/OCR (voir LigneRecetteInput.articleConfirme) — pas de bandeau « à confirmer » ici.
+      articleConfirme: true,
       quantite: ligne.quantite,
       uniteId: ligne.uniteId,
       gainCuissonPct: ligne.gainCuissonPct,
@@ -104,12 +109,14 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
   }
 
   useEffect(() => {
+    // Pas de présélection pour une nouvelle recette (import IA ou création manuelle) : la
+    // catégorie la première par ordre alphabétique n'a aucun rapport avec le contenu de la
+    // recette — un champ silencieusement rempli d'une valeur arbitraire est plus trompeur qu'un
+    // champ visiblement vide (voir l'audit import IA). La recette conserve sa propre catégorie en
+    // modification (recette?.categorieId déjà utilisé dans l'état initial).
     apiFetch(`${API_URL}/categories-recette`)
       .then((r) => r.json())
-      .then((data) => {
-        setCategories(data);
-        if (!recette && data.length > 0) setCategorieId(data[0].id);
-      });
+      .then(setCategories);
 
     apiFetch(`${API_URL}/sous-categories-recette`)
       .then((r) => r.json())
@@ -120,7 +127,6 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
     getUnitesDisponibles().then((data) => {
       setUnites(data);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function ajouterLigne() {
@@ -130,7 +136,13 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
         // Pas de présélection : le champ de recherche reste vide pour écrire directement, plutôt
         // que de forcer à effacer le premier article de la liste avant de pouvoir taper.
         articleId: 0,
+        // Ligne ajoutée explicitement par l'utilisateur : aucune décision automatique à signaler,
+        // contrairement à une ligne issue d'un import IA/OCR (voir LigneRecetteInput.articleConfirme).
+        articleConfirme: true,
         quantite: 0,
+        // Ici uniquement (pas à l'import, voir ligneImportee.ts) : un point de départ visible que
+        // l'utilisateur ajuste lui-même en remplissant une ligne qu'il vient de créer, pas un
+        // repli silencieux sur une valeur devinée pour une ligne déjà "remplie" en apparence.
         uniteId: trouverUniteParDefaut(unites)?.id ?? 0,
         gainCuissonPct: 0,
       },
@@ -211,19 +223,12 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
 
   // Déduit les allergènes de la recette par union de ceux des ingrédients sélectionnés, plutôt
   // que de les faire ressaisir manuellement (qui pourrait diverger des ingrédients réellement
-  // utilisés).
-  const allergenes = useMemo(() => {
-    const parId = new Map<number, string>();
-    for (const ligne of lignes) {
-      const article = articles.find((a) => a.id === ligne.articleId);
-      for (const { allergene } of article?.allergenes ?? []) {
-        parId.set(allergene.id, allergene.nom);
-      }
-    }
-    return Array.from(parId, ([id, nom]) => ({ id, nom })).sort((a, b) =>
-      a.nom.localeCompare(b.nom)
-    );
-  }, [lignes, articles]);
+  // utilisés). `incertain` signale qu'un de ces ingrédients vient d'un rapprochement automatique
+  // (import IA/OCR) pas encore confirmé — voir validationLignes.ts.
+  const { allergenes, incertain: allergenesIncertains } = useMemo(
+    () => calculerAllergenesAvecStatut(lignes, articles),
+    [lignes, articles]
+  );
 
   // Sélection en cascade : sousCategorieId porte la valeur finale (racine ou enfant), mais le
   // formulaire affiche deux listes — la racine (Viande, Poisson...) puis, si elle a des enfants
@@ -236,8 +241,14 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
   const sousCategorieRacine = sousCategoriesRacines.find((sc) => sc.id === sousCategorieRacineId);
 
   async function enregistrer() {
-    if (lignes.some((ligne) => !ligne.articleId)) {
+    if (lignes.some((ligne) => ligneIncomplete(ligne) === "article")) {
       toast.error("Choisis un ingrédient pour chaque ligne (ou supprime les lignes vides).");
+      return;
+    }
+    if (lignes.some((ligne) => ligneIncomplete(ligne) === "unite")) {
+      toast.error(
+        "Choisis une unité pour chaque ligne : l'import n'a pas pu la déterminer automatiquement pour au moins un ingrédient."
+      );
       return;
     }
 
@@ -332,6 +343,7 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
             onChange={(e) => setCategorieId(Number(e.target.value))}
             style={{ width: "auto", maxWidth: "100%", padding: 10 }}
           >
+            <option value={0}>— À définir —</option>
             {categories.map((categorie) => (
               <option key={categorie.id} value={categorie.id}>
                 {categorie.nom}
@@ -491,52 +503,67 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
           : articles;
 
         return (
-          <div
-            key={index}
-            style={{
-              display: "flex",
-              gap: 10,
-              alignItems: "center",
-              marginBottom: 10,
-            }}
-          >
-            <RechercheArticle
-              articles={articlesPourLigne}
-              articlesRepli={filtrerSuperU ? articles : undefined}
-              articleId={ligne.articleId}
-              onChange={(articleId) => modifierLigne(index, { articleId })}
-            />
-
-            <ChampNombre
-              valeur={ligne.quantite}
-              onChanger={(n) => modifierLigne(index, { quantite: n ?? 0 })}
-              style={{ width: 90, padding: 8, boxSizing: "border-box" }}
-            />
-
-            <select
-              value={ligne.uniteId}
-              onChange={(e) => modifierLigne(index, { uniteId: Number(e.target.value) })}
-              style={{ width: 100, padding: 8 }}
+          <div key={index} style={{ marginBottom: 10 }}>
+            {!ligne.articleConfirme && (
+              <div style={{ fontSize: 12, color: "#b3261e", marginBottom: 2 }}>
+                ⚠ Article rapproché automatiquement à l'import — à vérifier puis confirmer (choisis-le
+                à nouveau dans le champ ci-dessous, même si c'est le bon).
+              </div>
+            )}
+            {ligne.articleId !== 0 && !ligne.uniteId && (
+              <div style={{ fontSize: 12, color: "#b3261e", marginBottom: 2 }}>
+                ⚠ Unité non déterminée par l'import — choisis-la avant d'enregistrer.
+              </div>
+            )}
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                ...(!ligne.articleConfirme
+                  ? { background: "#fdecea", borderRadius: 6, padding: "4px 6px", margin: "-4px -6px" }
+                  : {}),
+              }}
             >
-              {unites.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.symbole}
-                </option>
-              ))}
-            </select>
+              <RechercheArticle
+                articles={articlesPourLigne}
+                articlesRepli={filtrerSuperU ? articles : undefined}
+                articleId={ligne.articleId}
+                onChange={(articleId) => modifierLigne(index, { articleId, articleConfirme: true })}
+              />
 
-            <ChampNombre
-              valeur={ligne.gainCuissonPct}
-              onChanger={(n) => modifierLigne(index, { gainCuissonPct: n ?? 0 })}
-              style={{ width: 70, padding: 8, boxSizing: "border-box" }}
-              placeholder="Gain %"
-            />
+              <ChampNombre
+                valeur={ligne.quantite}
+                onChanger={(n) => modifierLigne(index, { quantite: n ?? 0 })}
+                style={{ width: 90, padding: 8, boxSizing: "border-box" }}
+              />
 
-            <span style={{ width: 70, textAlign: "right", color: "#555" }}>
-              {cout.toFixed(2)} €
-            </span>
+              <select
+                value={ligne.uniteId}
+                onChange={(e) => modifierLigne(index, { uniteId: Number(e.target.value) })}
+                style={{ width: 100, padding: 8 }}
+              >
+                <option value={0}>— à choisir —</option>
+                {unites.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.symbole}
+                  </option>
+                ))}
+              </select>
 
-            <button onClick={() => retirerLigne(index)}>✕</button>
+              <ChampNombre
+                valeur={ligne.gainCuissonPct}
+                onChanger={(n) => modifierLigne(index, { gainCuissonPct: n ?? 0 })}
+                style={{ width: 70, padding: 8, boxSizing: "border-box" }}
+                placeholder="Gain %"
+              />
+
+              <span style={{ width: 70, textAlign: "right", color: "#555" }}>
+                {cout.toFixed(2)} €
+              </span>
+
+              <button onClick={() => retirerLigne(index)}>✕</button>
+            </div>
           </div>
         );
       })}
@@ -548,6 +575,12 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
       {allergenes.length > 0 && (
         <div style={{ marginBottom: 20 }}>
           <label>Allergènes (déduits des ingrédients)</label>
+          {allergenesIncertains && (
+            <div style={{ fontSize: 12, color: "#b3261e", marginBottom: 6 }}>
+              ⚠ Liste possiblement incomplète ou inexacte : au moins un ingrédient rapproché
+              automatiquement à l'import n'est pas encore confirmé (voir ci-dessus).
+            </div>
+          )}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {allergenes.map((allergene) => (
               <span
