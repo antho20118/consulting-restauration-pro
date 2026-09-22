@@ -167,6 +167,10 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
             const article = articlesParCode.get(l.code)!;
             return {
               articleId: article.articleId,
+              // Rapproché par code article exact (référence), pas par une correspondance
+              // approximative de texte comme l'import IA/OCR (voir ligneImportee.ts) — pas la même
+              // ambiguïté à signaler ici.
+              articleConfirme: true,
               quantite: l.quantite,
               uniteId: article.uniteId,
               gainCuissonPct: 0,

@@ -11,16 +11,9 @@ import {
 } from "../services/recetteService";
 import { analyseRecetteLocale } from "../utils/analyseRecetteLocale";
 import { estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
-import { normaliserTexte as normaliser } from "../utils/normaliserTexte";
+import { construireLigneImportee } from "../utils/ligneImportee";
 import { extraireTexteDePhoto } from "../utils/ocrPhoto";
-import { trouverUniteParDefaut } from "../utils/uniteParDefaut";
-import type {
-  AliasIngredient,
-  ArticleRecette,
-  ExtractionRecette,
-  LigneRecetteInput,
-  UniteRecette,
-} from "../types/recette";
+import type { AliasIngredient, ExtractionRecette, LigneRecetteInput } from "../types/recette";
 
 type Props = {
   onClose: () => void;
@@ -31,47 +24,6 @@ type Props = {
     etapes: { description: string; pointCritiqueHACCP: boolean; controleHACCP: string | null }[];
   }) => void;
 };
-
-function trouverArticle(
-  nomExtrait: string,
-  articles: ArticleRecette[],
-  aliasParTexte: Map<string, number>
-): ArticleRecette | null {
-  const cible = normaliser(nomExtrait);
-  if (!cible) return null;
-
-  // Une correspondance déjà validée par l'utilisateur lors d'un import précédent (voir
-  // AliasIngredientImport côté serveur) prime sur la recherche approximative ci-dessous : c'est
-  // justement pour corriger les cas où celle-ci se trompait ou ne trouvait rien.
-  const articleIdMemorise = aliasParTexte.get(cible);
-  if (articleIdMemorise) {
-    const article = articles.find((a) => a.id === articleIdMemorise);
-    if (article) return article;
-  }
-
-  const exact = articles.find((a) => normaliser(a.nom) === cible);
-  if (exact) return exact;
-
-  const correspondances = articles.filter(
-    (a) => normaliser(a.nom).includes(cible) || cible.includes(normaliser(a.nom))
-  );
-  if (correspondances.length === 0) return null;
-
-  // À correspondance approximative égale, le nom le plus proche en longueur de celui recherché
-  // est le plus probable (évite de préférer un nom d'article très générique qui contiendrait le
-  // terme cherché comme sous-chaîne, ex. « Farine » dans « Farine de sarrasin »).
-  return correspondances.reduce((meilleur, actuel) =>
-    Math.abs(normaliser(actuel.nom).length - cible.length) <
-    Math.abs(normaliser(meilleur.nom).length - cible.length)
-      ? actuel
-      : meilleur
-  );
-}
-
-function trouverUnite(symbole: string | null, unites: UniteRecette[]): UniteRecette | null {
-  if (!symbole) return null;
-  return unites.find((u) => normaliser(u.symbole) === normaliser(symbole)) ?? null;
-}
 
 // Fonction à part (plutôt qu'inline dans le catch ci-dessous) : le rétrécissement de type de
 // `source` par TypeScript ne survit pas à l'entrée d'un bloc catch, même via une simple relecture
@@ -141,26 +93,14 @@ export default function ImporterRecetteModal({ onClose, onExtrait }: Props) {
         ? articlesTous.filter((a) => estFournisseurSuperU(a))
         : articlesTous;
 
-      const lignes: LigneRecetteInput[] = extraction.ingredients.map((ingredient) => {
-        const article = trouverArticle(ingredient.nomExtrait, articles, aliasParTexte);
-        const unite = trouverUnite(ingredient.unite, unites);
-        return {
-          // 0 : pas de présélection, cohérent avec une ligne ajoutée manuellement — l'utilisateur
-          // choisit lui-même l'article dans le champ de recherche si rien n'a été trouvé.
-          articleId: article?.id ?? 0,
-          quantite: ingredient.quantite ?? 0,
-          uniteId: unite?.id ?? trouverUniteParDefaut(unites)?.id ?? 0,
-          gainCuissonPct: 0,
-          // Conservé jusqu'à l'enregistrement de la recette pour mémoriser le choix de
-          // l'utilisateur s'il corrige ou complète l'article (voir RecetteForm.tsx).
-          texteIngredientImporte: ingredient.nomExtrait,
-        };
-      });
+      const lignes: LigneRecetteInput[] = extraction.ingredients.map((ingredient) =>
+        construireLigneImportee(ingredient, articles, unites, aliasParTexte)
+      );
 
       const nbReconnus = lignes.filter((l) => l.articleId !== 0).length;
       if (extraction.ingredients.length > 0) {
         toast.success(
-          `${nbReconnus} ingrédient${nbReconnus > 1 ? "s" : ""} sur ${extraction.ingredients.length} reconnu${nbReconnus > 1 ? "s" : ""} automatiquement. Complète le reste dans le formulaire.`
+          `${nbReconnus} ingrédient${nbReconnus > 1 ? "s" : ""} sur ${extraction.ingredients.length} reconnu${nbReconnus > 1 ? "s" : ""} automatiquement, à confirmer dans le formulaire.`
         );
       }
 

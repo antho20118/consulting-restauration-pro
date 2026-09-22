@@ -78,6 +78,9 @@ export default function ImporterTechniquesFichierModal({ onClose, onImporte }: P
         photo: existante.photo,
         lignes: existante.lignes.map((l) => ({
           articleId: l.articleId,
+          // Lignes d'une recette déjà enregistrée, reprises telles quelles (seules les étapes
+          // sont modifiées par cet import) — déjà validées, comme dans RecetteForm.tsx.
+          articleConfirme: true,
           quantite: l.quantite,
           uniteId: l.uniteId,
           gainCuissonPct: l.gainCuissonPct,
