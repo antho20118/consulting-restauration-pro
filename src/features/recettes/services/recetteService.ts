@@ -1,6 +1,7 @@
 import { API_URL, apiFetch } from "../../../config/api";
 import type {
   AliasIngredient,
+  AnalyseConsulting,
   ArticleRecette,
   EvaluationHACCP,
   ExtractionRecette,
@@ -94,6 +95,23 @@ export async function getEvaluationHACCP(recetteId: number): Promise<EvaluationH
 
   if (!response.ok) {
     throw new Error("Impossible d'évaluer les points HACCP de la recette");
+  }
+
+  return response.json();
+}
+
+// Analyse déterministe de l'agent Consulting (voir server/routes/consulting.ts) — a minima
+// branchée ici pour ses alertes (food cost, tarif manquant, HACCP à valider), qui n'existaient
+// nulle part ailleurs dans l'interface avant ce correctif.
+export async function getAnalyseConsulting(recetteId: number): Promise<AnalyseConsulting> {
+  const response = await apiFetch(`${API_URL}/consulting/analyser-recette`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recetteId }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Impossible d'analyser la recette");
   }
 
   return response.json();

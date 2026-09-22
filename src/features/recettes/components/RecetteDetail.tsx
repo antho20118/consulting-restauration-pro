@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AlertesConsulting from "./AlertesConsulting";
 import CalculateurProduction from "./CalculateurProduction";
 import SuggestionsEconomie from "./SuggestionsEconomie";
 import { getEvaluationHACCP } from "../services/recetteService";
@@ -203,6 +204,7 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
       </div>
 
       <div className="fiche-technique-sans-impression">
+        <AlertesConsulting recetteId={recette.id} />
         <SuggestionsEconomie recetteId={recette.id} />
         <CalculateurProduction recette={recette} />
       </div>
