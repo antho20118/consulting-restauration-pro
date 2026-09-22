@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { getSuggestionsEconomie } from "../services/recetteService";
-import type { SuggestionEconomie } from "../types/recette";
+import type { SuggestionFournisseur } from "../types/recette";
 
 type Props = {
   recetteId: number;
 };
 
 export default function SuggestionsEconomie({ recetteId }: Props) {
-  const [suggestions, setSuggestions] = useState<SuggestionEconomie[] | null>(null);
+  const [suggestions, setSuggestions] = useState<SuggestionFournisseur[] | null>(null);
 
   useEffect(() => {
     getSuggestionsEconomie(recetteId)
@@ -26,7 +26,7 @@ export default function SuggestionsEconomie({ recetteId }: Props) {
         marginBottom: 20,
       }}
     >
-      <h3 style={{ marginTop: 0, marginBottom: 10, fontSize: 15 }}>💡 Suggestions d'économies</h3>
+      <h3 style={{ marginTop: 0, marginBottom: 10, fontSize: 15 }}>💡 Suggestions fournisseurs</h3>
       {suggestions.map((suggestion) => (
         <div
           key={suggestion.ligneId}
@@ -40,12 +40,13 @@ export default function SuggestionsEconomie({ recetteId }: Props) {
           }}
         >
           <span>
-            Remplacer <strong>{suggestion.articleActuel.nom}</strong> par{" "}
-            <strong>{suggestion.articleSuggere.nom}</strong>
+            <strong>{suggestion.article.nom}</strong> : {suggestion.fournisseurActuel.nom} (
+            {suggestion.prixActuelParUniteBase.toFixed(4)} €/{suggestion.uniteBase}) →{" "}
+            {suggestion.fournisseurAlternatif.nom} ({suggestion.prixAlternatifParUniteBase.toFixed(4)} €/
+            {suggestion.uniteBase})
           </span>
           <span style={{ color: "var(--couleur-primaire-hover)", fontWeight: 600 }}>
-            −{suggestion.economieParPortion.toFixed(2)} €/portion ({suggestion.economiePct.toFixed(0)}
-            % moins cher)
+            −{suggestion.economieEuros.toFixed(2)} € ({suggestion.economiePct.toFixed(0)}% moins cher)
             {suggestion.nouveauFoodCostPct != null &&
               ` · nouveau food cost : ${suggestion.nouveauFoodCostPct.toFixed(1)} %`}
           </span>
