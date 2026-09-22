@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: consulting
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/consulting?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Applique les migrations Prisma sur la base de test
+        run: npx prisma migrate deploy
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # --test-concurrency=1 : les fichiers de test partagent la même base Postgres ; les exécuter
+      # en parallèle peut créer une contention de connexions et des échecs intermittents (constaté
+      # en local). Un run séquentiel est plus lent mais fiable, ce qui compte plus pour un contrôle
+      # de fusion automatique que la vitesse.
+      - name: Tests (unitaires + smoke)
+        run: node --import tsx --test --test-concurrency=1 tests/unit/*.test.ts tests/smoke/*.test.ts
+
+      - name: Build
+        run: npm run build
