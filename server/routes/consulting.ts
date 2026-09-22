@@ -34,7 +34,16 @@ router.post("/analyser-recette", async (req, res) => {
     const haccp = evaluerEtapesHACCP(recette.etapes);
 
     const alertes: string[] = [];
-    if (calcule.foodCostPct != null && calcule.foodCostPct > 35) alertes.push("Food cost supérieur à 35 %");
+    // Toujours un signal explicite sur le food cost, jamais un silence : sans prix de vente
+    // renseigné, foodCostPct est null et la comparaison à 35 % ne peut mathématiquement pas avoir
+    // lieu — mais l'absence d'alerte ne doit jamais se confondre avec "vérifié, food cost correct"
+    // (voir l'audit de l'agent Consulting, constat A3 : un coût matière élevé sans prix de vente
+    // ne déclenchait auparavant aucune alerte du tout).
+    if (calcule.foodCostPct == null) {
+      alertes.push("Food cost non évaluable : prix de vente non renseigné (ou nul)");
+    } else if (calcule.foodCostPct > 35) {
+      alertes.push("Food cost supérieur à 35 %");
+    }
     if (calcule.coutParPortion <= 0) alertes.push("Coût matière nul ou non tarifé");
     if (haccp.some((e) => e.aValider)) alertes.push("Des étapes nécessitent une validation HACCP");
     if (recette.lignes.some((l) => l.article.tarifs.length === 0)) {

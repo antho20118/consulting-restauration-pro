@@ -5,22 +5,49 @@ type Props = {
   recetteId: number;
 };
 
+// État explicite plutôt qu'un simple `string[] | null` : voir l'audit de l'agent Consulting,
+// constat A3. Avant ce correctif, "en cours de chargement", "l'analyse a échoué" et "analysée,
+// aucune alerte" produisaient tous les trois exactement le même rendu (rien) — indiscernables pour
+// l'utilisateur. Seul "chargement" reste silencieux (état transitoire, pas un résultat) ; "erreur"
+// et "aucune alerte" doivent désormais rester visuellement distincts l'un de l'autre.
+type Etat =
+  | { statut: "chargement" }
+  | { statut: "erreur" }
+  | { statut: "analysee"; alertes: string[] };
+
 // Branchement a minima de l'agent Consulting (voir server/routes/consulting.ts et l'audit
 // fonctionnel qui a trouvé que ce endpoint, bien que fonctionnel et testé, n'était appelé nulle
 // part dans l'application). N'affiche que les alertes : les indicateurs (coût, food cost...) que
 // renvoie aussi cette route sont déjà affichés ailleurs sur la fiche recette à partir des mêmes
-// données ; les répéter ici serait redondant. Comme SuggestionsEconomie.tsx, ne s'affiche pas du
-// tout s'il n'y a rien à signaler.
+// données ; les répéter ici serait redondant.
 export default function AlertesConsulting({ recetteId }: Props) {
-  const [alertes, setAlertes] = useState<string[] | null>(null);
+  const [etat, setEtat] = useState<Etat>({ statut: "chargement" });
 
   useEffect(() => {
     getAnalyseConsulting(recetteId)
-      .then((res) => setAlertes(res.alertes))
-      .catch(() => setAlertes([]));
+      .then((res) => setEtat({ statut: "analysee", alertes: res.alertes }))
+      .catch(() => setEtat({ statut: "erreur" }));
   }, [recetteId]);
 
-  if (!alertes || alertes.length === 0) return null;
+  if (etat.statut === "chargement") return null;
+
+  if (etat.statut === "erreur") {
+    return (
+      <p
+        style={{
+          color: "var(--couleur-texte-attenue, #888)",
+          fontSize: 13,
+          fontStyle: "italic",
+          marginBottom: 20,
+        }}
+      >
+        Analyse Consulting indisponible pour cette recette (erreur lors du chargement) — ceci ne
+        signifie pas qu'il n'y a aucun point d'attention, seulement qu'il n'a pas pu être vérifié.
+      </p>
+    );
+  }
+
+  if (etat.alertes.length === 0) return null;
 
   return (
     <div
@@ -34,7 +61,7 @@ export default function AlertesConsulting({ recetteId }: Props) {
     >
       <h3 style={{ marginTop: 0, marginBottom: 10, fontSize: 15 }}>⚠ Points d'attention</h3>
       <ul style={{ margin: 0, paddingLeft: 20 }}>
-        {alertes.map((alerte) => (
+        {etat.alertes.map((alerte) => (
           <li key={alerte}>{alerte}</li>
         ))}
       </ul>
