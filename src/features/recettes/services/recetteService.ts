@@ -5,7 +5,7 @@ import type {
   ExtractionRecette,
   Recette,
   RecetteInput,
-  SuggestionEconomie,
+  SuggestionFournisseur,
   UniteRecette,
 } from "../types/recette";
 
@@ -78,7 +78,7 @@ export async function getArticlesDisponibles(): Promise<ArticleRecette[]> {
   return response.json();
 }
 
-export async function getSuggestionsEconomie(recetteId: number): Promise<SuggestionEconomie[]> {
+export async function getSuggestionsEconomie(recetteId: number): Promise<SuggestionFournisseur[]> {
   const response = await apiFetch(`${API_URL}/recettes/${recetteId}/suggestions-economie`);
 
   if (!response.ok) {

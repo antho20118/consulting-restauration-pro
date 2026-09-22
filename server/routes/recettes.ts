@@ -46,8 +46,9 @@ router.get("/:id", async (req: Request, res: Response) => {
   }
 });
 
-// Suggestions d'économies : articles moins chers de la même catégorie qui feraient baisser le
-// coût de la recette (voir server/utils/suggestionsEconomie.ts).
+// Suggestions d'économies : tarifs fournisseurs moins chers pour un même article déjà utilisé
+// dans la recette (jamais un remplacement d'un article par un autre — voir
+// server/utils/suggestionsEconomie.ts).
 router.get("/:id/suggestions-economie", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);

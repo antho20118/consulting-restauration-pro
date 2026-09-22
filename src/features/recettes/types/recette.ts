@@ -103,11 +103,19 @@ export interface ExtractionRecette {
   etapes: EtapeRecetteInput[];
 }
 
-export interface SuggestionEconomie {
+// Changement de fournisseur pour un même article déjà utilisé dans la recette — jamais un
+// remplacement d'un article par un autre (voir server/utils/suggestionsEconomie.ts).
+export interface SuggestionFournisseur {
   ligneId: number;
-  articleActuel: { id: number; nom: string };
-  articleSuggere: { id: number; nom: string };
-  economieParPortion: number;
+  article: { id: number; nom: string };
+  fournisseurActuel: { id: number; nom: string };
+  fournisseurAlternatif: { id: number; nom: string };
+  prixActuelParUniteBase: number;
+  prixAlternatifParUniteBase: number;
+  uniteBase: string;
+  conditionnementActuel: { nom: string; quantiteConditionnement: number; uniteSymbole: string };
+  conditionnementAlternatif: { nom: string; quantiteConditionnement: number; uniteSymbole: string };
+  economieEuros: number;
   economiePct: number;
   nouveauFoodCostPct: number | null;
 }
