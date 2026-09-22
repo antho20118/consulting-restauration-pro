@@ -103,6 +103,33 @@ export interface ExtractionRecette {
   etapes: EtapeRecetteInput[];
 }
 
+// Détection par mots-clés sur la description d'une étape (voir server/utils/haccp.ts) — une
+// suggestion, jamais une preuve de conformité.
+export interface RegleHACCP {
+  code: string;
+  nom: string;
+  risque: string;
+  mesurePreventive: string;
+  limiteCritique: string;
+  surveillance: string;
+  actionCorrective: string;
+}
+
+// Résultat de l'évaluation HACCP d'une étape : aValider tient compte à la fois de la détection par
+// mots-clés (reglesDetectees) et du signal humain explicite (pointCritiqueHACCP), l'un ou l'autre
+// suffisant à exiger un contrôle documenté (controleHACCP non vide).
+export interface EtapeEvalueeHACCP {
+  id: number;
+  reglesDetectees: RegleHACCP[];
+  aValider: boolean;
+}
+
+export interface EvaluationHACCP {
+  recetteId: number;
+  recetteNom: string;
+  etapes: EtapeEvalueeHACCP[];
+}
+
 // Changement de fournisseur pour un même article déjà utilisé dans la recette — jamais un
 // remplacement d'un article par un autre (voir server/utils/suggestionsEconomie.ts).
 export interface SuggestionFournisseur {
