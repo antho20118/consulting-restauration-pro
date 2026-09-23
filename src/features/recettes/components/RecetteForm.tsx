@@ -12,6 +12,12 @@ import {
 } from "../services/recetteService";
 import { estimerCoutLigne } from "../utils/cout";
 import { definirFiltrerSuperU, estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
+import {
+  modeApresChangementPoidsPortion,
+  peutPasserEnModeKg,
+  poidsTotalInitialKg,
+  portionsDepuisPoidsTotalKg,
+} from "../utils/quantiteAProduire";
 import { trouverUniteParDefaut } from "../utils/uniteParDefaut";
 import { calculerAllergenesAvecStatut, ligneIncomplete } from "../utils/validationLignes";
 import ImporterTechniquesModal from "./ImporterTechniquesModal";
@@ -156,20 +162,30 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
 
   function changerPoidsTotalKg(kg: number) {
     setPoidsTotalKgSaisi(kg);
-    if (poidsPortionG > 0) {
-      setPortions(Math.max(1, Math.round((kg * 1000) / poidsPortionG)));
+    const nouvellesPortions = portionsDepuisPoidsTotalKg(kg, poidsPortionG);
+    if (nouvellesPortions !== null) {
+      setPortions(nouvellesPortions);
     }
   }
 
   function passerEnModeKg() {
-    if (poidsPortionG <= 0) {
+    if (!peutPasserEnModeKg(poidsPortionG)) {
       toast.error(
         "Renseigne d'abord le poids d'une portion (en grammes, ci-dessous) pour pouvoir saisir la quantité à produire en kg."
       );
       return;
     }
-    setPoidsTotalKgSaisi((portions * poidsPortionG) / 1000);
+    setPoidsTotalKgSaisi(poidsTotalInitialKg(portions, poidsPortionG));
     setModeQuantite("poids");
+  }
+
+  // Bug corrigé (23/09) : si le poids d'une portion repasse à 0 (ou négatif) alors qu'on est déjà
+  // en mode Kg, ce mode n'a plus de sens — sans ce retour automatique en mode Portions, le champ
+  // "Quantité à produire" en kg continuait à accepter des saisies (affichait la nouvelle valeur
+  // tapée) sans plus jamais mettre à jour `portions`, silencieusement.
+  function changerPoidsPortionG(valeur: number) {
+    setPoidsPortionG(valeur);
+    setModeQuantite((modeActuel) => modeApresChangementPoidsPortion(modeActuel, valeur));
   }
 
   function retirerLigne(index: number) {
@@ -457,7 +473,7 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
           <label>Poids d'une portion (g)</label>
           <ChampNombre
             valeur={poidsPortionG}
-            onChanger={(n) => setPoidsPortionG(n ?? 0)}
+            onChanger={(n) => changerPoidsPortionG(n ?? 0)}
             style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
             placeholder="ex. 350"
           />
