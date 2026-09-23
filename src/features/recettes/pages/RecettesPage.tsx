@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import RecettesGrille from "../components/RecettesGrille";
 import RecetteForm from "../components/RecetteForm";
 import RecetteDetail from "../components/RecetteDetail";
@@ -305,28 +306,34 @@ export default function RecettesPage() {
         </div>
       )}
 
-      {recetteConsultee && (
-        <div
-          className="fiche-technique-apercu-overlay"
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,.4)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "flex-start",
-            overflowY: "auto",
-            padding: "40px 0",
-          }}
-        >
-          <RecetteDetail
-            recette={recetteConsultee}
-            onClose={() => setRecetteConsultee(null)}
-            onEdit={ouvrirEdition}
-            onDelete={supprimer}
-          />
-        </div>
-      )}
+      {recetteConsultee &&
+        createPortal(
+          // Rendu directement sous <body> (pas sous .app-layout) : à l'impression, le CSS de
+          // RecetteDetail masque tout ce qui n'est pas ce pop-up (voir body.fiche-technique-ouverte),
+          // ce qui exige que ce pop-up soit un enfant direct de <body>, pas un descendant de la
+          // barre latérale/liste des recettes qu'on cherche justement à masquer.
+          <div
+            className="fiche-technique-apercu-overlay"
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,.4)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "flex-start",
+              overflowY: "auto",
+              padding: "40px 0",
+            }}
+          >
+            <RecetteDetail
+              recette={recetteConsultee}
+              onClose={() => setRecetteConsultee(null)}
+              onEdit={ouvrirEdition}
+              onDelete={supprimer}
+            />
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
