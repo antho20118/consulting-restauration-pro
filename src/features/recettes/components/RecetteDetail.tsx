@@ -21,6 +21,14 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
       .catch(() => setEvaluationHACCP(null));
   }, [recette.id]);
 
+  // Le reste de la page (barre latérale, autres recettes de la liste) reste dans le DOM derrière
+  // ce pop-up : sans ce marqueur, il apparaissait aussi à l'impression puisque le CSS @media print
+  // ci-dessous ne masquait que le contenu interne du pop-up, jamais la page sous-jacente.
+  useEffect(() => {
+    document.body.classList.add("fiche-technique-ouverte");
+    return () => document.body.classList.remove("fiche-technique-ouverte");
+  }, []);
+
   return (
     <div
       className="fiche-technique-impression"
@@ -36,6 +44,7 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
     >
       <style>{`
         @media print {
+          body.fiche-technique-ouverte > *:not(.fiche-technique-apercu-overlay) { display: none !important; }
           .fiche-technique-sans-impression { display: none !important; }
           .fiche-technique-apercu-overlay {
             position: static !important;

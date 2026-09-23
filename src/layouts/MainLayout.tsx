@@ -4,6 +4,7 @@ import Sidebar from "./Sidebar";
 export default function MainLayout() {
   return (
     <div
+      className="app-layout"
       style={{
         display: "flex",
         minHeight: "100vh",
