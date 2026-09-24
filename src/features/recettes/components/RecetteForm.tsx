@@ -7,10 +7,15 @@ import {
   creerRecette,
   enregistrerAliasIngredients,
   getArticlesDisponibles,
+  getRecettes,
   getUnitesDisponibles,
   modifierRecette,
 } from "../services/recetteService";
 import { estimerCoutLigne } from "../utils/cout";
+import {
+  trouverToutesCorrespondances,
+  type RecetteExistantePourCorrespondance,
+} from "../utils/correspondanceImportExcel";
 import { definirFiltrerSuperU, estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
 import { POINTS_CRITIQUES_HACCP } from "../utils/pointsCritiquesHACCP";
 import {
@@ -107,6 +112,17 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
   // Restreint la recherche d'ingrédient aux articles fournis par Super U par défaut (voir
   // filtreFournisseur.ts) ; mémorisé pour ne pas avoir à le redéfinir à chaque recette.
   const [filtrerSuperU, setFiltrerSuperU] = useState(filtrerSuperUActif);
+  // Recettes actives déjà en base, chargées uniquement en création (jamais en modification, voir
+  // correspondancesRecette ci-dessous) : sert uniquement à repérer un doublon potentiel avant
+  // d'enregistrer, jamais à bloquer une modification existante — le renommage d'une recette déjà
+  // enregistrée (PUT /:id) reste un problème distinct, volontairement hors de ce correctif.
+  const [recettesExistantes, setRecettesExistantes] = useState<RecetteExistantePourCorrespondance[]>([]);
+  // Nom pour lequel l'utilisateur a explicitement confirmé vouloir créer un doublon malgré
+  // l'avertissement (voir correspondancesRecette) — null si aucune confirmation en cours. Comparé
+  // au nom actuel (confirmationDoublon ci-dessous) plutôt que d'être un simple booléen, pour
+  // qu'une confirmation donnée pour un nom ne valide jamais silencieusement la création d'un
+  // doublon différent après modification du champ Nom.
+  const [nomConfirmeDoublon, setNomConfirmeDoublon] = useState<string | null>(null);
 
   function changerFiltrerSuperU(valeur: boolean) {
     setFiltrerSuperU(valeur);
@@ -132,7 +148,28 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
     getUnitesDisponibles().then((data) => {
       setUnites(data);
     });
+
+    // Uniquement en création : une modification ne crée jamais de doublon par elle-même (voir le
+    // commentaire de recettesExistantes ci-dessus).
+    if (!recette) {
+      // getRecettes() ne renvoie que les recettes actives (voir GET /recettes) : une recette
+      // inactive du même nom ne bloque donc jamais une nouvelle création, par construction.
+      getRecettes().then((data) =>
+        setRecettesExistantes(data.map((r) => ({ id: r.id, nom: r.nom, actif: true })))
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Recettes déjà en base dont le nom correspond au nom en cours de saisie (voir
+  // trouverToutesCorrespondances, déjà utilisée et testée pour l'import Excel sécurisé et l'import
+  // de fichier de coûts) — jamais calculé en modification, pour ne jamais bloquer l'enregistrement
+  // d'une recette existante sur son propre nom.
+  const correspondancesRecette = useMemo(
+    () => (recette ? [] : trouverToutesCorrespondances(nom, recettesExistantes)),
+    [recette, nom, recettesExistantes]
+  );
+  const confirmationDoublon = nomConfirmeDoublon === nom;
 
   function ajouterLigne() {
     setLignes((precedent) => [
@@ -287,6 +324,15 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
       );
       return;
     }
+    // Doublon détecté (nom déjà en base) et non confirmé explicitement : bloque l'enregistrement,
+    // même principe que le correctif de l'import de fichier de coûts — jamais de création
+    // silencieuse d'une recette déjà existante.
+    if (correspondancesRecette.length > 0 && !confirmationDoublon) {
+      toast.error(
+        "Une recette portant ce nom existe déjà : coche la confirmation pour créer quand même ce doublon."
+      );
+      return;
+    }
 
     const payload = {
       nom,
@@ -370,6 +416,35 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
           )}
         </div>
       </div>
+
+      {correspondancesRecette.length > 0 && (
+        <div
+          style={{
+            background: "#fff4e5",
+            border: "1px solid #f0b429",
+            borderRadius: 6,
+            padding: "8px 10px",
+            marginBottom: 20,
+            fontSize: 13,
+          }}
+        >
+          <strong>⚠ Doublon potentiel</strong>
+          <div style={{ marginTop: 4 }}>
+            Une recette portant ce nom existe déjà :{" "}
+            {correspondancesRecette.map((c) => `« ${c.nom} »`).join(", ")}. Enregistrer créera une
+            recette supplémentaire, distincte de{" "}
+            {correspondancesRecette.length > 1 ? "celles-ci" : "celle-ci"}.
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+            <input
+              type="checkbox"
+              checked={confirmationDoublon}
+              onChange={(e) => setNomConfirmeDoublon(e.target.checked ? nom : null)}
+            />
+            Je confirme vouloir créer cette recette malgré le doublon détecté
+          </label>
+        </div>
+      )}
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: 20 }}>
         <div style={{ flex: "0 1 auto" }}>
