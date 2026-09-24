@@ -1,7 +1,16 @@
 import toast from "react-hot-toast";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { API_URL, apiFetch } from "../../../config/api";
-import { creerIngredient, getAllergenes, modifierIngredient } from "../services/ingredientService";
+import {
+  creerIngredient,
+  getAllergenes,
+  getIngredients,
+  modifierIngredient,
+} from "../services/ingredientService";
+import {
+  trouverArticlesCorrespondants,
+  type ArticleExistantPourCorrespondance,
+} from "../utils/correspondanceArticle";
 import type { Allergene, Ingredient } from "../types/ingredient";
 
 type Categorie = {
@@ -40,6 +49,19 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
     ingredient?.allergenes.map((a) => a.allergene.id) ?? []
   );
 
+  // Articles actifs déjà en base, chargés uniquement en création (jamais en modification, voir
+  // correspondances ci-dessous) : sert uniquement à repérer un doublon potentiel avant
+  // d'enregistrer — le renommage d'un article existant reste hors périmètre de ce correctif.
+  const [articlesExistants, setArticlesExistants] = useState<ArticleExistantPourCorrespondance[]>(
+    []
+  );
+  // Couple (nom, référence) pour lequel l'utilisateur a explicitement confirmé vouloir créer un
+  // doublon malgré l'avertissement — null si aucune confirmation en cours. Comparé au couple
+  // actuel (confirmationDoublon ci-dessous) plutôt que d'être un simple booléen, pour qu'une
+  // confirmation donnée ne valide jamais silencieusement la création d'un doublon différent après
+  // modification du nom ou de la référence saisis.
+  const [coupleConfirmeDoublon, setCoupleConfirmeDoublon] = useState<string | null>(null);
+
   useEffect(() => {
     apiFetch(`${API_URL}/categories`)
       .then((response) => response.json())
@@ -56,8 +78,30 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
       });
 
     getAllergenes().then(setAllergenes);
+
+    // Uniquement en création : modifier un article existant ne crée jamais de doublon par
+    // lui-même (voir le commentaire d'articlesExistants ci-dessus).
+    if (!ingredient) {
+      // getIngredients() ne renvoie que les articles actifs (voir GET /articles) : un article
+      // inactif du même nom ne bloque donc jamais une nouvelle création, par construction — en
+      // plus du filtre actif déjà appliqué dans trouverArticlesCorrespondants lui-même.
+      getIngredients().then((data) =>
+        setArticlesExistants(
+          data.map((a) => ({ id: a.id, nom: a.nom, reference: a.reference ?? null, actif: true }))
+        )
+      );
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Articles déjà en base correspondant au nom/à la référence en cours de saisie (voir
+  // trouverArticlesCorrespondants, correspondanceArticle.ts) — jamais calculé en modification,
+  // pour ne jamais bloquer l'enregistrement d'un article existant sur son propre nom.
+  const correspondances = useMemo(
+    () => (ingredient ? [] : trouverArticlesCorrespondants(nom, reference, articlesExistants)),
+    [ingredient, nom, reference, articlesExistants]
+  );
+  const confirmationDoublon = coupleConfirmeDoublon === `${nom}\u0000${reference}`;
 
   function basculerAllergene(id: number) {
     setAllergeneIds((precedent) =>
@@ -66,6 +110,16 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
   }
 
   async function enregistrer() {
+    // Doublon détecté (nom ou référence déjà en base) et non confirmé explicitement : bloque
+    // l'enregistrement, même principe que le correctif déjà appliqué à la création de recette
+    // (RecetteForm.tsx) — jamais de création silencieuse d'un article déjà existant.
+    if (correspondances.length > 0 && !confirmationDoublon) {
+      toast.error(
+        "Un article portant ce nom ou cette référence existe déjà : coche la confirmation pour créer quand même ce doublon."
+      );
+      return;
+    }
+
     const payload = {
       nom,
       reference,
@@ -129,6 +183,36 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
           marginBottom: 20,
         }}
       />
+
+      {correspondances.length > 0 && (
+        <div
+          style={{
+            background: "#fff4e5",
+            border: "1px solid #f0b429",
+            borderRadius: 6,
+            padding: "8px 10px",
+            marginBottom: 20,
+            fontSize: 13,
+          }}
+        >
+          <strong>⚠ Doublon potentiel</strong>
+          <div style={{ marginTop: 4 }}>
+            Un article correspondant existe déjà :{" "}
+            {correspondances.map((c) => `« ${c.nom} »`).join(", ")}. Enregistrer créera un article
+            supplémentaire, distinct de {correspondances.length > 1 ? "ceux-ci" : "celui-ci"}.
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+            <input
+              type="checkbox"
+              checked={confirmationDoublon}
+              onChange={(e) =>
+                setCoupleConfirmeDoublon(e.target.checked ? `${nom}\u0000${reference}` : null)
+              }
+            />
+            Je confirme vouloir créer cet article malgré le doublon détecté
+          </label>
+        </div>
+      )}
 
       <label>Catégorie</label>
       <select
