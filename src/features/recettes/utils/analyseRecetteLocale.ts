@@ -90,6 +90,9 @@ const MOTS_CLES_PREPARATION = [
   "ciseler",
   "mélanger",
   "melanger",
+  "incorporer",
+  "mixer",
+  "fouetter",
   "assaisonner",
   "mariner",
   "couper",
@@ -106,9 +109,12 @@ const MOTS_CLES_PREPARATION = [
   "realiser une sauce",
 ];
 
-const MOTS_CLES_CUISSON = [
+// Verbes/actions de cuisson à eux seuls suffisamment caractéristiques d'une étape de cuisson —
+// contrairement au simple nom "cuisson" (voir MOTS_CLES_CUISSON_FAIBLES ci-dessous), souvent
+// employé en référence secondaire au sein d'une étape de dressage (ex. "jus de cuisson",
+// "température de cuisson") sans que ce soit l'action réellement décrite par l'étape.
+const MOTS_CLES_CUISSON_FORTS = [
   "cuire",
-  "cuisson",
   "four",
   "rissoler",
   "griller",
@@ -128,6 +134,13 @@ const MOTS_CLES_CUISSON = [
   "saisir",
 ];
 
+// Signal faible : une simple mention de "cuisson"/"cuit" (nom ou participe), fréquente dans une
+// étape de dressage qui ne fait que s'y référer ("napper de jus de cuisson") — insuffisante seule
+// pour classer l'étape en cuisson si un mot de dressage est également présent (voir
+// classifierSection ci-dessous, corrige le faux classement de « Dresser... et napper de jus de
+// cuisson » observé avant ce correctif).
+const MOTS_CLES_CUISSON_FAIBLES = ["cuisson", "cuit"];
+
 const MOTS_CLES_DRESSAGE = [
   "dresser",
   "dressage",
@@ -141,6 +154,12 @@ const MOTS_CLES_DRESSAGE = [
   "finition",
   "décorer",
   "decorer",
+  "décoration",
+  "decoration",
+  "parsemer",
+  "garnir",
+  "assiette",
+  "servir",
   "assembler",
   "assemblage",
 ];
@@ -149,10 +168,17 @@ const MOTS_CLES_DRESSAGE = [
 // "autre" plutôt que d'être rattachée par défaut à une section qu'elle ne concerne peut-être pas
 // (voir la règle de non-invention) — contrairement à l'IA, qui peut classer d'après le sens général
 // de la phrase et pas seulement des mots-clés isolés.
+//
+// La cuisson est scindée en deux niveaux de signal (voir les constantes ci-dessus) plutôt que de
+// simplement inverser l'ordre de vérification cuisson/dressage : un vrai verbe de cuisson l'emporte
+// toujours, même en présence d'un mot de dressage secondaire (« Cuire au four puis dresser
+// rapidement » reste une étape de cuisson) ; mais une simple mention de « cuisson »/« cuit » ne doit
+// jamais l'emporter sur une action de dressage clairement énoncée par ailleurs dans le même texte.
 function classifierSection(texte: string): SectionEtape {
   const n = texte.toLowerCase();
-  if (MOTS_CLES_CUISSON.some((m) => n.includes(m))) return "cuisson";
+  if (MOTS_CLES_CUISSON_FORTS.some((m) => n.includes(m))) return "cuisson";
   if (MOTS_CLES_DRESSAGE.some((m) => n.includes(m))) return "dressage";
+  if (MOTS_CLES_CUISSON_FAIBLES.some((m) => n.includes(m))) return "cuisson";
   if (MOTS_CLES_PREPARATION.some((m) => n.includes(m))) return "preparation";
   return "autre";
 }

@@ -59,6 +59,46 @@ test("analyseRecetteLocale : classification dressage d'une étape", () => {
   assert.equal(extraction.etapes[0].section, "dressage");
 });
 
+// Classification dressage/cuisson affinée : un vrai verbe de cuisson (cuire, griller...) l'emporte
+// toujours, mais une simple mention secondaire de "cuisson"/"cuit" (ex. "jus de cuisson") ne doit
+// jamais faire basculer en cuisson une étape dont l'action principale est un dressage — voir
+// classifierSection dans analyseRecetteLocale.ts (correctif du contrôle post-merge PR #74).
+function section(texte: string): string {
+  return analyseRecetteLocale(`Nom\n1. ${texte}`).etapes[0].section;
+}
+
+test("analyseRecetteLocale : dressage malgré une référence secondaire à la cuisson (« jus de cuisson »)", () => {
+  assert.equal(section("Dresser sur un plat et napper de jus de cuisson"), "dressage");
+});
+
+test("analyseRecetteLocale : dressage malgré une simple mention isolée de « cuisson » (sans verbe fort)", () => {
+  assert.equal(section("Dresser l'assiette ; la cuisson est terminée"), "dressage");
+});
+
+test("analyseRecetteLocale : dressage avec décoration", () => {
+  assert.equal(section("Dresser l'assiette et décorer avec quelques herbes"), "dressage");
+});
+
+test("analyseRecetteLocale : dressage avec disposer/servir", () => {
+  assert.equal(section("Disposer dans l'assiette puis servir"), "dressage");
+});
+
+test("analyseRecetteLocale : vraie cuisson (verbe + mode explicites)", () => {
+  assert.equal(section("Cuire au four à 180°C pendant 25 minutes"), "cuisson");
+});
+
+test("analyseRecetteLocale : vraie cuisson malgré une formulation composée", () => {
+  assert.equal(section("Faire revenir puis cuire à couvert pendant 30 minutes"), "cuisson");
+});
+
+test("analyseRecetteLocale : préparation (mélanger/assaisonner)", () => {
+  assert.equal(section("Mélanger les ingrédients puis assaisonner"), "preparation");
+});
+
+test("analyseRecetteLocale : une vraie étape de cuisson reste cuisson malgré un mot de dressage secondaire", () => {
+  assert.equal(section("Cuire au four puis dresser rapidement en assiette"), "cuisson");
+});
+
 test("analyseRecetteLocale : étape sans mot-clé reconnu → section autre (jamais devinée)", () => {
   const extraction = analyseRecetteLocale("Nom\n1. Réserver au frais");
   assert.equal(extraction.etapes[0].section, "autre");
