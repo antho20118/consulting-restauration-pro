@@ -20,7 +20,7 @@ type SousCategorieRecette = {
   parentId: number | null;
 };
 
-// Les 4 catégories principales reconnues par les onglets de la page d'accueil, par leur nom
+// Les 5 catégories principales reconnues par les onglets de la page d'accueil, par leur nom
 // normalisé (accents/casse ignorés) — l'onglet "Autres" attrape tout le reste (catégorie
 // personnalisée, Festif, Mariage, ou aucune catégorie) : jamais une recette invisible faute de
 // catégorie connue.
@@ -28,12 +28,13 @@ const ONGLETS_CATEGORIE = [
   { cle: "tout", label: "Tout" },
   { cle: "entree", label: "Entrées" },
   { cle: "plat", label: "Plats" },
+  { cle: "sauces", label: "Sauces" },
   { cle: "accompagnement", label: "Accompagnements" },
   { cle: "dessert", label: "Desserts" },
   { cle: "autres", label: "Autres" },
 ] as const;
 type CleOngletCategorie = (typeof ONGLETS_CATEGORIE)[number]["cle"];
-const CLES_CATEGORIES_CONNUES = ["entree", "plat", "accompagnement", "dessert"];
+const CLES_CATEGORIES_CONNUES = ["entree", "plat", "accompagnement", "sauces", "dessert"];
 
 // Résout la clé d'onglet d'une recette à partir du nom de sa catégorie (accents/casse ignorés) :
 // une recette dont la catégorie ne correspond à aucun des 4 onglets connus (catégorie
@@ -84,6 +85,7 @@ export default function RecettesPage() {
       entree: 0,
       plat: 0,
       accompagnement: 0,
+      sauces: 0,
       dessert: 0,
       autres: 0,
     };
