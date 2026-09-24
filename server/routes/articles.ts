@@ -3,11 +3,9 @@ import type { Request, Response } from "express";
 
 import prisma from "../prisma.js";
 import {
-  extraireQuantiteDesignation,
-  parsePrix,
-  SEUIL_CORRESPONDANCE_DESIGNATION,
-  trouverCorrespondance,
+  analyserPropositionLigne,
   type CandidatExistant,
+  type ContexteAnalyseLigne,
 } from "../utils/importListing.js";
 
 const router = Router();
@@ -360,9 +358,30 @@ router.post("/import", async (req: Request, res: Response) => {
       if (!tarifActifParArticle.has(t.articleId)) tarifActifParArticle.set(t.articleId, t);
     }
 
+    const uniteSymboleParId = new Map<number, string>();
+    if (uniteKg) uniteSymboleParId.set(uniteKg.id, uniteKg.symbole);
+    if (uniteL) uniteSymboleParId.set(uniteL.id, uniteL.symbole);
+    if (unitePiece) uniteSymboleParId.set(unitePiece.id, unitePiece.symbole);
+
+    // Contexte transmis à analyserPropositionLigne (voir importListing.ts) : candidats et
+    // tarifActifParArticle sont les MÊMES objets que ceux mutés plus bas (push/set) à chaque
+    // création ou remplacement de tarif, pour qu'une ligne puisse se rapprocher d'un article créé
+    // plus tôt dans le même import, exactement comme avant ce correctif.
+    const contexteLigne: ContexteAnalyseLigne = {
+      candidats,
+      tarifActifParArticle,
+      uniteKgId: uniteKg?.id ?? null,
+      uniteLId: uniteL?.id ?? null,
+      unitePieceId: unitePiece?.id ?? null,
+      uniteSymboleParId,
+    };
+
     let crees = 0;
     let misesAJour = 0;
     let inchanges = 0;
+    // Ligne dont la correspondance approximative n'a pas (ou plus) été confirmée explicitement
+    // par l'utilisateur : jamais écrite (voir PR #79), à distinguer de misesAJour/erreurs.
+    let enAttente = 0;
     const erreurs: string[] = [];
 
     for (const ligne of lignes) {
@@ -382,31 +401,18 @@ router.post("/import", async (req: Request, res: Response) => {
         }
       }
 
-      const reference = ligne.reference ? String(ligne.reference).trim() : null;
-      const prixTotal = parsePrix(ligne.prix);
-      if (prixTotal === null) {
-        erreurs.push(`Prix illisible pour "${designation}"`);
-        continue;
-      }
+      // Réévalue la proposition à l'instant de l'écriture, à partir de l'état courant de
+      // candidats/tarifActifParArticle (jamais une proposition transmise par le client) : c'est
+      // cette réévaluation fraîche qui permet de vérifier qu'une confirmation d'approximation
+      // porte bien sur la correspondance qui sera réellement écrite (voir PHASE 3, PR #79).
+      const proposition = analyserPropositionLigne(
+        ligne,
+        contexteLigne,
+        { fournisseurId, fournisseurNom: nomFournisseurLigne || fournisseurNom }
+      );
 
-      // Déduit l'unité de vente (kg/L) et le prix unitaire correspondant à partir de la
-      // désignation/du conditionnement ; à défaut, l'article est considéré vendu à la pièce.
-      const quantiteDetectee = extraireQuantiteDesignation(designation, ligne.conditionnement);
-      let uniteId: number | null = null;
-      let prixHT = prixTotal;
-
-      if (quantiteDetectee && quantiteDetectee.quantite > 0) {
-        const unite = quantiteDetectee.unite === "kg" ? uniteKg : uniteL;
-        if (unite) {
-          uniteId = unite.id;
-          prixHT = Math.round((prixTotal / quantiteDetectee.quantite) * 10000) / 10000;
-        }
-      }
-      if (uniteId === null && unitePiece) {
-        uniteId = unitePiece.id;
-      }
-      if (uniteId === null) {
-        erreurs.push(`Aucune unité disponible pour "${designation}"`);
+      if (proposition.statut === "invalide") {
+        erreurs.push(`${proposition.motif} pour "${designation}"`);
         continue;
       }
       if (!conditionnement) {
@@ -414,22 +420,25 @@ router.post("/import", async (req: Request, res: Response) => {
         continue;
       }
 
-      const { candidat, score, parReference } = trouverCorrespondance(designation, reference, candidats);
-      const correspondanceValide = candidat && (parReference || score >= SEUIL_CORRESPONDANCE_DESIGNATION);
+      if (proposition.statut === "tarif_inchange") {
+        inchanges++;
+        continue;
+      }
 
-      if (correspondanceValide && candidat) {
-        const tarifActif = tarifActifParArticle.get(candidat.articleId);
-
-        const inchange =
-          tarifActif &&
-          tarifActif.uniteId === uniteId &&
-          tarifActif.fournisseurId === fournisseurId &&
-          tarifActif.prixHT === prixHT;
-
-        if (inchange) {
-          inchanges++;
-          continue;
+      if (proposition.statut === "tarif_a_remplacer") {
+        if (proposition.typeCorrespondance === "approximative") {
+          // Une correspondance approximative ne peut jamais être écrite sans une confirmation
+          // explicitement liée à CET article précis — jamais un simple booléen global. Si la
+          // proposition a changé entre la prévisualisation et cet appel (état de la base modifié
+          // entretemps), la confirmation transmise ne correspond plus à l'article réévalué et
+          // l'écriture est refusée.
+          if (ligne.confirmationArticleId !== proposition.articleId) {
+            enAttente++;
+            continue;
+          }
         }
+
+        const tarifActif = tarifActifParArticle.get(proposition.articleId);
 
         const operations = [];
         if (tarifActif) {
@@ -443,90 +452,185 @@ router.post("/import", async (req: Request, res: Response) => {
         operations.push(
           prisma.tarifArticle.create({
             data: {
-              articleId: candidat.articleId,
+              articleId: proposition.articleId,
               fournisseurId,
-              uniteId,
+              uniteId: proposition.uniteId,
               conditionnementId: conditionnement.id,
               quantiteConditionnement: 1,
-              prixHT,
+              prixHT: proposition.nouveauPrixHT,
             },
           })
         );
 
         const resultats = await prisma.$transaction(operations);
-        tarifActifParArticle.set(candidat.articleId, resultats[resultats.length - 1]);
+        tarifActifParArticle.set(proposition.articleId, resultats[resultats.length - 1]);
 
         misesAJour++;
-      } else {
-        const nomsAllergenes = String(ligne.allergenes ?? "")
-          .split(/[,/;]/)
-          .map((m) => m.trim().toLowerCase())
-          .filter(Boolean);
+        continue;
+      }
 
-        const allergeneIds = allergenesExistants
-          .filter((a) => nomsAllergenes.includes(a.nom.toLowerCase()))
-          .map((a) => a.id);
+      // proposition.statut === "creation" : aucune correspondance valide, comportement inchangé.
+      const reference = proposition.reference;
+      const uniteId = proposition.uniteId;
+      const prixHT = proposition.prixHT;
 
-        const nomCategorie = ligne.categorie ? String(ligne.categorie).trim() : "";
-        let categorieIdLigne = categorieId;
-        if (nomCategorie) {
-          const cleCategorie = nomCategorie.toLowerCase();
-          const categorieExistanteId = categorieIdParNom.get(cleCategorie);
-          if (categorieExistanteId) {
-            categorieIdLigne = categorieExistanteId;
-          } else {
-            const categorieCreee = await prisma.categorie.upsert({
-              where: { nom: nomCategorie },
-              update: {},
-              create: { nom: nomCategorie },
-            });
-            categorieIdParNom.set(cleCategorie, categorieCreee.id);
-            categorieIdLigne = categorieCreee.id;
-          }
+      const nomsAllergenes = String(ligne.allergenes ?? "")
+        .split(/[,/;]/)
+        .map((m) => m.trim().toLowerCase())
+        .filter(Boolean);
+
+      const allergeneIds = allergenesExistants
+        .filter((a) => nomsAllergenes.includes(a.nom.toLowerCase()))
+        .map((a) => a.id);
+
+      const nomCategorie = ligne.categorie ? String(ligne.categorie).trim() : "";
+      let categorieIdLigne = categorieId;
+      if (nomCategorie) {
+        const cleCategorie = nomCategorie.toLowerCase();
+        const categorieExistanteId = categorieIdParNom.get(cleCategorie);
+        if (categorieExistanteId) {
+          categorieIdLigne = categorieExistanteId;
+        } else {
+          const categorieCreee = await prisma.categorie.upsert({
+            where: { nom: nomCategorie },
+            update: {},
+            create: { nom: nomCategorie },
+          });
+          categorieIdParNom.set(cleCategorie, categorieCreee.id);
+          categorieIdLigne = categorieCreee.id;
         }
+      }
 
-        const { nouvelArticle, tarifCree } = await prisma.$transaction(async (tx) => {
-          const created = await tx.article.create({
-            data: {
-              nom: designation,
-              reference,
-              categorieId: categorieIdLigne,
-              tvaId,
-              societeId,
-              type: type || "MATIERE_PREMIERE",
-            },
-          });
-
-          if (allergeneIds.length > 0) {
-            await tx.articleAllergene.createMany({
-              data: allergeneIds.map((allergeneId) => ({ articleId: created.id, allergeneId })),
-            });
-          }
-
-          const tarifCree = await tx.tarifArticle.create({
-            data: {
-              articleId: created.id,
-              fournisseurId,
-              uniteId,
-              conditionnementId: conditionnement.id,
-              quantiteConditionnement: 1,
-              prixHT,
-            },
-          });
-
-          return { nouvelArticle: created, tarifCree };
+      const { nouvelArticle, tarifCree } = await prisma.$transaction(async (tx) => {
+        const created = await tx.article.create({
+          data: {
+            nom: designation,
+            reference,
+            categorieId: categorieIdLigne,
+            tvaId,
+            societeId,
+            type: type || "MATIERE_PREMIERE",
+          },
         });
 
-        candidats.push({ articleId: nouvelArticle.id, nom: designation, reference });
-        tarifActifParArticle.set(nouvelArticle.id, tarifCree);
-        crees++;
-      }
+        if (allergeneIds.length > 0) {
+          await tx.articleAllergene.createMany({
+            data: allergeneIds.map((allergeneId) => ({ articleId: created.id, allergeneId })),
+          });
+        }
+
+        const tarifCree = await tx.tarifArticle.create({
+          data: {
+            articleId: created.id,
+            fournisseurId,
+            uniteId,
+            conditionnementId: conditionnement.id,
+            quantiteConditionnement: 1,
+            prixHT,
+          },
+        });
+
+        return { nouvelArticle: created, tarifCree };
+      });
+
+      candidats.push({ articleId: nouvelArticle.id, nom: designation, reference });
+      tarifActifParArticle.set(nouvelArticle.id, tarifCree);
+      crees++;
     }
 
-    res.json({ crees, misesAJour, inchanges, erreurs });
+    res.json({ crees, misesAJour, inchanges, enAttente, erreurs });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Impossible d'importer le listing" });
+  }
+});
+
+// Prévisualisation en lecture seule d'un import de listing fournisseur (voir PR #79) : produit,
+// pour chaque ligne, la MÊME proposition que POST /import écrira réellement (analyserPropositionLigne,
+// importListing.ts), sans jamais créer ni modifier le moindre fournisseur, article ou tarif. Le
+// client affiche cette prévisualisation et ne peut confirmer une correspondance approximative que
+// ligne par ligne (articleId précis), jamais globalement — voir PHASE 3/4 de PR #79.
+router.post("/import/apercu", async (req: Request, res: Response) => {
+  try {
+    const { societeId, fournisseurNom, lignes } = req.body;
+
+    if (!Array.isArray(lignes) || lignes.length === 0) {
+      res.status(400).json({ error: "Aucune ligne à analyser" });
+      return;
+    }
+
+    const [
+      uniteKg,
+      uniteL,
+      unitePiece,
+      articlesExistants,
+      fournisseursExistants,
+    ] = await Promise.all([
+      prisma.unite.findFirst({ where: { symbole: { equals: "kg", mode: "insensitive" } } }),
+      prisma.unite.findFirst({ where: { symbole: { equals: "l", mode: "insensitive" } } }),
+      prisma.unite.findFirst({ where: { symbole: { equals: "pièce", mode: "insensitive" } } }),
+      prisma.article.findMany({
+        where: { societeId, actif: true },
+        select: { id: true, nom: true, reference: true },
+      }),
+      // Lecture seule : un fournisseur absent n'est jamais créé ici, contrairement à
+      // POST /import — la prévisualisation ne doit jamais avoir d'effet de bord en base.
+      prisma.fournisseur.findMany({ where: { societeId }, select: { id: true, nom: true } }),
+    ]);
+
+    const candidats: CandidatExistant[] = articlesExistants.map((a) => ({
+      articleId: a.id,
+      nom: a.nom,
+      reference: a.reference,
+    }));
+
+    const tarifsActifsExistants = await prisma.tarifArticle.findMany({
+      where: { actif: true, articleId: { in: articlesExistants.map((a) => a.id) } },
+      orderBy: { dateDebut: "desc" },
+    });
+    const tarifActifParArticle = new Map<number, (typeof tarifsActifsExistants)[number]>();
+    for (const t of tarifsActifsExistants) {
+      if (!tarifActifParArticle.has(t.articleId)) tarifActifParArticle.set(t.articleId, t);
+    }
+
+    const fournisseurIdParNomExistant = new Map<string, number>();
+    for (const f of fournisseursExistants) {
+      fournisseurIdParNomExistant.set(f.nom.trim().toLowerCase(), f.id);
+    }
+
+    const uniteSymboleParId = new Map<number, string>();
+    if (uniteKg) uniteSymboleParId.set(uniteKg.id, uniteKg.symbole);
+    if (uniteL) uniteSymboleParId.set(uniteL.id, uniteL.symbole);
+    if (unitePiece) uniteSymboleParId.set(unitePiece.id, unitePiece.symbole);
+
+    const contexteLigne: ContexteAnalyseLigne = {
+      candidats,
+      tarifActifParArticle,
+      uniteKgId: uniteKg?.id ?? null,
+      uniteLId: uniteL?.id ?? null,
+      unitePieceId: unitePiece?.id ?? null,
+      uniteSymboleParId,
+    };
+
+    // Une ligne conserve son index d'origine (jamais filtrée ni réordonnée) : le client doit
+    // pouvoir associer chaque proposition à la ligne source du fichier importé, y compris les
+    // lignes invalides.
+    const propositions = lignes.map((ligne) => {
+      const nomFournisseurLigne = ligne?.fournisseur ? String(ligne.fournisseur).trim() : "";
+      const nomFournisseurResolu = nomFournisseurLigne || String(fournisseurNom ?? "").trim();
+      const fournisseurId =
+        fournisseurIdParNomExistant.get(nomFournisseurResolu.toLowerCase()) ?? null;
+
+      return analyserPropositionLigne(ligne, contexteLigne, {
+        fournisseurId,
+        fournisseurNom: nomFournisseurResolu,
+      });
+    });
+
+    res.json({ propositions });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible d'analyser le listing" });
   }
 });
 
