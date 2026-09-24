@@ -20,6 +20,30 @@ type SousCategorieRecette = {
   parentId: number | null;
 };
 
+// Les 4 catégories principales reconnues par les onglets de la page d'accueil, par leur nom
+// normalisé (accents/casse ignorés) — l'onglet "Autres" attrape tout le reste (catégorie
+// personnalisée, Festif, Mariage, ou aucune catégorie) : jamais une recette invisible faute de
+// catégorie connue.
+const ONGLETS_CATEGORIE = [
+  { cle: "tout", label: "Tout" },
+  { cle: "entree", label: "Entrées" },
+  { cle: "plat", label: "Plats" },
+  { cle: "accompagnement", label: "Accompagnements" },
+  { cle: "dessert", label: "Desserts" },
+  { cle: "autres", label: "Autres" },
+] as const;
+type CleOngletCategorie = (typeof ONGLETS_CATEGORIE)[number]["cle"];
+const CLES_CATEGORIES_CONNUES = ["entree", "plat", "accompagnement", "dessert"];
+
+// Résout la clé d'onglet d'une recette à partir du nom de sa catégorie (accents/casse ignorés) :
+// une recette dont la catégorie ne correspond à aucun des 4 onglets connus (catégorie
+// personnalisée, "Festif", "Mariage", ou aucune catégorie du tout) tombe dans "autres" plutôt
+// que de disparaître silencieusement d'un onglet.
+function ongletDeLaRecette(recette: Recette): CleOngletCategorie {
+  const nom = recette.categorie?.nom ? normaliserTexte(recette.categorie.nom) : "";
+  return CLES_CATEGORIES_CONNUES.includes(nom) ? (nom as CleOngletCategorie) : "autres";
+}
+
 type BrouillonImport = {
   nom?: string;
   portions?: number;
@@ -40,6 +64,7 @@ export default function RecettesPage() {
   const [recherche, setRecherche] = useState("");
   const [sousCategories, setSousCategories] = useState<SousCategorieRecette[]>([]);
   const [filtreSousCategorieId, setFiltreSousCategorieId] = useState(0);
+  const [ongletCategorie, setOngletCategorie] = useState<CleOngletCategorie>("tout");
 
   async function chargerRecettes() {
     const data = await getRecettes();
@@ -52,6 +77,21 @@ export default function RecettesPage() {
       .then((r) => r.json())
       .then(setSousCategories);
   }, []);
+
+  const comptesParOnglet = useMemo(() => {
+    const comptes: Record<CleOngletCategorie, number> = {
+      tout: recettes.length,
+      entree: 0,
+      plat: 0,
+      accompagnement: 0,
+      dessert: 0,
+      autres: 0,
+    };
+    recettes.forEach((recette) => {
+      comptes[ongletDeLaRecette(recette)]++;
+    });
+    return comptes;
+  }, [recettes]);
 
   // Liste plate pour le menu déroulant : racines dans l'ordre, chacune suivie de ses enfants
   // (indentés) juste après, plutôt que toutes les sous-catégories mélangées par ordre alphabétique.
@@ -92,9 +132,12 @@ export default function RecettesPage() {
       if (idsSousCategorieFiltre && !idsSousCategorieFiltre.has(recette.sousCategorieId ?? -1)) {
         return false;
       }
+      if (ongletCategorie !== "tout" && ongletDeLaRecette(recette) !== ongletCategorie) {
+        return false;
+      }
       return true;
     });
-  }, [recettes, recherche, idsSousCategorieFiltre]);
+  }, [recettes, recherche, idsSousCategorieFiltre, ongletCategorie]);
 
   function ouvrirCreation() {
     setRecetteEnEdition(null);
@@ -168,6 +211,26 @@ export default function RecettesPage() {
   return (
     <div style={{ padding: 20 }}>
       <h1>📖 Fiches recettes</h1>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {ONGLETS_CATEGORIE.map((onglet) => (
+          <button
+            key={onglet.cle}
+            onClick={() => setOngletCategorie(onglet.cle)}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 20,
+              border: "1px solid var(--couleur-bordure)",
+              background: ongletCategorie === onglet.cle ? "var(--couleur-primaire)" : "transparent",
+              color: ongletCategorie === onglet.cle ? "white" : "inherit",
+              cursor: "pointer",
+              fontWeight: ongletCategorie === onglet.cle ? 600 : 400,
+            }}
+          >
+            {onglet.label} ({comptesParOnglet[onglet.cle]})
+          </button>
+        ))}
+      </div>
 
       <div
         style={{
