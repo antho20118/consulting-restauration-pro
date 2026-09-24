@@ -24,6 +24,26 @@ router.get("/", async (_req: Request, res: Response) => {
   }
 });
 
+// Toutes les recettes, actives ET inactives, pour la correspondance de l'import Excel sécurisé
+// (voir correspondanceImportExcel.ts) : contrairement à GET / ci-dessus (recettes actives
+// uniquement, avec coûts calculés), une recette inactive doit pouvoir être reconnue et mise à
+// jour par cet import sans jamais être réactivée automatiquement — juste le strict nécessaire
+// (id/nom/actif) pour la correspondance, jamais les coûts ou le détail complet.
+// Doit rester déclarée AVANT GET /:id pour ne pas être interceptée par cette route générique.
+router.get("/toutes-pour-correspondance", async (_req: Request, res: Response) => {
+  try {
+    const recettes = await prisma.recette.findMany({
+      select: { id: true, nom: true, actif: true },
+      orderBy: { nom: "asc" },
+    });
+
+    res.json(recettes);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de récupérer les recettes" });
+  }
+});
+
 // Détail d'une recette
 router.get("/:id", async (req: Request, res: Response) => {
   try {
@@ -89,6 +109,154 @@ router.post("/import-ia", async (req: Request, res: Response) => {
     }
     console.error(error);
     res.status(500).json({ error: "Impossible d'analyser cette recette" });
+  }
+});
+
+// Décision d'import validée par l'utilisateur dans l'aperçu de l'import Excel sécurisé (voir
+// ImporterRecettesExcelSecuriseModal.tsx) : soit la création d'une recette entièrement nouvelle
+// (aucune correspondance trouvée), soit la mise à jour des ingrédients d'une recette existante
+// déjà reconnue avec certitude (une seule correspondance, jamais choisie automatiquement en cas
+// d'ambiguïté — cette décision est prise côté client avant l'appel).
+type DecisionImportExcel =
+  | {
+      action: "creer";
+      nom: string;
+      categorieId: number | null;
+      sousCategorieId: number | null;
+      societeId: number;
+      lignes: { articleId: number; quantite: number; uniteId: number; gainCuissonPct?: number }[];
+    }
+  | {
+      action: "mettre_a_jour";
+      recetteId: number;
+      lignes: { articleId: number; quantite: number; uniteId: number; gainCuissonPct?: number }[];
+    };
+
+// Import Excel sécurisé (ingrédients/quantités/coûts uniquement, jamais la technique) : reçoit la
+// liste des décisions déjà validées dans l'aperçu (voir ImporterRecettesExcelSecuriseModal.tsx) et
+// les applique TOUTES dans une seule transaction Prisma — si l'une échoue, aucune des autres n'est
+// conservée (voir le commentaire d'atomicité ci-dessous), jamais un lot partiellement écrit.
+//
+// RÈGLE ABSOLUE pour "mettre_a_jour" : contrairement à PUT /:id (qui remplace intégralement
+// lignes ET étapes, voir son commentaire plus bas), cette route ne touche JAMAIS RecetteEtape ni
+// aucun autre champ de la recette (nom, instructions, photo, categorieId, sousCategorieId,
+// portions, poidsPortionG, poidsAccompagnementG, prixVenteHT, actif) — seule sa table
+// RecetteLigne est remplacée. Une recette inactive reconnue par ce chemin reste inactive : ce
+// champ n'apparaît nulle part dans cette route, il ne peut donc pas être modifié par erreur.
+// Signal interne utilisé uniquement pour annuler volontairement la transaction en mode aperçu
+// (simulate: true) : porte les résultats déjà calculés jusqu'au bloc catch, sans qu'aucune des
+// écritures de cette transaction ne soit jamais conservée en base (rollback Prisma standard).
+class SimulationApercuAnnulee extends Error {
+  constructor(public resultats: unknown[]) {
+    super("Aperçu de coût : transaction volontairement annulée, aucune écriture conservée");
+  }
+}
+
+router.post("/import-excel", async (req: Request, res: Response) => {
+  try {
+    const { decisions, simulate } = req.body as {
+      decisions: DecisionImportExcel[];
+      // Calcule le coût résultant de chaque décision via le même calculerCoutRecette que l'import
+      // réel (aucune deuxième formule), en écrivant réellement dans la transaction puis en
+      // l'annulant systématiquement avant de la valider — jamais une estimation approximative
+      // recalculée séparément, jamais une écriture conservée en base.
+      simulate?: boolean;
+    };
+
+    if (!Array.isArray(decisions) || decisions.length === 0) {
+      res.status(400).json({ error: "Aucune décision d'import fournie" });
+      return;
+    }
+
+    // Garde-fou explicite et bloquant (cas réel identifié à l'audit : "SAUTE DE VEAU MARENGO" et
+    // "SAUTE DE VEAU AUX OLIVES" correspondent chacune, individuellement, à l'unique recette
+    // existante "Saute de veau") : si deux décisions "mettre_a_jour" du même lot visaient la même
+    // recette, la seconde écraserait silencieusement le résultat de la première (deleteMany, puis
+    // recreate, exécutés en séquence) sans qu'aucune erreur ne soit jamais levée. Détecté et
+    // rejeté ici, AVANT toute écriture — jamais résolu silencieusement après coup côté serveur ;
+    // c'est à l'aperçu (ImporterRecettesExcelSecuriseModal.tsx) d'empêcher cette situation
+    // d'atteindre cette route en premier lieu.
+    const cibles = new Map<number, number>();
+    for (const decision of decisions) {
+      if (decision.action !== "mettre_a_jour") continue;
+      cibles.set(decision.recetteId, (cibles.get(decision.recetteId) ?? 0) + 1);
+    }
+    const recetteIdEnConflit = [...cibles.entries()].find(([, count]) => count > 1)?.[0];
+    if (recetteIdEnConflit !== undefined) {
+      res.status(400).json({
+        error: `Conflit d'import : plusieurs décisions de ce lot visent la même recette (id ${recetteIdEnConflit}) — aucune écriture effectuée.`,
+      });
+      return;
+    }
+
+    const resultats = await prisma.$transaction(async (tx) => {
+      const sortie: { action: DecisionImportExcel["action"]; recette: ReturnType<typeof calculerCoutRecette> }[] = [];
+
+      for (const decision of decisions) {
+        if (decision.action === "creer") {
+          const creee = await tx.recette.create({
+            data: {
+              nom: decision.nom,
+              categorieId: decision.categorieId ?? null,
+              sousCategorieId: decision.sousCategorieId ?? null,
+              societeId: decision.societeId,
+              lignes: {
+                create: decision.lignes.map((ligne, index) => ({
+                  articleId: ligne.articleId,
+                  quantite: ligne.quantite,
+                  uniteId: ligne.uniteId,
+                  gainCuissonPct: ligne.gainCuissonPct ?? 0,
+                  ordre: index,
+                })),
+              },
+              // etapes volontairement absent de ce payload : une recette créée par cet import n'a
+              // par nature aucune technique de réalisation existante à préserver.
+            },
+            include: inclusionsRecette,
+          });
+          sortie.push({ action: "creer", recette: calculerCoutRecette(creee) });
+        } else {
+          const existante = await tx.recette.findUnique({ where: { id: decision.recetteId } });
+          if (!existante) {
+            // Lève dans la transaction : Prisma annule automatiquement tout ce qui a déjà été fait
+            // dans ce même $transaction (créations et mises à jour précédentes de ce lot incluses).
+            throw new Error(`Recette ${decision.recetteId} introuvable pour la mise à jour`);
+          }
+
+          await tx.recetteLigne.deleteMany({ where: { recetteId: decision.recetteId } });
+          await tx.recetteLigne.createMany({
+            data: decision.lignes.map((ligne, index) => ({
+              recetteId: decision.recetteId,
+              articleId: ligne.articleId,
+              quantite: ligne.quantite,
+              uniteId: ligne.uniteId,
+              gainCuissonPct: ligne.gainCuissonPct ?? 0,
+              ordre: index,
+            })),
+          });
+
+          const miseAJour = await tx.recette.findUniqueOrThrow({
+            where: { id: decision.recetteId },
+            include: inclusionsRecette,
+          });
+          sortie.push({ action: "mettre_a_jour", recette: calculerCoutRecette(miseAJour) });
+        }
+      }
+
+      if (simulate) throw new SimulationApercuAnnulee(sortie);
+      return sortie;
+    });
+
+    res.status(200).json({ simulate: false, resultats });
+  } catch (error) {
+    if (error instanceof SimulationApercuAnnulee) {
+      // Transaction annulée volontairement (voir plus haut) : la requête a bien atteint la base
+      // pour calculer un coût réel via calculerCoutRecette, mais rien n'a été conservé.
+      res.status(200).json({ simulate: true, resultats: error.resultats });
+      return;
+    }
+    console.error(error);
+    res.status(500).json({ error: "Impossible de finaliser l'import (aucune modification conservée)" });
   }
 });
 

@@ -6,6 +6,7 @@ import RecetteDetail from "../components/RecetteDetail";
 import ImporterRecetteModal from "../components/ImporterRecetteModal";
 import ImporterFichierCoutsModal from "../components/ImporterFichierCoutsModal";
 import ImporterTechniquesFichierModal from "../components/ImporterTechniquesFichierModal";
+import ImporterRecettesExcelSecuriseModal from "../components/ImporterRecettesExcelSecuriseModal";
 import { API_URL, apiFetch } from "../../../config/api";
 import toast from "react-hot-toast";
 import { getRecettes, supprimerRecette, supprimerToutesLesRecettes } from "../services/recetteService";
@@ -34,6 +35,7 @@ export default function RecettesPage() {
   const [importOuvert, setImportOuvert] = useState(false);
   const [importFichierCoutsOuvert, setImportFichierCoutsOuvert] = useState(false);
   const [importTechniquesFichierOuvert, setImportTechniquesFichierOuvert] = useState(false);
+  const [importExcelSecuriseOuvert, setImportExcelSecuriseOuvert] = useState(false);
   const [recetteConsultee, setRecetteConsultee] = useState<Recette | null>(null);
   const [recherche, setRecherche] = useState("");
   const [sousCategories, setSousCategories] = useState<SousCategorieRecette[]>([]);
@@ -179,6 +181,7 @@ export default function RecettesPage() {
           <button onClick={() => setImportOuvert(true)}>Importer une recette</button>
           <button onClick={() => setImportFichierCoutsOuvert(true)}>Importer un fichier de coûts</button>
           <button onClick={() => setImportTechniquesFichierOuvert(true)}>Importer des techniques (fichier)</button>
+          <button onClick={() => setImportExcelSecuriseOuvert(true)}>Importer Excel (sécurisé)</button>
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 
@@ -301,6 +304,26 @@ export default function RecettesPage() {
         >
           <ImporterTechniquesFichierModal
             onClose={() => setImportTechniquesFichierOuvert(false)}
+            onImporte={chargerRecettes}
+          />
+        </div>
+      )}
+
+      {importExcelSecuriseOuvert && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            overflowY: "auto",
+            padding: "40px 0",
+          }}
+        >
+          <ImporterRecettesExcelSecuriseModal
+            onClose={() => setImportExcelSecuriseOuvert(false)}
             onImporte={chargerRecettes}
           />
         </div>

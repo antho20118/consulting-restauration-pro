@@ -149,7 +149,9 @@ export async function analyserFichierTechniques(fichier: File): Promise<RecetteT
 
 // Retire les précisions de poids/portion très variables d'une source à l'autre (ex. "(2900gr)",
 // "environ 1200gr", "1,150kg") pour comparer les titres par leur seul nom de plat.
-function nettoyerTitre(titre: string): string {
+// Exportée pour être réutilisée par correspondanceImportExcel.ts (import Excel sécurisé) sans
+// dupliquer cette normalisation.
+export function nettoyerTitre(titre: string): string {
   return normaliserTexte(titre)
     .replace(/\(.*?\)/g, " ")
     .replace(/environ\s*\d+\s*(g|gr|kg)?/g, " ")

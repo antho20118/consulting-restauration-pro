@@ -192,3 +192,29 @@ export type RecetteInput = {
   lignes: LigneRecetteInput[];
   etapes: EtapeRecetteInput[];
 };
+
+// Import Excel sécurisé (voir ImporterRecettesExcelSecuriseModal.tsx) : une recette existante
+// n'est jamais renvoyée entièrement (nom, étapes, HACCP, notes, photo...), seules ses nouvelles
+// lignes d'ingrédients sont transmises — POST /api/recettes/import-excel ne touche donc jamais à
+// autre chose que RecetteLigne pour une mise à jour (voir server/routes/recettes.ts).
+export type LigneImportExcel = { articleId: number; quantite: number; uniteId: number; gainCuissonPct?: number };
+
+export type DecisionImportExcel =
+  | {
+      action: "creer";
+      nom: string;
+      categorieId: number | null;
+      sousCategorieId: number | null;
+      societeId: number;
+      lignes: LigneImportExcel[];
+    }
+  | { action: "mettre_a_jour"; recetteId: number; lignes: LigneImportExcel[] };
+
+export type ResultatDecisionImportExcel = { action: DecisionImportExcel["action"]; recette: Recette };
+
+// simulate: true -> aperçu de coût calculé via une transaction réellement exécutée puis annulée
+// (voir POST /import-excel, server/routes/recettes.ts) : resultats reflète calculerCoutRecette
+// mais rien n'a été conservé en base. simulate: false -> import réel, effectivement conservé.
+export type ReponseImportExcel = { simulate: boolean; resultats: ResultatDecisionImportExcel[] };
+
+export type RecettePourCorrespondance = { id: number; nom: string; actif: boolean };
