@@ -3,10 +3,13 @@ import type {
   AliasIngredient,
   AnalyseConsulting,
   ArticleRecette,
+  DecisionImportExcel,
   EvaluationHACCP,
   ExtractionRecette,
   Recette,
   RecetteInput,
+  RecettePourCorrespondance,
+  ReponseImportExcel,
   SuggestionFournisseur,
   UniteRecette,
 } from "../types/recette";
@@ -16,6 +19,52 @@ export async function getRecettes(): Promise<Recette[]> {
 
   if (!response.ok) {
     throw new Error("Impossible de récupérer les recettes");
+  }
+
+  return response.json();
+}
+
+// Toutes les recettes (actives ET inactives) pour la correspondance de l'import Excel sécurisé —
+// voir GET /toutes-pour-correspondance (server/routes/recettes.ts) : une recette inactive doit
+// pouvoir être reconnue sans jamais être réactivée automatiquement.
+export async function getRecettesPourCorrespondance(): Promise<RecettePourCorrespondance[]> {
+  const response = await apiFetch(`${API_URL}/recettes/toutes-pour-correspondance`);
+
+  if (!response.ok) {
+    throw new Error("Impossible de récupérer les recettes pour la correspondance");
+  }
+
+  return response.json();
+}
+
+// Une recette précise, active ou inactive (contrairement à getRecettes ci-dessus, limitée aux
+// recettes actives) : sert à charger le détail complet (étapes, HACCP, notes, photo) d'une
+// recette reconnue par l'import Excel sécurisé, pour le bloc « CONSERVÉ » de son aperçu.
+export async function getRecetteDetail(id: number): Promise<Recette> {
+  const response = await apiFetch(`${API_URL}/recettes/${id}`);
+
+  if (!response.ok) {
+    throw new Error("Impossible de récupérer cette recette");
+  }
+
+  return response.json();
+}
+
+// simulate: true -> aperçu de coût (voir POST /import-excel côté serveur : transaction réellement
+// exécutée via calculerCoutRecette puis systématiquement annulée, jamais conservée). simulate
+// omis ou false -> import réel, conservé dans une seule transaction, tout ou rien.
+export async function importerRecettesExcel(
+  decisions: DecisionImportExcel[],
+  simulate = false
+): Promise<ReponseImportExcel> {
+  const response = await apiFetch(`${API_URL}/recettes/import-excel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ decisions, simulate }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Impossible de finaliser l'import (aucune modification conservée)");
   }
 
   return response.json();
