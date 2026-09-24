@@ -1,15 +1,30 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { construireLigneImportee, trouverArticle, trouverUnite } from "../../src/features/recettes/utils/ligneImportee.js";
-import type { ArticleRecette, IngredientExtrait, UniteRecette } from "../../src/features/recettes/types/recette.js";
+import {
+  construireLigneImportee,
+  construireMaterielImporte,
+  trouverArticle,
+  trouverUnite,
+} from "../../src/features/recettes/utils/ligneImportee.js";
+import type {
+  ArticleRecette,
+  IngredientExtrait,
+  MaterielExtrait,
+  TypeArticle,
+  UniteRecette,
+} from "../../src/features/recettes/types/recette.js";
 
 // Teste src/features/recettes/utils/ligneImportee.ts, le cœur du pipeline d'import IA/OCR côté
 // client (voir l'audit fonctionnel « import IA » et PR #61) : le rapprochement automatique
 // d'article/unité ne doit jamais avoir l'air d'un choix humain déjà confirmé, et une unité non
 // reconnue ne doit plus jamais retomber silencieusement sur le kg.
 
-function article(id: number, nom: string): ArticleRecette {
-  return { id, nom, reference: null, rendement: 100, tarifs: [], allergenes: [] };
+function article(id: number, nom: string, type: TypeArticle = "MATIERE_PREMIERE"): ArticleRecette {
+  return { id, nom, reference: null, rendement: 100, type, tarifs: [], allergenes: [] };
+}
+
+function materiel(partiel: Partial<MaterielExtrait>): MaterielExtrait {
+  return { texteOriginal: "", nomExtrait: "", confiance: "faible", ...partiel };
 }
 
 function unite(id: number, symbole: string): UniteRecette {
@@ -17,7 +32,15 @@ function unite(id: number, symbole: string): UniteRecette {
 }
 
 function ingredient(partiel: Partial<IngredientExtrait>): IngredientExtrait {
-  return { texteOriginal: "", nomExtrait: "", quantite: null, unite: null, ...partiel };
+  return {
+    texteOriginal: "",
+    nomExtrait: "",
+    quantite: null,
+    unite: null,
+    precision: null,
+    confiance: "faible",
+    ...partiel,
+  };
 }
 
 const ARTICLES = [article(1, "Farine de blé T55"), article(2, "Farine de sarrasin"), article(3, "Beurre doux")];
@@ -142,4 +165,43 @@ test("construireLigneImportee : quantité absente (IA imprécise, ex. « une pin
     new Map()
   );
   assert.equal(ligne.quantite, 0);
+});
+
+const ARTICLES_AVEC_MATERIEL = [
+  ...ARTICLES,
+  article(4, "Thermomètre sonde", "PETIT_MATERIEL"),
+  article(5, "Poche à douille", "PETIT_MATERIEL"),
+];
+
+test("construireMaterielImporte : matériel reconnu parmi les seuls articles PETIT_MATERIEL → à confirmer", () => {
+  const resultat = construireMaterielImporte(
+    materiel({ nomExtrait: "thermomètre sonde", confiance: "elevee" }),
+    ARTICLES_AVEC_MATERIEL,
+    new Map()
+  );
+  assert.equal(resultat.articleId, 4);
+  assert.equal(resultat.articleConfirme, false);
+  assert.equal(resultat.confiance, "elevee");
+});
+
+test("construireMaterielImporte : jamais de rapprochement avec un article alimentaire même si le nom correspond mieux", () => {
+  // « Beurre doux » (article alimentaire, id 3) ne doit jamais être proposé comme matériel, même
+  // si son nom se rapprocherait d'un texte mal extrait — le filtre PETIT_MATERIEL prime toujours.
+  const resultat = construireMaterielImporte(
+    materiel({ nomExtrait: "beurre doux" }),
+    ARTICLES_AVEC_MATERIEL,
+    new Map()
+  );
+  assert.equal(resultat.articleId, 0);
+  assert.equal(resultat.articleConfirme, true);
+});
+
+test("construireMaterielImporte : matériel inconnu → articleId=0, à résoudre par l'utilisateur", () => {
+  const resultat = construireMaterielImporte(
+    materiel({ nomExtrait: "chalumeau de cuisine" }),
+    ARTICLES_AVEC_MATERIEL,
+    new Map()
+  );
+  assert.equal(resultat.articleId, 0);
+  assert.equal(resultat.articleConfirme, true);
 });

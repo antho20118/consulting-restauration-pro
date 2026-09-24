@@ -19,6 +19,7 @@ function articleAvecAllergenes(id: number, ...allergenes: { id: number; nom: str
     nom: `Article ${id}`,
     reference: null,
     rendement: 100,
+    type: "MATIERE_PREMIERE",
     tarifs: [],
     allergenes: allergenes.map((allergene) => ({ allergene })),
   };

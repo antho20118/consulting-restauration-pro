@@ -10,11 +10,24 @@ export interface AllergeneRecette {
   nom: string;
 }
 
+// Reflète l'enum Prisma TypeArticle (server/prisma/schema.prisma) — PETIT_MATERIEL est le seul
+// type utilisé pour le rapprochement du matériel détecté à l'import (voir construireMaterielImporte
+// dans ligneImportee.ts) : aucun des autres types n'a de sens comme "matériel de cuisine".
+export type TypeArticle =
+  | "MATIERE_PREMIERE"
+  | "SOUS_RECETTE"
+  | "PRODUIT_FINI"
+  | "EMBALLAGE"
+  | "CONSOMMABLE"
+  | "ENTRETIEN"
+  | "PETIT_MATERIEL";
+
 export interface ArticleRecette {
   id: number;
   nom: string;
   reference: string | null;
   rendement: number;
+  type: TypeArticle;
   tarifs: {
     prixHT: number;
     quantiteConditionnement: number;
@@ -97,19 +110,101 @@ export type EtapeRecetteInput = {
   controleHACCP: string | null;
 };
 
+// Reflète la fiabilité réelle d'une information extraite (jamais devinée) — voir la règle absolue
+// de non-invention (audit refonte import IA) : sert à décider, dans la prévisualisation, ce qui
+// peut être accepté d'un simple coup d'œil et ce qui doit attirer l'attention avant validation.
+export type Confiance = "elevee" | "moyenne" | "faible";
+
+// Classification purement destinée à regrouper les étapes dans la prévisualisation (voir
+// PrevisualisationImportRecette.tsx) : n'existe dans aucune colonne Prisma (RecetteEtape n'a pas
+// de champ "section") — au moment de l'enregistrement, seul le texte intégral de l'étape
+// (description) est conservé, exactement comme une étape ajoutée manuellement.
+export type SectionEtape = "preparation" | "cuisson" | "dressage" | "autre";
+
+export interface CategorieDetectee {
+  nom: string;
+  confiance: Confiance;
+}
+
 export interface IngredientExtrait {
   texteOriginal: string;
   nomExtrait: string;
   quantite: number | null;
   unite: string | null;
+  // Précision qualitative accompagnant la quantité quand le document en donne une, sans qu'elle
+  // soit exploitable comme un nombre (ex. "au goût", "environ", "à discrétion") — jamais fabriquée
+  // si absente du texte source.
+  precision: string | null;
+  confiance: Confiance;
+}
+
+export interface EtapeExtraite {
+  ordre: number;
+  titre: string | null;
+  // Texte intégral de l'étape tel qu'il apparaît dans le document source — jamais remplacé ni
+  // tronqué par les champs structurés ci-dessous (dureeMinutes/temperatureC/modeCuisson), qui ne
+  // servent qu'à aider la prévisualisation, pas à s'y substituer.
+  description: string;
+  section: SectionEtape;
+  dureeMinutes: number | null;
+  temperatureC: number | null;
+  modeCuisson: string | null;
+  pointCritiqueHACCP: boolean;
+  controleHACCP: string | null;
+  confiance: Confiance;
+}
+
+export interface MaterielExtrait {
+  texteOriginal: string;
+  nomExtrait: string;
+  confiance: Confiance;
 }
 
 export interface ExtractionRecette {
   nom: string | null;
+  categorieDetectee: CategorieDetectee | null;
+  sousCategorieDetectee: CategorieDetectee | null;
   portions: number | null;
+  poidsPortionG: number | null;
+  poidsAccompagnementG: number | null;
   ingredients: IngredientExtrait[];
-  etapes: EtapeRecetteInput[];
+  etapes: EtapeExtraite[];
+  materiel: MaterielExtrait[];
+  // Texte narratif résiduel, non rattachable à une étape ou un ingrédient précis (ex. conseils,
+  // variantes, origine de la recette) — destiné à Recette.instructions, jamais aux champs calculés.
+  instructions: string | null;
+  // Ambiguïtés relevées pendant l'extraction (quantité absente, unité incertaine, catégorie
+  // ambiguë...) — affichées telles quelles dans la prévisualisation, jamais résolues silencieusement.
+  alertes: string[];
 }
+
+// Rapprochement d'un élément de matériel détecté avec le catalogue d'articles, restreint à
+// TypeArticle.PETIT_MATERIEL (voir construireMaterielImporte dans ligneImportee.ts) — même logique
+// que LigneRecetteInput.articleConfirme pour les ingrédients : jamais un rapprochement automatique
+// qui aurait l'air d'un choix humain déjà confirmé.
+export type MaterielImporteInput = {
+  articleId: number;
+  articleConfirme: boolean;
+  confiance: Confiance;
+  texteMaterielImporte: string;
+};
+
+// Résultat de la validation humaine d'une prévisualisation d'import (voir
+// PrevisualisationImportRecette.tsx), appliqué à une recette déjà ouverte dans RecetteForm — jamais
+// à la création, qui repart d'un brouillon complet (voir BrouillonRecette dans RecetteForm.tsx).
+// Chaque champ scalaire n'est présent que si l'utilisateur a explicitement choisi de l'appliquer :
+// un champ absent laisse la valeur actuelle du formulaire intacte (aucun écrasement silencieux).
+export type PatchImportRecette = {
+  nom?: string;
+  categorieId?: number | null;
+  sousCategorieId?: number | null;
+  portions?: number;
+  poidsPortionG?: number;
+  poidsAccompagnementG?: number;
+  lignesAjoutees?: LigneRecetteInput[];
+  etapesAjoutees?: EtapeRecetteInput[];
+  instructionsAjoutees?: string;
+};
 
 // Détection par mots-clés sur la description d'une étape (voir server/utils/haccp.ts) — une
 // suggestion, jamais une preuve de conformité.
@@ -178,6 +273,21 @@ export interface SuggestionFournisseur {
   economiePct: number;
   nouveauFoodCostPct: number | null;
 }
+
+// Pré-remplissage optionnel utilisé uniquement à la création (ex. depuis la prévisualisation
+// d'import) : contrairement à `recette` sur RecetteForm, sa présence ne déclenche jamais une
+// modification (PUT) plutôt qu'une création (POST).
+export type BrouillonRecette = {
+  nom?: string;
+  categorieId?: number | null;
+  sousCategorieId?: number | null;
+  portions?: number;
+  poidsPortionG?: number;
+  poidsAccompagnementG?: number;
+  instructions?: string;
+  lignes?: LigneRecetteInput[];
+  etapes?: EtapeRecetteInput[];
+};
 
 export type RecetteInput = {
   nom: string;
