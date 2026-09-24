@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { API_URL, apiFetch } from "../../../config/api";
 import {
   creerRecette,
+  getRecettes,
   rechercherArticlesParReferences,
   type ArticleTrouveParReference,
 } from "../services/recetteService";
@@ -12,6 +13,13 @@ import {
   type ArticleCatalogue,
   type RecetteCoutsExtraite,
 } from "../utils/analyserFichierCouts";
+import {
+  aConflitDoublonImportCouts,
+  detecterDoublonsInternes,
+  indicesDoublonInterne as indicesDoublonInterneImport,
+  trouverToutesCorrespondances,
+  type RecetteExistantePourCorrespondance,
+} from "../utils/correspondanceImportExcel";
 import { normaliserTexte } from "../utils/normaliserTexte";
 
 type CategorieRecette = { id: number; nom: string };
@@ -47,6 +55,17 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
   // vérifier/choisir l'ingrédient exact avant import plutôt que de dépendre uniquement du
   // rapprochement automatique par code.
   const [codesCorriges, setCodesCorriges] = useState<Record<string, string>>({});
+  // Recettes actives déjà en base au moment de l'import (voir gererFichier) : sert uniquement à
+  // repérer un doublon potentiel, jamais à proposer une mise à jour — cet import ne fait que créer
+  // (voir importerRecette), contrairement à l'import Excel sécurisé.
+  const [recettesExistantes, setRecettesExistantes] = useState<RecetteExistantePourCorrespondance[]>([]);
+  // Titres en double au sein même du fichier importé (voir detecterDoublonsInternes) : une clé de
+  // titre normalisé -> les index (dans `recettes`) qui la partagent.
+  const [doublonsInternes, setDoublonsInternes] = useState<Map<string, number[]>>(new Map());
+  // Confirmation explicite de l'utilisateur, par index de recette, qu'il souhaite créer un doublon
+  // malgré l'avertissement (voir aConflitDoublon) — jamais cochée par défaut, pour ne jamais créer
+  // un doublon silencieusement (voir l'audit qui a motivé ce correctif).
+  const [confirmationsDoublon, setConfirmationsDoublon] = useState<Record<number, boolean>>({});
 
   async function gererFichier(e: React.ChangeEvent<HTMLInputElement>) {
     const fichier = e.target.files?.[0];
@@ -55,12 +74,13 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
     setChargement(true);
     setErreur("");
     try {
-      const [recettesExtraites, catalogueExtrait, categoriesData, sousCategoriesData] =
+      const [recettesExtraites, catalogueExtrait, categoriesData, sousCategoriesData, recettesActives] =
         await Promise.all([
           analyserFichierCouts(fichier),
           analyserCatalogueFichierCouts(fichier),
           apiFetch(`${API_URL}/categories-recette`).then((r) => r.json()),
           apiFetch(`${API_URL}/sous-categories-recette`).then((r) => r.json()),
+          getRecettes(),
         ]);
 
       if (recettesExtraites.length === 0) {
@@ -84,6 +104,11 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
       setArticlesParCode(new Map(trouves.map((t) => [t.reference, t])));
       setCategories(categoriesData);
       setSousCategories(sousCategoriesData);
+      // getRecettes() ne renvoie que les recettes actives (voir GET /recettes) : toutes
+      // implicitement actif=true ici, seul le champ attendu par trouverToutesCorrespondances.
+      setRecettesExistantes(recettesActives.map((r) => ({ id: r.id, nom: r.nom, actif: true })));
+      setDoublonsInternes(detecterDoublonsInternes(recettesExtraites));
+      setConfirmationsDoublon({});
 
       const initCategorie: Record<number, number> = {};
       const initSousCategorie: Record<number, number> = {};
@@ -134,9 +159,34 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
     }
   }
 
+  // Autres index de `recettes` partageant le même titre normalisé que celui-ci (voir
+  // indicesDoublonInterne dans correspondanceImportExcel.ts) — tableau vide si ce titre n'apparaît
+  // qu'une fois dans le fichier.
+  function indicesDoublonInterne(index: number): number[] {
+    return indicesDoublonInterneImport(index, doublonsInternes);
+  }
+
+  // Recettes déjà en base dont le nom correspond (voir trouverToutesCorrespondances) : jamais
+  // utilisé pour choisir une mise à jour à la place de l'utilisateur, seulement pour avertir avant
+  // une création qui créerait un doublon.
+  function correspondancesExistantes(index: number): RecetteExistantePourCorrespondance[] {
+    return trouverToutesCorrespondances(recettes[index].titre, recettesExistantes);
+  }
+
+  function aConflitDoublon(index: number): boolean {
+    return aConflitDoublonImportCouts(index, recettes[index].titre, doublonsInternes, recettesExistantes);
+  }
+
   function estPrete(index: number): boolean {
     const recette = recettes[index];
-    return recette.lignes.every((l, i) => articlesParCode.has(codeEffectif(index, i, l.code)));
+    const ingredientsOk = recette.lignes.every((l, i) => articlesParCode.has(codeEffectif(index, i, l.code)));
+    if (!ingredientsOk) return false;
+    // Un doublon détecté (nom déjà en base, ou répété dans le fichier) bloque l'import tant que
+    // l'utilisateur ne l'a pas confirmé explicitement (voir le correctif de l'audit import IA —
+    // même principe que la prévisualisation obligatoire de l'import photo/texte : jamais de
+    // création silencieuse en cas d'ambiguïté).
+    if (aConflitDoublon(index) && !confirmationsDoublon[index]) return false;
+    return true;
   }
 
   async function importerRecette(index: number) {
@@ -216,6 +266,9 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
   })();
 
   const nbPretes = recettes.filter((_r, index) => estPrete(index)).length;
+  const nbConflitsNonConfirmes = recettes.filter(
+    (_r, index) => aConflitDoublon(index) && !confirmationsDoublon[index]
+  ).length;
 
   return (
     <div
@@ -265,6 +318,12 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
               {codesManquants.length > 0 && (
                 <span> {codesManquants.length} code(s) article sans correspondance.</span>
               )}
+              {nbConflitsNonConfirmes > 0 && (
+                <span style={{ color: "#b45309" }}>
+                  {" "}
+                  {nbConflitsNonConfirmes} doublon(s) potentiel(s) à confirmer.
+                </span>
+              )}
             </div>
             <button
               className="btn-primary"
@@ -297,6 +356,9 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
             const nbSansCode = recette.lignes.filter(
               (l, i) => !articlesParCode.has(codeEffectif(index, i, l.code))
             ).length;
+            const doublonsIndices = indicesDoublonInterne(index);
+            const correspondances = correspondancesExistantes(index);
+            const conflit = doublonsIndices.length > 0 || correspondances.length > 0;
             return (
               <div
                 key={index}
@@ -314,9 +376,51 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
                       ? "Importée ✓"
                       : prete
                         ? "Prête"
-                        : `${nbSansCode} ingrédient(s) sans code trouvé`}
+                        : nbSansCode > 0
+                          ? `${nbSansCode} ingrédient(s) sans code trouvé`
+                          : "⚠ Doublon à confirmer"}
                   </span>
                 </div>
+
+                {conflit && (
+                  <div
+                    style={{
+                      background: "#fff4e5",
+                      border: "1px solid #f0b429",
+                      borderRadius: 6,
+                      padding: "8px 10px",
+                      margin: "8px 0",
+                      fontSize: 13,
+                    }}
+                  >
+                    <strong>⚠ Doublon potentiel</strong>
+                    {correspondances.length > 0 && (
+                      <div style={{ marginTop: 4 }}>
+                        Une recette portant ce nom existe déjà :{" "}
+                        {correspondances.map((c) => `« ${c.nom} »`).join(", ")}. Importer créera une
+                        recette supplémentaire, distincte de {correspondances.length > 1 ? "celles-ci" : "celle-ci"}.
+                      </div>
+                    )}
+                    {doublonsIndices.length > 0 && (
+                      <div style={{ marginTop: 4 }}>
+                        Ce nom apparaît {doublonsIndices.length} fois dans ce fichier (recette
+                        {doublonsIndices.length > 2 ? "s" : ""} n°
+                        {doublonsIndices.filter((i) => i !== index).map((i) => i + 1).join(", ")}).
+                      </div>
+                    )}
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={confirmationsDoublon[index] ?? false}
+                        disabled={statut === "importee"}
+                        onChange={(e) =>
+                          setConfirmationsDoublon((s) => ({ ...s, [index]: e.target.checked }))
+                        }
+                      />
+                      Je confirme vouloir créer cette recette malgré le doublon détecté
+                    </label>
+                  </div>
+                )}
 
                 <div style={{ display: "flex", gap: 12, margin: "8px 0" }}>
                   <select

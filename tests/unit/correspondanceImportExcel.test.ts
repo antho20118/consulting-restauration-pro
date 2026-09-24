@@ -4,6 +4,8 @@ import {
   trouverToutesCorrespondances,
   detecterDoublonsInternes,
   classifierRecetteImport,
+  indicesDoublonInterne,
+  aConflitDoublonImportCouts,
 } from "../../src/features/recettes/utils/correspondanceImportExcel.js";
 
 // Teste correspondanceImportExcel.ts — cœur de l'import Excel sécurisé (voir
@@ -129,4 +131,59 @@ test("classifierRecetteImport : CAS C direct quand plusieurs candidats", () => {
   ]);
   assert.equal(statut.type, "ambiguite");
   assert.equal(statut.type === "ambiguite" && statut.candidats.length, 2);
+});
+
+// Teste aConflitDoublonImportCouts/indicesDoublonInterne — utilisés par
+// ImporterFichierCoutsModal.tsx pour bloquer une création silencieuse de recette en double.
+// Contrairement à classifierRecetteImport (import Excel sécurisé, qui propose une mise à jour),
+// cet import ne fait jamais que créer : il n'y a donc que "conflit à confirmer" ou "rien à
+// signaler", jamais de mise à jour automatique.
+
+test("import fichier de coûts — cas 1 : recette inexistante en base -> aucun conflit, création inchangée", () => {
+  const doublons = detecterDoublonsInternes([{ titre: "TARTE TATIN" }]);
+  const conflit = aConflitDoublonImportCouts(0, "TARTE TATIN", doublons, [
+    { id: 1, nom: "Crème brûlée", actif: true },
+  ]);
+  assert.equal(conflit, false);
+});
+
+test("import fichier de coûts — cas 2 : recette déjà en base sous le même nom -> conflit détecté", () => {
+  const doublons = detecterDoublonsInternes([{ titre: "LASAGNES BOLOGNAISES" }]);
+  const conflit = aConflitDoublonImportCouts(0, "LASAGNES BOLOGNAISES", doublons, [
+    { id: 7, nom: "Lasagnes bolognaises", actif: true },
+  ]);
+  assert.equal(conflit, true);
+});
+
+test("import fichier de coûts — cas 3 : correspondance détectée malgré casse/accents/poids (nettoyerTitre)", () => {
+  const doublons = detecterDoublonsInternes([{ titre: "Hachis parmentier (1200gr)" }]);
+  const conflit = aConflitDoublonImportCouts(0, "HACHIS PARMENTIER (1200GR)", doublons, [
+    { id: 3, nom: "hachis parmentier", actif: true },
+  ]);
+  assert.equal(conflit, true);
+});
+
+test("import fichier de coûts — cas 4 : même titre répété deux fois dans le fichier -> les deux occurrences signalées, pas de création silencieuse", () => {
+  const fichier = [{ titre: "RATATOUILLE" }, { titre: "RATATOUILLE" }];
+  const doublons = detecterDoublonsInternes(fichier);
+  assert.equal(aConflitDoublonImportCouts(0, "RATATOUILLE", doublons, []), true);
+  assert.equal(aConflitDoublonImportCouts(1, "RATATOUILLE", doublons, []), true);
+  // Chaque occurrence voit tout son groupe (elle-même incluse), jamais seulement "les autres".
+  assert.deepEqual(indicesDoublonInterne(0, doublons).sort(), [0, 1]);
+  assert.deepEqual(indicesDoublonInterne(1, doublons).sort(), [0, 1]);
+});
+
+test("import fichier de coûts — cas 5 : fichier de plusieurs recettes différentes -> seules les recettes réellement en conflit sont signalées", () => {
+  const fichier = [{ titre: "TARTE TATIN" }, { titre: "RATATOUILLE" }, { titre: "SAUCE BEARNAISE" }];
+  const doublons = detecterDoublonsInternes(fichier);
+  const recettesExistantes = [{ id: 9, nom: "Ratatouille", actif: true }];
+
+  assert.equal(aConflitDoublonImportCouts(0, "TARTE TATIN", doublons, recettesExistantes), false);
+  assert.equal(aConflitDoublonImportCouts(1, "RATATOUILLE", doublons, recettesExistantes), true);
+  assert.equal(aConflitDoublonImportCouts(2, "SAUCE BEARNAISE", doublons, recettesExistantes), false);
+});
+
+test("indicesDoublonInterne : tableau vide quand le titre n'apparaît qu'une fois", () => {
+  const doublons = detecterDoublonsInternes([{ titre: "TARTE TATIN" }, { titre: "RATATOUILLE" }]);
+  assert.deepEqual(indicesDoublonInterne(0, doublons), []);
 });

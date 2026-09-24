@@ -86,3 +86,31 @@ export function classifierRecetteImport(
   if (candidats.length === 1) return { type: "mise_a_jour", recette: candidats[0] };
   return { type: "ambiguite", candidats };
 }
+
+// Autres index d'un fichier importé partageant le même titre normalisé qu'`index` (voir
+// detecterDoublonsInternes) — inclut `index` lui-même dans le tableau retourné (une occurrence
+// fait partie de son propre groupe de doublons). Tableau vide si ce titre n'apparaît qu'une fois.
+export function indicesDoublonInterne(index: number, doublonsInternes: Map<string, number[]>): number[] {
+  for (const indices of doublonsInternes.values()) {
+    if (indices.includes(index)) return indices;
+  }
+  return [];
+}
+
+// Pour l'import d'un fichier de coûts (voir ImporterFichierCoutsModal.tsx) : signale un conflit à
+// faire trancher explicitement par l'utilisateur avant création, qu'il s'agisse d'une recette déjà
+// en base (CAS A/B/C) ou d'un titre répété dans le fichier lui-même (CAS D). Contrairement à
+// classifierRecetteImport (conçu pour l'import Excel sécurisé, qui propose une mise à jour), cet
+// import ne crée jamais que de nouvelles recettes : il n'y a donc rien à "classer", seulement à
+// bloquer ou laisser passer.
+export function aConflitDoublonImportCouts(
+  index: number,
+  titre: string,
+  doublonsInternes: Map<string, number[]>,
+  recettesExistantes: RecetteExistantePourCorrespondance[]
+): boolean {
+  return (
+    indicesDoublonInterne(index, doublonsInternes).length > 0 ||
+    trouverToutesCorrespondances(titre, recettesExistantes).length > 0
+  );
+}
