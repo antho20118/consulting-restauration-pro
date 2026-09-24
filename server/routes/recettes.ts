@@ -82,10 +82,12 @@ router.get("/:id/suggestions-economie", async (req: Request, res: Response) => {
   }
 });
 
-// Import d'une recette depuis un texte libre ou une photo (IA) : extrait nom, portions,
-// ingrédients et étapes. Ne crée rien en base ni ne rapproche les ingrédients des articles
-// existants (voir server/utils/importRecetteIA.ts) — c'est un brouillon que l'utilisateur complète
-// et valide dans le formulaire de recette habituel avant d'enregistrer.
+// Import d'une recette depuis un texte libre ou une photo (IA) : extrait, en une seule analyse
+// structurée, nom, catégorie/sous-catégorie détectées, portions, poids, ingrédients, étapes
+// classées préparation/cuisson/dressage/autre, matériel, notes et alertes. Ne crée rien en base ni
+// ne rapproche les ingrédients/matériel des articles existants (voir server/utils/importRecetteIA.ts)
+// — c'est une extraction que l'utilisateur revoit dans la prévisualisation globale puis valide dans
+// le formulaire de recette habituel avant d'enregistrer.
 router.post("/import-ia", async (req: Request, res: Response) => {
   try {
     const { texte, photoDataUrl } = req.body as { texte?: string; photoDataUrl?: string };
@@ -95,10 +97,19 @@ router.post("/import-ia", async (req: Request, res: Response) => {
       return;
     }
 
-    const unites = await prisma.unite.findMany({ where: { actif: true } });
+    // Mêmes listes, non filtrées sur actif, que celles proposées par le formulaire de recette
+    // (voir GET /categories-recette, /sous-categories-recette) : la catégorie détectée doit
+    // toujours pouvoir être choisie parmi les options réellement proposées à l'utilisateur.
+    const [unites, categories, sousCategories] = await Promise.all([
+      prisma.unite.findMany({ where: { actif: true } }),
+      prisma.categorieRecette.findMany(),
+      prisma.sousCategorieRecette.findMany(),
+    ]);
     const extraction = await extraireRecette(
       texte?.trim() ? { texte } : { photoDataUrl: photoDataUrl! },
-      unites.map((u) => u.symbole)
+      unites.map((u) => u.symbole),
+      categories.map((c) => c.nom),
+      sousCategories.map((sc) => sc.nom)
     );
 
     res.json(extraction);

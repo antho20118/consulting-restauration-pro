@@ -21,12 +21,14 @@ import {
 } from "../utils/quantiteAProduire";
 import { trouverUniteParDefaut } from "../utils/uniteParDefaut";
 import { calculerAllergenesAvecStatut, ligneIncomplete } from "../utils/validationLignes";
-import ImporterTechniquesModal from "./ImporterTechniquesModal";
+import ImporterRecetteModal from "./ImporterRecetteModal";
 import RechercheArticle from "./RechercheArticle";
 import type {
   ArticleRecette,
+  BrouillonRecette,
   EtapeRecetteInput,
   LigneRecetteInput,
+  PatchImportRecette,
   Recette,
   UniteRecette,
 } from "../types/recette";
@@ -42,16 +44,6 @@ type SousCategorieRecette = {
   parentId: number | null;
 };
 
-// Pré-remplissage optionnel utilisé uniquement à la création (ex. depuis l'import de recette par
-// IA) : contrairement à `recette`, sa présence ne déclenche jamais une modification (PUT) plutôt
-// qu'une création (POST) — voir enregistrer().
-type BrouillonRecette = {
-  nom?: string;
-  portions?: number;
-  lignes?: LigneRecetteInput[];
-  etapes?: EtapeRecetteInput[];
-};
-
 type Props = {
   recette: Recette | null;
   brouillon?: BrouillonRecette;
@@ -61,12 +53,18 @@ type Props = {
 
 export default function RecetteForm({ recette, brouillon, onClose, onSave }: Props) {
   const [nom, setNom] = useState(recette?.nom ?? brouillon?.nom ?? "");
-  const [categorieId, setCategorieId] = useState<number>(recette?.categorieId ?? 0);
-  const [sousCategorieId, setSousCategorieId] = useState<number>(recette?.sousCategorieId ?? 0);
+  const [categorieId, setCategorieId] = useState<number>(
+    recette?.categorieId ?? brouillon?.categorieId ?? 0
+  );
+  const [sousCategorieId, setSousCategorieId] = useState<number>(
+    recette?.sousCategorieId ?? brouillon?.sousCategorieId ?? 0
+  );
   const [portions, setPortions] = useState(recette?.portions ?? brouillon?.portions ?? 1);
-  const [poidsPortionG, setPoidsPortionG] = useState(recette?.poidsPortionG ?? 0);
+  const [poidsPortionG, setPoidsPortionG] = useState(
+    recette?.poidsPortionG ?? brouillon?.poidsPortionG ?? 0
+  );
   const [poidsAccompagnementG, setPoidsAccompagnementG] = useState(
-    recette?.poidsAccompagnementG ?? 0
+    recette?.poidsAccompagnementG ?? brouillon?.poidsAccompagnementG ?? 0
   );
   const [modeQuantite, setModeQuantite] = useState<"portions" | "poids">("portions");
   // Valeur brute du champ "poids total (kg)", indépendante de portions : liée directement à
@@ -77,7 +75,7 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
     recette?.poidsPortionG ? (recette.portions * recette.poidsPortionG) / 1000 : 0
   );
   const [prixVenteHT, setPrixVenteHT] = useState(recette?.prixVenteHT ?? 0);
-  const [instructions, setInstructions] = useState(recette?.instructions ?? "");
+  const [instructions, setInstructions] = useState(recette?.instructions ?? brouillon?.instructions ?? "");
   const [photo, setPhoto] = useState<string | null>(recette?.photo ?? null);
   const [lignes, setLignes] = useState<LigneRecetteInput[]>(
     recette?.lignes.map((ligne) => ({
@@ -105,7 +103,7 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
   const [sousCategories, setSousCategories] = useState<SousCategorieRecette[]>([]);
   const [articles, setArticles] = useState<ArticleRecette[]>([]);
   const [unites, setUnites] = useState<UniteRecette[]>([]);
-  const [importTechniquesOuvert, setImportTechniquesOuvert] = useState(false);
+  const [importOuvert, setImportOuvert] = useState(false);
   // Restreint la recherche d'ingrédient aux articles fournis par Super U par défaut (voir
   // filtreFournisseur.ts) ; mémorisé pour ne pas avoir à le redéfinir à chaque recette.
   const [filtrerSuperU, setFiltrerSuperU] = useState(filtrerSuperUActif);
@@ -214,6 +212,27 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
     setEtapes((precedent) =>
       precedent.map((etape, i) => (i === index ? { ...etape, ...changement } : etape))
     );
+  }
+
+  // Applique le résultat validé d'une prévisualisation d'import (voir
+  // PrevisualisationImportRecette.tsx) à ce formulaire déjà ouvert : chaque champ scalaire n'est
+  // présent dans le patch que si l'utilisateur a explicitement choisi de l'appliquer (aucun
+  // écrasement silencieux), les ingrédients/matériel/étapes retenus sont toujours ajoutés à ceux
+  // déjà présents, jamais substitués.
+  function appliquerImport(patch: PatchImportRecette) {
+    if (patch.nom !== undefined) setNom(patch.nom);
+    if (patch.categorieId !== undefined) setCategorieId(patch.categorieId ?? 0);
+    if (patch.sousCategorieId !== undefined) setSousCategorieId(patch.sousCategorieId ?? 0);
+    if (patch.portions !== undefined) setPortions(patch.portions);
+    if (patch.poidsPortionG !== undefined) changerPoidsPortionG(patch.poidsPortionG);
+    if (patch.poidsAccompagnementG !== undefined) setPoidsAccompagnementG(patch.poidsAccompagnementG);
+    if (patch.lignesAjoutees?.length) setLignes((precedent) => [...precedent, ...patch.lignesAjoutees!]);
+    if (patch.etapesAjoutees?.length) setEtapes((precedent) => [...precedent, ...patch.etapesAjoutees!]);
+    if (patch.instructionsAjoutees) {
+      setInstructions((precedent) =>
+        precedent ? `${precedent}\n\n${patch.instructionsAjoutees}` : patch.instructionsAjoutees!
+      );
+    }
   }
 
   async function gererPhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -701,10 +720,10 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
 
       <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
         <button onClick={ajouterEtape}>+ Ajouter une étape</button>
-        <button onClick={() => setImportTechniquesOuvert(true)}>Importer des techniques</button>
+        <button onClick={() => setImportOuvert(true)}>Importer depuis une photo ou un texte</button>
       </div>
 
-      {importTechniquesOuvert && (
+      {importOuvert && (
         <div
           style={{
             position: "fixed",
@@ -718,9 +737,10 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
             zIndex: 20,
           }}
         >
-          <ImporterTechniquesModal
-            onClose={() => setImportTechniquesOuvert(false)}
-            onEtapesExtraites={(nouvelles) => setEtapes((precedent) => [...precedent, ...nouvelles])}
+          <ImporterRecetteModal
+            onClose={() => setImportOuvert(false)}
+            recetteActuelle={recette}
+            onComplete={appliquerImport}
           />
         </div>
       )}

@@ -12,7 +12,7 @@ import toast from "react-hot-toast";
 import { getRecettes, supprimerRecette, supprimerToutesLesRecettes } from "../services/recetteService";
 import { exporterExcel } from "../../../common/exportExcel";
 import { normaliserTexte } from "../utils/normaliserTexte";
-import type { LigneRecetteInput, Recette } from "../types/recette";
+import type { BrouillonRecette, Recette } from "../types/recette";
 
 type SousCategorieRecette = {
   id: number;
@@ -45,18 +45,11 @@ function ongletDeLaRecette(recette: Recette): CleOngletCategorie {
   return CLES_CATEGORIES_CONNUES.includes(nom) ? (nom as CleOngletCategorie) : "autres";
 }
 
-type BrouillonImport = {
-  nom?: string;
-  portions?: number;
-  lignes: LigneRecetteInput[];
-  etapes: { description: string; pointCritiqueHACCP: boolean; controleHACCP: string | null }[];
-};
-
 export default function RecettesPage() {
   const [recettes, setRecettes] = useState<Recette[]>([]);
   const [recetteEnEdition, setRecetteEnEdition] = useState<Recette | null>(null);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
-  const [brouillonImport, setBrouillonImport] = useState<BrouillonImport | undefined>(undefined);
+  const [brouillonImport, setBrouillonImport] = useState<BrouillonRecette | undefined>(undefined);
   const [importOuvert, setImportOuvert] = useState(false);
   const [importFichierCoutsOuvert, setImportFichierCoutsOuvert] = useState(false);
   const [importTechniquesFichierOuvert, setImportTechniquesFichierOuvert] = useState(false);
@@ -324,7 +317,7 @@ export default function RecettesPage() {
         >
           <ImporterRecetteModal
             onClose={() => setImportOuvert(false)}
-            onExtrait={(brouillon) => {
+            onCree={(brouillon) => {
               setImportOuvert(false);
               setRecetteEnEdition(null);
               setBrouillonImport(brouillon);

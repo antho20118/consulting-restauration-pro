@@ -196,6 +196,32 @@ export async function importerRecetteIA(
   return data;
 }
 
+export type CategorieRecetteOption = { id: number; nom: string };
+export type SousCategorieRecetteOption = { id: number; nom: string; parentId: number | null };
+
+// Utilisées par la prévisualisation d'import (voir PrevisualisationImportRecette.tsx) pour
+// résoudre la catégorie/sous-catégorie détectée par le texte en un id réel — mêmes endpoints que
+// ceux déjà appelés directement par RecetteForm.tsx et ImporterFichierCoutsModal.tsx.
+export async function getCategoriesRecette(): Promise<CategorieRecetteOption[]> {
+  const response = await apiFetch(`${API_URL}/categories-recette`);
+
+  if (!response.ok) {
+    throw new Error("Impossible de récupérer les catégories de recette");
+  }
+
+  return response.json();
+}
+
+export async function getSousCategoriesRecette(): Promise<SousCategorieRecetteOption[]> {
+  const response = await apiFetch(`${API_URL}/sous-categories-recette`);
+
+  if (!response.ok) {
+    throw new Error("Impossible de récupérer les sous-catégories de recette");
+  }
+
+  return response.json();
+}
+
 export async function getUnitesDisponibles(): Promise<UniteRecette[]> {
   const response = await apiFetch(`${API_URL}/unites`);
 

@@ -1,4 +1,11 @@
-import type { ArticleRecette, IngredientExtrait, LigneRecetteInput, UniteRecette } from "../types/recette";
+import type {
+  ArticleRecette,
+  IngredientExtrait,
+  LigneRecetteInput,
+  MaterielExtrait,
+  MaterielImporteInput,
+  UniteRecette,
+} from "../types/recette";
 import { normaliserTexte as normaliser } from "./normaliserTexte";
 
 export function trouverArticle(
@@ -78,5 +85,46 @@ export function construireLigneImportee(
     // Conservé jusqu'à l'enregistrement de la recette pour mémoriser le choix de l'utilisateur
     // s'il corrige ou complète l'article (voir RecetteForm.tsx).
     texteIngredientImporte: ingredient.nomExtrait,
+  };
+}
+
+// Même logique que construireLigneImportee ci-dessus, pour le matériel détecté à l'import : jamais
+// de rapprochement avec un article alimentaire, même par erreur d'appelant — le filtre sur
+// TypeArticle.PETIT_MATERIEL est donc appliqué ici, pas délégué à qui appelle cette fonction (voir
+// la refonte de l'import photo/texte, règle « ne jamais transformer silencieusement un matériel
+// extrait en article alimentaire »).
+export function construireMaterielImporte(
+  materiel: MaterielExtrait,
+  articles: ArticleRecette[],
+  aliasParTexte: Map<string, number>
+): MaterielImporteInput {
+  const articlesMateriel = articles.filter((a) => a.type === "PETIT_MATERIEL");
+  const article = trouverArticle(materiel.nomExtrait, articlesMateriel, aliasParTexte);
+  return {
+    articleId: article?.id ?? 0,
+    articleConfirme: article == null,
+    confiance: materiel.confiance,
+    texteMaterielImporte: materiel.nomExtrait,
+  };
+}
+
+// Convertit un matériel rapproché en ligne de recette ordinaire (RecetteLigne) : TypeArticle.
+// PETIT_MATERIEL passe déjà par ce même mécanisme pour tout le reste de l'application (coût,
+// affichage...) — voir l'audit qui a motivé ce choix plutôt que d'inventer un stockage dédié.
+// Quantité/unité ne sont jamais devinées depuis le document (le matériel n'est généralement pas
+// quantifié dans une recette) : 1 pièce par défaut, à ajuster ou ignorer par l'utilisateur comme
+// n'importe quelle ligne fraîchement ajoutée.
+export function materielVersLigne(
+  materielImporte: MaterielImporteInput,
+  unites: UniteRecette[]
+): LigneRecetteInput {
+  const unitePiece = unites.find((u) => normaliser(u.symbole) === normaliser("pièce"));
+  return {
+    articleId: materielImporte.articleId,
+    articleConfirme: materielImporte.articleConfirme,
+    quantite: materielImporte.articleId ? 1 : 0,
+    uniteId: unitePiece?.id ?? 0,
+    gainCuissonPct: 0,
+    texteIngredientImporte: materielImporte.texteMaterielImporte,
   };
 }
