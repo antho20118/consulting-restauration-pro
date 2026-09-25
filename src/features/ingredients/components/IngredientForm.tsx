@@ -49,9 +49,9 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
     ingredient?.allergenes.map((a) => a.allergene.id) ?? []
   );
 
-  // Articles actifs déjà en base, chargés uniquement en création (jamais en modification, voir
-  // correspondances ci-dessous) : sert uniquement à repérer un doublon potentiel avant
-  // d'enregistrer — le renommage d'un article existant reste hors périmètre de ce correctif.
+  // Articles actifs déjà en base (l'article en cours de modification, s'il y en a un, en est
+  // toujours exclu ci-dessous) : sert à repérer un doublon potentiel avant d'enregistrer, en
+  // création comme en modification (voir correspondances ci-dessous).
   const [articlesExistants, setArticlesExistants] = useState<ArticleExistantPourCorrespondance[]>(
     []
   );
@@ -79,28 +79,37 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
 
     getAllergenes().then(setAllergenes);
 
-    // Uniquement en création : modifier un article existant ne crée jamais de doublon par
-    // lui-même (voir le commentaire d'articlesExistants ci-dessus).
-    if (!ingredient) {
-      // getIngredients() ne renvoie que les articles actifs (voir GET /articles) : un article
-      // inactif du même nom ne bloque donc jamais une nouvelle création, par construction — en
-      // plus du filtre actif déjà appliqué dans trouverArticlesCorrespondants lui-même.
-      getIngredients().then((data) =>
-        setArticlesExistants(
-          data.map((a) => ({ id: a.id, nom: a.nom, reference: a.reference ?? null, actif: true }))
-        )
-      );
-    }
+    // getIngredients() ne renvoie que les articles actifs (voir GET /articles) : un article
+    // inactif du même nom/référence ne bloque donc jamais un enregistrement, par construction — en
+    // plus du filtre actif déjà appliqué dans trouverArticlesCorrespondants lui-même. L'article en
+    // cours de modification, s'il y en a un, est systématiquement exclu : il ne doit jamais être
+    // détecté comme un doublon de lui-même.
+    getIngredients().then((data) =>
+      setArticlesExistants(
+        data
+          .filter((a) => !ingredient || a.id !== ingredient.id)
+          .map((a) => ({ id: a.id, nom: a.nom, reference: a.reference ?? null, actif: true }))
+      )
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Articles déjà en base correspondant au nom/à la référence en cours de saisie (voir
-  // trouverArticlesCorrespondants, correspondanceArticle.ts) — jamais calculé en modification,
-  // pour ne jamais bloquer l'enregistrement d'un article existant sur son propre nom.
-  const correspondances = useMemo(
-    () => (ingredient ? [] : trouverArticlesCorrespondants(nom, reference, articlesExistants)),
-    [ingredient, nom, reference, articlesExistants]
-  );
+  // En création : détection large (nom OU référence), voir trouverArticlesCorrespondants. En
+  // modification : le serveur (PUT /articles/:id) ne protège que la référence, jamais le nom — la
+  // détection ici est donc volontairement restreinte à une correspondance de référence exacte
+  // (trim + insensible à la casse, même règle que trouverArticlesCorrespondants), pour ne jamais
+  // bloquer l'enregistrement d'un article existant sur son propre nom ni introduire une détection
+  // par nom que le serveur ne vérifie pas en modification.
+  const correspondances = useMemo(() => {
+    if (!ingredient) return trouverArticlesCorrespondants(nom, reference, articlesExistants);
+
+    const referenceTrimModif = reference.trim().toLowerCase();
+    if (!referenceTrimModif) return [];
+    const correspondance = articlesExistants.find(
+      (a) => a.reference && a.reference.trim().toLowerCase() === referenceTrimModif
+    );
+    return correspondance ? [correspondance] : [];
+  }, [ingredient, nom, reference, articlesExistants]);
   const confirmationDoublon = coupleConfirmeDoublon === `${nom}\u0000${reference}`;
 
   // Parmi les correspondances détectées, celle qui l'est PAR RÉFÉRENCE (et non seulement par nom) :
@@ -143,7 +152,10 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
 
     try {
       if (ingredient) {
-        await modifierIngredient(ingredient.id, payload);
+        await modifierIngredient(ingredient.id, {
+          ...payload,
+          confirmationArticleId: correspondanceParReference?.id,
+        });
       } else {
         await creerIngredient({
           ...payload,
