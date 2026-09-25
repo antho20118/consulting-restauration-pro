@@ -107,6 +107,36 @@ router.post("/", async (req: Request, res: Response) => {
     const { nom, type, rendement, prixHT } = analyse.data;
     const { reference, categorieId, tvaId, societeId, uniteId, fournisseurNom, stockInitial, allergeneIds } =
       req.body;
+    const confirmationArticleId = req.body.confirmationArticleId;
+
+    // Une référence déjà utilisée par un autre article actif ne doit jamais créer un doublon
+    // silencieusement (voir caractérisation dédiée) : recherche recalculée à CET instant précis
+    // (jamais une liste transmise par le client), comparée comme côté client
+    // (correspondanceArticle.ts::trouverArticlesCorrespondants : trim + insensible à la casse), pour
+    // que la confirmation envoyée par l'utilisateur porte bien sur ce que le serveur détecte
+    // réellement. Sans confirmation explicitement liée à l'UN de ces articles précis (jamais un
+    // simple booléen), la création est refusée — un ID confirmé qui ne correspond plus à aucun
+    // doublon recalculé (article désactivé entretemps, ou référence reprise par un autre article
+    // entre la prévisualisation et cet appel) est refusé de la même façon, sans logique dédiée
+    // supplémentaire.
+    const referenceTrim = typeof reference === "string" ? reference.trim() : "";
+    if (referenceTrim) {
+      const candidatsMemeReference = await prisma.article.findMany({
+        where: { actif: true, reference: { not: null } },
+        select: { id: true, nom: true, reference: true },
+      });
+      const doublons = candidatsMemeReference.filter(
+        (a) => a.reference && a.reference.trim().toLowerCase() === referenceTrim.toLowerCase()
+      );
+
+      if (doublons.length > 0 && !doublons.some((d) => d.id === confirmationArticleId)) {
+        res.status(409).json({
+          error: "Un article actif utilise déjà cette référence",
+          doublons: doublons.map((d) => ({ id: d.id, nom: d.nom, reference: d.reference })),
+        });
+        return;
+      }
+    }
 
     const article = await prisma.$transaction(async (tx) => {
       const created = await tx.article.create({

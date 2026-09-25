@@ -11,6 +11,11 @@ export type IngredientInput = {
   prixHT: number;
   stockInitial: number;
   allergeneIds: number[];
+  // Confirmation explicite qu'un doublon de référence détecté (voir correspondanceArticle.ts)
+  // doit bien créer un second article malgré tout — doit correspondre exactement à l'articleId de
+  // l'article-doublon réévalué par le serveur au moment de l'écriture (POST /articles), jamais un
+  // simple booléen. Absent tant qu'aucun doublon de référence n'a été confirmé.
+  confirmationArticleId?: number;
 };
 
 export async function getIngredients(): Promise<Ingredient[]> {
