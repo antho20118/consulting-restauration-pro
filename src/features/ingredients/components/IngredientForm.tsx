@@ -103,6 +103,15 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
   );
   const confirmationDoublon = coupleConfirmeDoublon === `${nom}\u0000${reference}`;
 
+  // Parmi les correspondances détectées, celle qui l'est PAR RÉFÉRENCE (et non seulement par nom) :
+  // seule celle-ci doit être transmise en confirmation au serveur, qui ne protège que la référence
+  // (voir POST /articles) — un doublon de nom seul reste une protection purement côté client, comme
+  // avant. Même comparaison (trim + insensible à la casse) que trouverArticlesCorrespondants.
+  const referenceTrim = reference.trim().toLowerCase();
+  const correspondanceParReference = referenceTrim
+    ? correspondances.find((c) => c.reference && c.reference.trim().toLowerCase() === referenceTrim)
+    : undefined;
+
   function basculerAllergene(id: number) {
     setAllergeneIds((precedent) =>
       precedent.includes(id) ? precedent.filter((a) => a !== id) : [...precedent, id]
@@ -136,7 +145,13 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
       if (ingredient) {
         await modifierIngredient(ingredient.id, payload);
       } else {
-        await creerIngredient({ ...payload, tvaId: 1, societeId: 1, type: "MATIERE_PREMIERE" });
+        await creerIngredient({
+          ...payload,
+          tvaId: 1,
+          societeId: 1,
+          type: "MATIERE_PREMIERE",
+          confirmationArticleId: correspondanceParReference?.id,
+        });
       }
 
       onSave();
