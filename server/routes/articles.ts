@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import { z } from "zod";
 
 import prisma from "../prisma.js";
 import {
@@ -9,6 +10,45 @@ import {
 } from "../utils/importListing.js";
 
 const router = Router();
+
+// Validation minimale de la création/modification manuelle d'un article (voir caractérisation
+// dédiée) : seuls les champs dont l'absence de contrôle a un effet réel démontré sont validés ici
+// — nom vide/trop long, prix négatif, rendement hors des bornes acceptées par le moteur de coût
+// (coutRecette.ts::rendementValide, mêmes bornes ]0, 1000]), type hors de l'enum Prisma. Les autres
+// champs (categorieId, tvaId, societeId, uniteId, référence, fournisseur…) restent volontairement
+// hors de ce lot, leur absence de contrôle n'ayant pas de conséquence différente de ce qui existe
+// déjà ailleurs dans ce routeur (contrainte de clé étrangère Postgres, déjà systématiquement
+// respectée). Même style que les schémas déjà en place ailleurs (voir server/routes/mouvements.ts).
+const champsArticle = {
+  nom: z
+    .string()
+    .trim()
+    .min(1, "La désignation est obligatoire")
+    .max(200, "La désignation est trop longue (200 caractères maximum)"),
+  type: z.enum([
+    "MATIERE_PREMIERE",
+    "SOUS_RECETTE",
+    "PRODUIT_FINI",
+    "EMBALLAGE",
+    "CONSOMMABLE",
+    "ENTRETIEN",
+    "PETIT_MATERIEL",
+  ]),
+  rendement: z
+    .number()
+    .finite()
+    .gt(0, "Le rendement doit être supérieur à 0")
+    .lte(1000, "Le rendement ne peut pas dépasser 1000 %")
+    .optional(),
+  prixHT: z.number().finite().min(0, "Le prix HT ne peut pas être négatif").optional(),
+};
+
+// Création : type obligatoire, comme aujourd'hui (toujours fourni par les appelants existants).
+const schemaCreationArticle = z.object(champsArticle);
+
+// Modification : type n'a jamais été pris en compte par PUT /:id (jamais dans data ci-dessous) et
+// ce correctif ne change pas ce comportement.
+const schemaModificationArticle = z.object(champsArticle).omit({ type: true });
 
 const inclusionsArticle = {
   categorie: true,
@@ -59,20 +99,14 @@ router.get("/", async (_req: Request, res: Response) => {
 
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const {
-      nom,
-      reference,
-      categorieId,
-      tvaId,
-      societeId,
-      rendement,
-      type,
-      uniteId,
-      fournisseurNom,
-      prixHT,
-      stockInitial,
-      allergeneIds,
-    } = req.body;
+    const analyse = schemaCreationArticle.safeParse(req.body);
+    if (!analyse.success) {
+      res.status(400).json({ error: "Article invalide", details: analyse.error.flatten() });
+      return;
+    }
+    const { nom, type, rendement, prixHT } = analyse.data;
+    const { reference, categorieId, tvaId, societeId, uniteId, fournisseurNom, stockInitial, allergeneIds } =
+      req.body;
 
     const article = await prisma.$transaction(async (tx) => {
       const created = await tx.article.create({
@@ -134,11 +168,8 @@ router.post("/", async (req: Request, res: Response) => {
 
     res.status(201).json(article);
   } catch (error) {
-    console.error("========== ERREUR PRISMA ==========");
     console.error(error);
-    console.error("===================================");
-
-    res.status(500).json(error);
+    res.status(500).json({ error: "Impossible de créer l'article" });
   }
 });
 
@@ -149,17 +180,13 @@ router.put("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
-    const {
-      nom,
-      reference,
-      categorieId,
-      rendement,
-      uniteId,
-      fournisseurNom,
-      prixHT,
-      stockInitial,
-      allergeneIds,
-    } = req.body;
+    const analyse = schemaModificationArticle.safeParse(req.body);
+    if (!analyse.success) {
+      res.status(400).json({ error: "Article invalide", details: analyse.error.flatten() });
+      return;
+    }
+    const { nom, rendement, prixHT } = analyse.data;
+    const { reference, categorieId, uniteId, fournisseurNom, stockInitial, allergeneIds } = req.body;
 
     const article = await prisma.$transaction(async (tx) => {
       const existant = await tx.article.findUniqueOrThrow({ where: { id } });
