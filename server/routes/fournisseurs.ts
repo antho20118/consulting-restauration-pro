@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import prisma from "../prisma.js";
+import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 
 const router = Router();
 
@@ -35,8 +36,7 @@ router.post("/", async (req, res) => {
 
     res.status(201).json(fournisseur);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Impossible de créer le fournisseur" });
+    repondreErreurEcriture(error, res, "Impossible de créer le fournisseur");
   }
 });
 

@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 
 import prisma from "../prisma.js";
 import { calculerCoutMenu, calculerCoutsMenusSansErreur, inclusionsMenu } from "../utils/coutMenu.js";
+import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 
 const router = Router();
 
@@ -76,8 +77,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     res.status(201).json(calculerCoutMenu(menu));
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Impossible de créer le menu" });
+    repondreErreurEcriture(error, res, "Impossible de créer le menu");
   }
 });
 
@@ -118,8 +118,7 @@ router.put("/:id", async (req: Request, res: Response) => {
 
     res.json(calculerCoutMenu(menu));
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Impossible de mettre à jour le menu" });
+    repondreErreurEcriture(error, res, "Impossible de mettre à jour le menu");
   }
 });
 

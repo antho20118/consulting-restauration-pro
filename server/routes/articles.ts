@@ -8,6 +8,7 @@ import {
   type CandidatExistant,
   type ContexteAnalyseLigne,
 } from "../utils/importListing.js";
+import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 
 const router = Router();
 
@@ -204,8 +205,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     res.status(201).json(article);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Impossible de créer l'article" });
+    repondreErreurEcriture(error, res, "Impossible de créer l'article");
   }
 });
 
@@ -332,8 +332,7 @@ router.put("/:id", async (req: Request, res: Response) => {
 
     res.json(article);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Impossible de modifier l'article" });
+    repondreErreurEcriture(error, res, "Impossible de modifier l'article");
   }
 });
 
