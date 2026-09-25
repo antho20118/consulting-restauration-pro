@@ -41,6 +41,12 @@ const champsArticle = {
     .lte(1000, "Le rendement ne peut pas dépasser 1000 %")
     .optional(),
   prixHT: z.number().finite().min(0, "Le prix HT ne peut pas être négatif").optional(),
+  stockInitial: z
+    .number()
+    .finite()
+    .min(0, "Le stock initial ne peut pas être négatif")
+    .nullable()
+    .optional(),
 };
 
 // Création : type obligatoire, comme aujourd'hui (toujours fourni par les appelants existants).
@@ -104,8 +110,8 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Article invalide", details: analyse.error.flatten() });
       return;
     }
-    const { nom, type, rendement, prixHT } = analyse.data;
-    const { reference, categorieId, tvaId, societeId, uniteId, fournisseurNom, stockInitial, allergeneIds } =
+    const { nom, type, rendement, prixHT, stockInitial } = analyse.data;
+    const { reference, categorieId, tvaId, societeId, uniteId, fournisseurNom, allergeneIds } =
       req.body;
     const confirmationArticleId = req.body.confirmationArticleId;
 
@@ -215,8 +221,44 @@ router.put("/:id", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Article invalide", details: analyse.error.flatten() });
       return;
     }
-    const { nom, rendement, prixHT } = analyse.data;
-    const { reference, categorieId, uniteId, fournisseurNom, stockInitial, allergeneIds } = req.body;
+    const { nom, rendement, prixHT, stockInitial } = analyse.data;
+    const { reference, categorieId, uniteId, fournisseurNom, allergeneIds } = req.body;
+    const confirmationArticleId = req.body.confirmationArticleId;
+
+    // Même protection contre un doublon de référence que POST /articles (voir plus haut) : une
+    // modification de référence ne doit pas non plus pouvoir créer silencieusement un doublon actif.
+    // Si la référence saisie est la même que la référence déjà en base pour CET article (aucun
+    // changement réel), aucune vérification n'est nécessaire — comme aujourd'hui. L'article modifié
+    // est explicitement exclu de la recherche de doublons (id: { not: id }).
+    const referenceTrim = typeof reference === "string" ? reference.trim() : "";
+    if (referenceTrim) {
+      const articleActuel = await prisma.article.findUnique({
+        where: { id },
+        select: { reference: true },
+      });
+      const referenceActuelle = articleActuel?.reference ?? null;
+      const referenceInchangee =
+        referenceActuelle !== null &&
+        referenceActuelle.trim().toLowerCase() === referenceTrim.toLowerCase();
+
+      if (!referenceInchangee) {
+        const candidatsMemeReference = await prisma.article.findMany({
+          where: { actif: true, reference: { not: null }, id: { not: id } },
+          select: { id: true, nom: true, reference: true },
+        });
+        const doublons = candidatsMemeReference.filter(
+          (a) => a.reference && a.reference.trim().toLowerCase() === referenceTrim.toLowerCase()
+        );
+
+        if (doublons.length > 0 && !doublons.some((d) => d.id === confirmationArticleId)) {
+          res.status(409).json({
+            error: "Un article actif utilise déjà cette référence",
+            doublons: doublons.map((d) => ({ id: d.id, nom: d.nom, reference: d.reference })),
+          });
+          return;
+        }
+      }
+    }
 
     const article = await prisma.$transaction(async (tx) => {
       const existant = await tx.article.findUniqueOrThrow({ where: { id } });
