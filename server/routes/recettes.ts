@@ -6,6 +6,7 @@ import prisma from "../prisma.js";
 import { calculerCoutRecette, calculerCoutsRecettesSansErreur, inclusionsRecette } from "../utils/coutRecette.js";
 import { suggestionsEconomieRecette } from "../utils/suggestionsEconomie.js";
 import { extraireRecette, ImportIANonConfigureError } from "../utils/importRecetteIA.js";
+import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 
 const router = Router();
 
@@ -398,8 +399,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     res.status(201).json(recette);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Impossible de créer la recette" });
+    repondreErreurEcriture(error, res, "Impossible de créer la recette");
   }
 });
 
@@ -494,8 +494,7 @@ router.put("/:id", async (req: Request, res: Response) => {
 
     res.json(recette);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Impossible de mettre à jour la recette" });
+    repondreErreurEcriture(error, res, "Impossible de mettre à jour la recette");
   }
 });
 

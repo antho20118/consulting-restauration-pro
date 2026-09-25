@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import prisma from "../prisma.js";
+import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 
 const router = Router();
 
@@ -29,8 +30,7 @@ router.post("/", async (req, res) => {
 
     res.status(201).json(sousCategorie);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Impossible de créer la sous-catégorie de recette" });
+    repondreErreurEcriture(error, res, "Impossible de créer la sous-catégorie de recette");
   }
 });
 
@@ -47,8 +47,7 @@ router.put("/:id", async (req, res) => {
 
     res.json(sousCategorie);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Impossible de modifier la sous-catégorie de recette" });
+    repondreErreurEcriture(error, res, "Impossible de modifier la sous-catégorie de recette");
   }
 });
 

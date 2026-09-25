@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 
 import prisma from "../prisma.js";
 import { normaliserTexte } from "../utils/normaliserTexte.js";
+import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 
 const router = Router();
 
@@ -52,8 +53,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     res.status(204).send();
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Impossible d'enregistrer les correspondances d'ingrédients" });
+    repondreErreurEcriture(error, res, "Impossible d'enregistrer les correspondances d'ingrédients");
   }
 });
 
