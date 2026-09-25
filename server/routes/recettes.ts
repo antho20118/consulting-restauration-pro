@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import { z } from "zod";
 
 import prisma from "../prisma.js";
 import { calculerCoutRecette, calculerCoutsRecettesSansErreur, inclusionsRecette } from "../utils/coutRecette.js";
@@ -7,6 +8,40 @@ import { suggestionsEconomieRecette } from "../utils/suggestionsEconomie.js";
 import { extraireRecette, ImportIANonConfigureError } from "../utils/importRecetteIA.js";
 
 const router = Router();
+
+// Validation minimale de la création/modification d'une recette (voir caractérisation dédiée) :
+// seuls les champs dont l'absence de contrôle a un effet réel démontré sont validés ici — nom
+// vide/trop long, prixVenteHT négatif (corrompt margeHT/foodCostPct, consommés par
+// server/routes/consulting.ts et server/routes/dashboard.ts). Les autres champs (categorieId,
+// sousCategorieId, societeId, portions, poidsPortionG, lignes vides, articleId/quantite/uniteId de
+// ligne) restent volontairement hors de ce lot : portions et ligne.quantite sont déjà protégés par
+// calculerCoutRecette/versUniteBase (transaction intégralement annulée en cas d'invalidité), les
+// FK par Postgres, et aucun impact aval dangereux n'a été démontré pour poidsPortionG ni pour une
+// recette sans ingrédient. Même style que les schémas déjà en place ailleurs (voir
+// server/routes/articles.ts). POST et PUT partagent exactement le même sous-ensemble de champs
+// validés ici (contrairement à articles.ts, où `type` diffère entre création et modification).
+const champsRecette = {
+  nom: z
+    .string()
+    .trim()
+    .min(1, "Le nom est obligatoire")
+    .max(200, "Le nom est trop long (200 caractères maximum)"),
+  prixVenteHT: z.number().finite().min(0, "Le prix de vente HT ne peut pas être négatif").nullable().optional(),
+};
+const schemaRecette = z.object(champsRecette);
+
+// gainCuissonPct représente un GAIN de poids à la cuisson (eau/sauce absorbée par l'ingrédient),
+// jamais une perte : la perte est déjà intégralement portée par Article.rendement (voir le
+// commentaire du champ RecetteLigne.gainCuissonPct dans prisma/schema.prisma). Une valeur négative
+// n'a donc pas de sens métier et peut produire un poidsFiniTotalG négatif, persisté tel quel (voir
+// coutRecette.ts::calculerCoutRecette). Aucune borne supérieure n'est en revanche déductible du
+// modèle actuel : un gain de poids à la cuisson peut légitimement dépasser 100 % pour certains
+// ingrédients (riz, légumineuses...) — volontairement non bornée au-delà de .finite().
+const schemaGainCuissonPct = z
+  .number()
+  .finite()
+  .min(0, "Le gain à la cuisson ne peut pas être négatif")
+  .optional();
 
 // Liste des recettes
 router.get("/", async (_req: Request, res: Response) => {
@@ -274,13 +309,17 @@ router.post("/import-excel", async (req: Request, res: Response) => {
 // Création d'une recette
 router.post("/", async (req: Request, res: Response) => {
   try {
+    const analyse = schemaRecette.safeParse(req.body);
+    if (!analyse.success) {
+      res.status(400).json({ error: "Recette invalide", details: analyse.error.flatten() });
+      return;
+    }
+    const { nom, prixVenteHT } = analyse.data;
     const {
-      nom,
       categorieId,
       sousCategorieId,
       societeId,
       portions,
-      prixVenteHT,
       instructions,
       photo,
       poidsPortionG,
@@ -288,12 +327,10 @@ router.post("/", async (req: Request, res: Response) => {
       lignes,
       etapes,
     } = req.body as {
-      nom: string;
       categorieId?: number | null;
       sousCategorieId?: number | null;
       societeId: number;
       portions?: number;
-      prixVenteHT?: number | null;
       instructions?: string | null;
       photo?: string | null;
       poidsPortionG?: number | null;
@@ -301,6 +338,19 @@ router.post("/", async (req: Request, res: Response) => {
       lignes: { articleId: number; quantite: number; uniteId: number; gainCuissonPct?: number }[];
       etapes?: { description: string; pointCritiqueHACCP: boolean; controleHACCP: string | null }[];
     };
+
+    // Chaque gainCuissonPct de ligne est validé indépendamment de la structure lignes elle-même
+    // (articleId/quantite/uniteId restent hors périmètre de cette validation, voir caractérisation
+    // dédiée et le commentaire de schemaGainCuissonPct plus haut).
+    if (Array.isArray(lignes)) {
+      for (const ligne of lignes) {
+        const analyseLigne = schemaGainCuissonPct.safeParse(ligne?.gainCuissonPct);
+        if (!analyseLigne.success) {
+          res.status(400).json({ error: "Recette invalide", details: analyseLigne.error.flatten() });
+          return;
+        }
+      }
+    }
 
     // calculerCoutRecette valide au passage les données de la recette (portions > 0, rendement de
     // chaque article, etc.) et lève une exception sinon — elle doit donc être appelée DANS la même
@@ -358,12 +408,16 @@ router.put("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
+    const analyse = schemaRecette.safeParse(req.body);
+    if (!analyse.success) {
+      res.status(400).json({ error: "Recette invalide", details: analyse.error.flatten() });
+      return;
+    }
+    const { nom, prixVenteHT } = analyse.data;
     const {
-      nom,
       categorieId,
       sousCategorieId,
       portions,
-      prixVenteHT,
       instructions,
       photo,
       poidsPortionG,
@@ -371,11 +425,9 @@ router.put("/:id", async (req: Request, res: Response) => {
       lignes,
       etapes,
     } = req.body as {
-      nom: string;
       categorieId?: number | null;
       sousCategorieId?: number | null;
       portions?: number;
-      prixVenteHT?: number | null;
       instructions?: string | null;
       photo?: string | null;
       poidsPortionG?: number | null;
@@ -383,6 +435,18 @@ router.put("/:id", async (req: Request, res: Response) => {
       lignes: { articleId: number; quantite: number; uniteId: number; gainCuissonPct?: number }[];
       etapes?: { description: string; pointCritiqueHACCP: boolean; controleHACCP: string | null }[];
     };
+
+    // Chaque gainCuissonPct de ligne est validé indépendamment (voir POST /recettes ci-dessus pour
+    // la justification détaillée).
+    if (Array.isArray(lignes)) {
+      for (const ligne of lignes) {
+        const analyseLigne = schemaGainCuissonPct.safeParse(ligne?.gainCuissonPct);
+        if (!analyseLigne.success) {
+          res.status(400).json({ error: "Recette invalide", details: analyseLigne.error.flatten() });
+          return;
+        }
+      }
+    }
 
     // calculerCoutRecette (qui valide au passage portions > 0, le rendement de chaque article,
     // etc.) doit être appelée DANS cette même transaction, pour que Prisma annule aussi le
