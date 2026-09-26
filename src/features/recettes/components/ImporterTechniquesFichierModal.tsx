@@ -509,7 +509,10 @@ export default function ImporterTechniquesFichierModal({ onClose, onImporte }: P
           >
             <Camera size={22} />
             {photoDataUrl ? "Changer la photo" : "Prendre ou choisir une photo de la fiche technique"}
-            <input type="file" accept="image/*" capture="environment" hidden onChange={choisirPhoto} />
+            {/* Pas d'attribut capture : sur mobile, il forcerait l'ouverture directe de l'appareil
+                photo et empêcherait de choisir une photo déjà prise dans la galerie — contraire au
+                texte affiché ci-dessus, qui promet bien les deux. */}
+            <input type="file" accept="image/*" hidden onChange={choisirPhoto} />
           </label>
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
