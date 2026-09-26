@@ -175,6 +175,36 @@ test("analyseRecetteLocale : mélange d'étapes numérotées et non numérotées
 
 // Une fiche technique française contient presque toujours des caractères accentués (ingrédients,
 // techniques, HACCP) : jamais tronqués ni corrompus par l'analyse par règles.
+// Chantier « import photo : rendu professionnel » — corrige le défaut démontré : une ligne à
+// ingrédients multiples séparés par une virgule ne devient plus un seul ingrédient au nom-phrase
+// contenant une seconde quantité résiduelle, mais un ingrédient par segment quantifié.
+test("analyseRecetteLocale : ligne à ingrédients multiples (virgule) séparée en autant d'ingrédients", () => {
+  const extraction = analyseRecetteLocale("Nom\n2 œufs, 100 g de sucre");
+  assert.equal(extraction.ingredients.length, 2);
+  assert.equal(extraction.ingredients[0].quantite, 2);
+  assert.equal(extraction.ingredients[0].nomExtrait, "œufs");
+  assert.equal(extraction.ingredients[1].quantite, 100);
+  assert.equal(extraction.ingredients[1].unite, "g");
+  assert.equal(extraction.ingredients[1].nomExtrait, "sucre");
+});
+
+test("analyseRecetteLocale : une virgule à l'intérieur d'un seul ingrédient n'est jamais découpée à tort", () => {
+  // Un seul segment est quantifié ("500 g de farine") : la ligne reste un ingrédient unique, pas
+  // deux — jamais de découpage deviné sur un segment non quantifié ("tamisée").
+  const extraction = analyseRecetteLocale("Nom\n500 g de farine, tamisée");
+  assert.equal(extraction.ingredients.length, 1);
+  assert.equal(extraction.ingredients[0].nomExtrait, "farine, tamisée");
+});
+
+test("analyseRecetteLocale : en-tête décoratif (tirets) ignoré, ne devient ni ingrédient ni étape parasite", () => {
+  const extraction = analyseRecetteLocale(
+    ["Nom", "— Ingrédients —", "500 g de farine", "--- Préparation ---", "1. Mélanger"].join("\n")
+  );
+  assert.equal(extraction.ingredients.length, 1);
+  assert.equal(extraction.etapes.length, 1);
+  assert.equal(extraction.etapes[0].description, "Mélanger");
+});
+
 test("analyseRecetteLocale : caractères accentués préservés fidèlement (nom, ingrédient, étape)", () => {
   const texte = [
     "Crème brûlée à l'ancienne",

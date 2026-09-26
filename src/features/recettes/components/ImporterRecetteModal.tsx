@@ -14,6 +14,7 @@ import {
 import { analyseRecetteLocale } from "../utils/analyseRecetteLocale";
 import { estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
 import { construireLigneImportee, construireMaterielImporte, materielVersLigne } from "../utils/ligneImportee";
+import { normaliserExtraction } from "../utils/normaliserExtraction";
 import { extraireTexteDePhoto } from "../utils/ocrPhoto";
 import PrevisualisationImportRecette from "./PrevisualisationImportRecette";
 import type {
@@ -112,6 +113,11 @@ export default function ImporterRecetteModal({ onClose, recetteActuelle, onCree,
         );
         extractionRecue = analyseRecetteLocale(await obtenirTexteSource(source));
       }
+
+      // Couche déterministe commune aux deux moteurs (voir normaliserExtraction.ts) : ne réinterprète
+      // jamais le sens d'une donnée, corrige uniquement des défauts de forme (ponctuation résiduelle,
+      // doublons, numérotation des étapes).
+      extractionRecue = normaliserExtraction(extractionRecue);
 
       if (
         extractionRecue.ingredients.length === 0 &&

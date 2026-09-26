@@ -213,8 +213,52 @@ function extraireEtape(ligne: string, ordre: number): ExtractionRecette["etapes"
   };
 }
 
+// Retire aussi une ponctuation décorative de mise en page (tirets, puces) en tête et fin de ligne
+// avant de comparer à MOTS_ENTETE : un en-tête comme « — Ingrédients — » ne doit pas être manqué
+// simplement parce que la comparaison reste, par ailleurs, toujours exacte (aucune approximation
+// floue introduite ici, seule la ponctuation environnante est ignorée).
 function normaliserLigne(ligne: string): string {
-  return ligne.toLowerCase().replace(/[:：]\s*$/, "").trim();
+  return ligne
+    .toLowerCase()
+    .replace(/^[\s\-–—•*·:：]+/, "")
+    .replace(/[\s\-–—•*·:：]+$/, "")
+    .trim();
+}
+
+// Reconnaît un unique segment "quantité [unité] nom" (même règle que la ligne entière ci-dessous),
+// réutilisé tel quel pour une ligne à ingrédients multiples séparés par des virgules — voir
+// analyserSegmentsIngredients. Retourne null si le segment ne commence pas lui-même par une
+// quantité chiffrée : jamais de découpage partiel ou deviné.
+function analyserSegmentIngredient(segment: string): ExtractionRecette["ingredients"][number] | null {
+  const correspondance = RE_INGREDIENT.exec(segment);
+  if (!correspondance) return null;
+  const quantite = normaliserNombre(correspondance[1]);
+  const uniteBrute = correspondance[2]?.toLowerCase().trim() ?? "";
+  const unite = UNITES_CONNUES.find((u) => uniteBrute === u) ?? null;
+  const nomExtrait = (
+    unite ? correspondance[3] : `${correspondance[2] ?? ""} ${correspondance[3]}`
+  ).trim();
+  if (!nomExtrait) return null;
+  return { texteOriginal: segment, nomExtrait, quantite, unite, precision: null, confiance: "faible" };
+}
+
+// Une ligne peut lister plusieurs ingrédients séparés par une virgule (ex. « 2 œufs, 100 g de
+// sucre ») : chacun n'est reconnu séparément que si TOUS les segments de la ligne sont eux-mêmes
+// des ingrédients quantifiés valides — sinon la ligne est laissée intacte à l'appelant (jamais de
+// découpage partiel sur un cas ambigu, ex. une simple virgule dans un nom composé).
+function analyserSegmentsIngredients(ligne: string): ExtractionRecette["ingredients"] | null {
+  const segments = ligne
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (segments.length <= 1) return null;
+  const ingredients: ExtractionRecette["ingredients"] = [];
+  for (const segment of segments) {
+    const ingredient = analyserSegmentIngredient(segment);
+    if (!ingredient) return null;
+    ingredients.push(ingredient);
+  }
+  return ingredients;
 }
 
 function normaliserNombre(brut: string): number | null {
@@ -253,6 +297,12 @@ export function analyseRecetteLocale(texteBrut: string): ExtractionRecette {
     const matchEtape = RE_ETAPE_NUMEROTEE.exec(ligne);
     if (matchEtape) {
       etapes.push(extraireEtape(matchEtape[2].trim(), etapes.length + 1));
+      continue;
+    }
+
+    const ingredientsSegmentes = analyserSegmentsIngredients(ligne);
+    if (ingredientsSegmentes) {
+      ingredients.push(...ingredientsSegmentes);
       continue;
     }
 
