@@ -150,10 +150,11 @@ test("Import photo → technique : parcours utilisateur réel de bout en bout", 
   await expect(page.locator("text=Émincer les oignons")).toBeVisible();
 
   // 6. Suppression d'une étape non désirée : décocher "Ajouter le fond et cuire 45 minutes". Le
-  // paragraphe de description est unique par étape (voir PrevisualisationImportRecette.tsx) ; on
-  // remonte à son ancêtre direct portant la case à cocher, pour éviter tout div englobant ambigu.
-  const paragrapheEtape = page.locator("p", { hasText: "Ajouter le fond et cuire 45 minutes" });
-  const ligneEtapeADecocher = paragrapheEtape.locator("xpath=ancestor::div[input[@type='checkbox']][1]");
+  // texte de description est désormais modifiable (textarea, voir PrevisualisationImportRecette.tsx)
+  // et unique par étape ; on remonte à son ancêtre direct portant la case à cocher, pour éviter tout
+  // div englobant ambigu.
+  const zoneTexteEtapeADecocher = page.locator("textarea", { hasText: "Ajouter le fond et cuire 45 minutes" });
+  const ligneEtapeADecocher = zoneTexteEtapeADecocher.locator("xpath=ancestor::div[input[@type='checkbox']][1]");
   await ligneEtapeADecocher.locator('input[type="checkbox"]').uncheck();
 
   // 7. Valider la prévisualisation.

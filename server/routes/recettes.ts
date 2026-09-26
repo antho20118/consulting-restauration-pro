@@ -175,7 +175,7 @@ router.post("/import-ia", async (req: Request, res: Response) => {
         return;
       }
       if (tailleDecodeeBase64Octets(correspondance[1]) > TAILLE_MAX_PHOTO_OCTETS) {
-        res.status(400).json({ error: "Photo trop volumineuse (8 Mo maximum)" });
+        res.status(400).json({ error: "Photo trop volumineuse (6 Mo maximum)" });
         return;
       }
     }

@@ -147,6 +147,12 @@ export default function PrevisualisationImportRecette({
   const [materielRetenu, setMaterielRetenu] = useState(() => extraction.materiel.map(() => true));
   const [lignesMaterielEditees, setLignesMaterielEditees] = useState(lignesMateriel);
   const [etapesRetenues, setEtapesRetenues] = useState(() => extraction.etapes.map(() => true));
+  // Texte de chaque étape, modifiable avant validation (voir la mission dédiée : l'analyse — IA ou
+  // OCR local — peut se tromper ou rester approximative, l'utilisateur doit pouvoir corriger sans
+  // relancer l'analyse) — initialisé depuis l'extraction, jamais réécrit automatiquement ensuite.
+  const [descriptionsEtapesEditees, setDescriptionsEtapesEditees] = useState(() =>
+    extraction.etapes.map((e) => e.description)
+  );
 
   function modifierLigneIngredient(index: number, changement: Partial<LigneRecetteInput>) {
     setLignesIngredientsEditees((precedent) =>
@@ -160,14 +166,22 @@ export default function PrevisualisationImportRecette({
     );
   }
 
+  function modifierDescriptionEtape(index: number, valeur: string) {
+    setDescriptionsEtapesEditees((precedent) => precedent.map((d, i) => (i === index ? valeur : d)));
+  }
+
   function valider() {
     const lignesRetenues = [
       ...lignesIngredientsEditees.filter((_l, i) => ingredientsRetenus[i]),
       ...lignesMaterielEditees.filter((_l, i) => materielRetenu[i]),
     ];
     const etapesFinales: EtapeRecetteInput[] = extraction.etapes
-      .filter((_e, i) => etapesRetenues[i])
-      .map((e) => ({ description: e.description, pointCritiqueHACCP: e.pointCritiqueHACCP, controleHACCP: e.controleHACCP }));
+      .map((e, i) => ({
+        description: descriptionsEtapesEditees[i],
+        pointCritiqueHACCP: e.pointCritiqueHACCP,
+        controleHACCP: e.controleHACCP,
+      }))
+      .filter((_e, i) => etapesRetenues[i]);
 
     if (!modeCompletion) {
       const brouillon: BrouillonRecette = {
@@ -471,7 +485,12 @@ export default function PrevisualisationImportRecette({
                     <strong>{etape.ordre}. {etape.titre ?? ""}</strong>
                     <BadgeConfiance confiance={etape.confiance} />
                   </div>
-                  <p style={{ margin: "4px 0", whiteSpace: "pre-wrap", fontSize: 13 }}>{etape.description}</p>
+                  <textarea
+                    value={descriptionsEtapesEditees[index]}
+                    onChange={(e) => modifierDescriptionEtape(index, e.target.value)}
+                    rows={2}
+                    style={{ width: "100%", margin: "4px 0", fontSize: 13, fontFamily: "inherit", padding: 6 }}
+                  />
                   <div style={{ fontSize: 12, color: "#666", display: "flex", gap: 12, flexWrap: "wrap" }}>
                     {etape.temperatureC != null && <span>🌡 {etape.temperatureC} °C</span>}
                     {etape.dureeMinutes != null && <span>⏱ {etape.dureeMinutes} min</span>}
