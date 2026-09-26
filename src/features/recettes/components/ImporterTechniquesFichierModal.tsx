@@ -16,6 +16,7 @@ import {
 import { analyseRecetteLocale } from "../utils/analyseRecetteLocale";
 import { estFournisseurSuperU, filtrerSuperUActif } from "../utils/filtreFournisseur";
 import { construireLigneImportee, construireMaterielImporte, materielVersLigne } from "../utils/ligneImportee";
+import { normaliserExtraction } from "../utils/normaliserExtraction";
 import { extraireTexteDePhoto } from "../utils/ocrPhoto";
 import {
   analyserFichierTechniques,
@@ -198,6 +199,11 @@ export default function ImporterTechniquesFichierModal({ onClose, onImporte }: P
         toast("IA non configurée : analyse locale utilisée (moins précise, à vérifier).", { icon: "ℹ️" });
         extractionRecue = analyseRecetteLocale(await extraireTexteDePhoto(photoDataUrl));
       }
+
+      // Couche déterministe commune aux deux moteurs (voir normaliserExtraction.ts) : ne réinterprète
+      // jamais le sens d'une donnée, corrige uniquement des défauts de forme (ponctuation résiduelle,
+      // doublons, numérotation des étapes).
+      extractionRecue = normaliserExtraction(extractionRecue);
 
       if (
         extractionRecue.ingredients.length === 0 &&
