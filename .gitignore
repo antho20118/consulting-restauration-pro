@@ -6,3 +6,7 @@ dist
 coverage
 *.log
 /src/generated/prisma
+/public/tesseract
+/test-results
+/playwright-report
+/blob-report

@@ -140,3 +140,54 @@ test("analyseRecetteLocale : alerte informant que ce repli est moins fiable que 
   const extraction = analyseRecetteLocale("Nom\n1. Étape");
   assert.ok(extraction.alertes.length > 0);
 });
+
+// Chantier « import photo → technique » (PHASE 17) : une fiche technique photographiée n'a pas
+// toujours ses étapes numérotées (fiche manuscrite, mise en page libre) — le repli sans IA doit
+// rester exploitable dans ce cas plutôt que de perdre silencieusement ces lignes.
+test("analyseRecetteLocale : étapes reconnues même sans numérotation (une ligne libre par étape)", () => {
+  const texte = [
+    "Sauté de veau",
+    "Éplucher et laver les légumes",
+    "Émincer les oignons",
+    "Faire revenir les légumes dans l'huile",
+    "Ajouter le fond et cuire 45 minutes",
+  ].join("\n");
+
+  const extraction = analyseRecetteLocale(texte);
+
+  assert.equal(extraction.nom, "Sauté de veau");
+  assert.equal(extraction.etapes.length, 4);
+  assert.equal(extraction.etapes[0].ordre, 1);
+  assert.equal(extraction.etapes[0].description, "Éplucher et laver les légumes");
+  assert.equal(extraction.etapes[1].ordre, 2);
+  assert.equal(extraction.etapes[1].description, "Émincer les oignons");
+  assert.equal(extraction.etapes[3].ordre, 4);
+  assert.equal(extraction.etapes[3].description, "Ajouter le fond et cuire 45 minutes");
+});
+
+test("analyseRecetteLocale : mélange d'étapes numérotées et non numérotées, la numérotation reste normalisée en continu", () => {
+  const texte = ["Nom", "1. Première étape numérotée", "Deuxième étape libre, sans numéro"].join("\n");
+  const extraction = analyseRecetteLocale(texte);
+  assert.equal(extraction.etapes.length, 2);
+  assert.equal(extraction.etapes[0].ordre, 1);
+  assert.equal(extraction.etapes[1].ordre, 2);
+});
+
+// Une fiche technique française contient presque toujours des caractères accentués (ingrédients,
+// techniques, HACCP) : jamais tronqués ni corrompus par l'analyse par règles.
+test("analyseRecetteLocale : caractères accentués préservés fidèlement (nom, ingrédient, étape)", () => {
+  const texte = [
+    "Crème brûlée à l'ancienne",
+    "250 ml de crème fraîche épaisse",
+    "1. Préchauffer le four à 160°C puis chemiser les ramequins",
+    "2. Verser la préparation et cuire à cœur jusqu'à 68°C. [HACCP: sonde de température, ≥68°C à cœur]",
+  ].join("\n");
+
+  const extraction = analyseRecetteLocale(texte);
+
+  assert.equal(extraction.nom, "Crème brûlée à l'ancienne");
+  assert.equal(extraction.ingredients[0].nomExtrait, "crème fraîche épaisse");
+  assert.equal(extraction.etapes[0].description, "Préchauffer le four à 160°C puis chemiser les ramequins");
+  assert.equal(extraction.etapes[1].pointCritiqueHACCP, true);
+  assert.equal(extraction.etapes[1].controleHACCP, "sonde de température, ≥68°C à cœur");
+});
