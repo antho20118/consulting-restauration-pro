@@ -5,7 +5,7 @@ import { z } from "zod";
 import prisma from "../prisma.js";
 import { calculerCoutRecette, calculerCoutsRecettesSansErreur, inclusionsRecette } from "../utils/coutRecette.js";
 import { suggestionsEconomieRecette } from "../utils/suggestionsEconomie.js";
-import { extraireRecette, ImportIANonConfigureError } from "../utils/importRecetteIA.js";
+import { extraireRecette, ImportIANonConfigureError, PhotoInvalideError } from "../utils/importRecetteIA.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 
 const router = Router();
@@ -118,6 +118,41 @@ router.get("/:id/suggestions-economie", async (req: Request, res: Response) => {
   }
 });
 
+// Taille maximale d'une photo acceptée pour l'import IA (décodée, avant l'encodage base64 qui la
+// gonfle d'environ 33 %) : une photo de fiche technique lisible n'a jamais besoin de dépasser cette
+// taille (voir redimensionnerImage.ts côté client, qui la réduit systématiquement bien en-deçà) —
+// au-delà, il s'agit soit d'une erreur d'intégration cliente, soit d'un usage anormal de l'API,
+// jamais d'un cas légitime. Fixée nettement en-dessous de la limite générique du corps JSON
+// (express.json({limit:"10mb"}), server/app.ts) une fois ré-encodée en base64 (+33 %) : sinon cette
+// limite globale, moins explicite pour l'appelant (413 générique), interviendrait en premier et
+// rendrait cette vérification dédiée inatteignable pour les cas qu'elle doit précisément couvrir.
+export const TAILLE_MAX_PHOTO_OCTETS = 6 * 1024 * 1024;
+
+// L'appel à l'IA est une requête réseau vers un service tiers : sans limite, une requête qui ne
+// répond jamais laisserait le client indéfiniment sur un état "Analyse en cours…" sans queue moyen
+// de s'en sortir autrement qu'en fermant l'onglet. Le délai reste large (l'analyse d'une photo
+// dense en texte peut prendre plusieurs dizaines de secondes) mais borné.
+const DELAI_MAX_ANALYSE_MS = 60_000;
+
+export class AnalyseTimeoutError extends Error {}
+
+export function tailleDecodeeBase64Octets(donneesBase64: string): number {
+  const paddingCount = donneesBase64.endsWith("==") ? 2 : donneesBase64.endsWith("=") ? 1 : 0;
+  return Math.floor((donneesBase64.length * 3) / 4) - paddingCount;
+}
+
+export async function avecTimeout<T>(promesse: Promise<T>, delaiMs: number): Promise<T> {
+  let identifiantTimer: NodeJS.Timeout;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    identifiantTimer = setTimeout(() => reject(new AnalyseTimeoutError("Délai d'analyse dépassé")), delaiMs);
+  });
+  try {
+    return await Promise.race([promesse, timeout]);
+  } finally {
+    clearTimeout(identifiantTimer!);
+  }
+}
+
 // Import d'une recette depuis un texte libre ou une photo (IA) : extrait, en une seule analyse
 // structurée, nom, catégorie/sous-catégorie détectées, portions, poids, ingrédients, étapes
 // classées préparation/cuisson/dressage/autre, matériel, notes et alertes. Ne crée rien en base ni
@@ -133,6 +168,18 @@ router.post("/import-ia", async (req: Request, res: Response) => {
       return;
     }
 
+    if (photoDataUrl) {
+      const correspondance = /^data:image\/[a-zA-Z+]+;base64,(.+)$/.exec(photoDataUrl);
+      if (!correspondance) {
+        res.status(400).json({ error: "Format de photo invalide" });
+        return;
+      }
+      if (tailleDecodeeBase64Octets(correspondance[1]) > TAILLE_MAX_PHOTO_OCTETS) {
+        res.status(400).json({ error: "Photo trop volumineuse (6 Mo maximum)" });
+        return;
+      }
+    }
+
     // Mêmes listes, non filtrées sur actif, que celles proposées par le formulaire de recette
     // (voir GET /categories-recette, /sous-categories-recette) : la catégorie détectée doit
     // toujours pouvoir être choisie parmi les options réellement proposées à l'utilisateur.
@@ -141,17 +188,28 @@ router.post("/import-ia", async (req: Request, res: Response) => {
       prisma.categorieRecette.findMany(),
       prisma.sousCategorieRecette.findMany(),
     ]);
-    const extraction = await extraireRecette(
-      texte?.trim() ? { texte } : { photoDataUrl: photoDataUrl! },
-      unites.map((u) => u.symbole),
-      categories.map((c) => c.nom),
-      sousCategories.map((sc) => sc.nom)
+    const extraction = await avecTimeout(
+      extraireRecette(
+        texte?.trim() ? { texte } : { photoDataUrl: photoDataUrl! },
+        unites.map((u) => u.symbole),
+        categories.map((c) => c.nom),
+        sousCategories.map((sc) => sc.nom)
+      ),
+      DELAI_MAX_ANALYSE_MS
     );
 
     res.json(extraction);
   } catch (error) {
     if (error instanceof ImportIANonConfigureError) {
       res.status(503).json({ error: error.message });
+      return;
+    }
+    if (error instanceof PhotoInvalideError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error instanceof AnalyseTimeoutError) {
+      res.status(504).json({ error: "L'analyse a pris trop de temps. Réessaie avec une photo plus simple." });
       return;
     }
     console.error(error);

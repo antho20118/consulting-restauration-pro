@@ -18,6 +18,7 @@
   },
   "include": [
     "vite.config.ts",
+    "playwright.config.ts",
     "server/**/*.ts"
   ]
 }

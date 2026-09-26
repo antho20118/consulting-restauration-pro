@@ -11,6 +11,12 @@ export class ImportIANonConfigureError extends Error {
   }
 }
 
+// Distingue une photo mal formée (entrée utilisateur invalide — jamais une panne serveur) de toute
+// autre erreur : la route la traite spécifiquement en 400, jamais en 500 générique (voir la
+// distinction déjà établie pour P2003/P2025 dans server/utils/erreursEcriture.ts et
+// server/routes/mouvements.ts). Discriminée par son type, jamais par le texte du message.
+export class PhotoInvalideError extends Error {}
+
 const NIVEAUX_CONFIANCE = ["elevee", "moyenne", "faible"] as const;
 export type Confiance = (typeof NIVEAUX_CONFIANCE)[number];
 
@@ -65,7 +71,7 @@ export type ExtractionRecette = {
 function parserDataUrlImage(dataUrl: string): { mediaType: string; data: string } {
   const correspondance = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(dataUrl);
   if (!correspondance) {
-    throw new Error("Format de photo invalide");
+    throw new PhotoInvalideError("Format de photo invalide");
   }
   return { mediaType: correspondance[1], data: correspondance[2] };
 }
@@ -241,7 +247,7 @@ export async function extraireRecette(
       : (() => {
           const { mediaType, data } = parserDataUrlImage(source.photoDataUrl);
           if (!MEDIA_TYPES_IMAGE_ACCEPTES.includes(mediaType as MediaTypeImage)) {
-            throw new Error("Format de photo non pris en charge (jpeg, png, gif ou webp attendu)");
+            throw new PhotoInvalideError("Format de photo non pris en charge (jpeg, png, gif ou webp attendu)");
           }
           return [
             {
