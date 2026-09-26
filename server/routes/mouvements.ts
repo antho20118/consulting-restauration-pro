@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 
 import prisma from "../prisma.js";
 import { libelleUniteBase } from "../utils/uniteConversion.js";
@@ -103,6 +104,16 @@ router.post("/", async (req: Request, res: Response) => {
   } catch (error) {
     if (error instanceof StockInsuffisantError) {
       res.status(400).json({ error: "Stock insuffisant pour cette sortie" });
+      return;
+    }
+
+    // articleId/depotId inexistant (voir les findUniqueOrThrow ci-dessus) : Prisma lève P2025, une
+    // erreur prévisible côté appelant, jamais une panne serveur — traitement local à ce seul
+    // routeur (voir caractérisation dédiée « P2025, POST /mouvements »), sans toucher au helper
+    // partagé server/utils/erreursEcriture.ts (P2003 uniquement).
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      console.error(error);
+      res.status(400).json({ error: "Référence invalide : un champ désigne un enregistrement inexistant" });
       return;
     }
 
