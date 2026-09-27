@@ -127,6 +127,12 @@ export default function FournisseurDetailPage() {
         ← Retour à la liste
       </button>
       <h1 style={{ marginBottom: 4 }}>🚚 {fournisseur.nom}</h1>
+      {/* Identité stable, générée par le serveur — jamais éditable ici (voir FournisseurForm.tsx) */}
+      {fournisseur.codeFournisseur && (
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#0f6848", marginBottom: 4 }}>
+          Code fournisseur : {fournisseur.codeFournisseur}
+        </div>
+      )}
       <div style={{ color: "#666", fontSize: 14, marginBottom: 20 }}>
         {fournisseur.telephone ?? "—"} · {fournisseur.email ?? "—"} · {fournisseur.siteWeb ?? "—"}
       </div>

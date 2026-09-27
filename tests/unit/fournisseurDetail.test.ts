@@ -258,14 +258,15 @@ test("GET /listings-fournisseur/documents/:id : une ligne non rapprochée reste 
 // --- Phase 7 : historique des tarifs fournisseurs ---
 //
 // Fixtures scopées à ce describe (before/after propres, jamais mêlées à celles ci-dessus) pour
-// exercer explicitement : plusieurs tarifs historiques d'un même article, une source FACTURE, et la
-// particularité réelle du moteur de clôture déjà en place depuis les Phases 4/5/6 (jamais modifié
-// ici) — TarifArticle.actif est recherché par articleId SEUL (voir server/routes/listingsFournisseur.ts
-// et server/routes/articles.ts : `findFirst({ where: { articleId, actif: true } })`, sans
-// fournisseurId) : il ne peut donc exister qu'un unique tarif actif par Article, tous fournisseurs
-// confondus. Un import chez un AUTRE fournisseur pour le même article clôture donc le tarif actif
-// du fournisseur consulté. Ce test documente ce comportement réel, ne le corrige pas, ne le qualifie
-// pas de bug (règle explicite de la Phase 7).
+// exercer explicitement : plusieurs tarifs historiques d'un même article, une source FACTURE, et
+// (depuis le chantier « identité fournisseur + produit fournisseur + historique des tarifs »)
+// l'ABSENCE de clôture croisée entre fournisseurs. Avant ce chantier, TarifArticle.actif était
+// recherché par articleId SEUL (voir server/routes/listingsFournisseur.ts et server/routes/articles.ts),
+// ce qui clôturait le tarif actif d'un fournisseur A dès qu'un import chez un fournisseur B portait
+// sur le même article — documenté ici comme "PARTICULARITÉ RÉELLE (non corrigée)" jusqu'à ce
+// chantier. La recherche est désormais scopée par (articleId, fournisseurId) (ou produitFournisseurId
+// quand un code produit est connu) : ce test vérifie maintenant que les deux fournisseurs conservent
+// chacun leur propre tarif actif, simultanément, sur le même article.
 describe("Phase 7 — historique des tarifs (actif/historique, source, ordre, particularité cross-fournisseur)", () => {
   let fournisseurHistorique: number;
   let fournisseurAutre: number;
@@ -336,8 +337,10 @@ describe("Phase 7 — historique des tarifs (actif/historique, source, ordre, pa
     });
 
     // Article partagé : tarif actif d'abord chez fournisseurHistorique, puis un import chez
-    // fournisseurAutre pour LE MÊME article — doit clôturer (actif:false, dateFin renseigné) le
-    // tarif de fournisseurHistorique, sans qu'aucune opération n'ait été faite "sur" ce fournisseur.
+    // fournisseurAutre pour LE MÊME article — depuis ce chantier, le tarif de fournisseurHistorique
+    // reste actif (jamais clôturé par l'import chez l'autre fournisseur) : chaque fournisseur
+    // conserve son propre tarif actif, simultanément, sur le même article (voir le test corrigé
+    // plus bas).
     const aPartage = await prisma.article.create({
       data: { type: "MATIERE_PREMIERE", nom: "FICHE FOURNISSEUR TEST P7 Article Partage", categorieId, tvaId, societeId },
     });
@@ -449,26 +452,28 @@ describe("Phase 7 — historique des tarifs (actif/historique, source, ordre, pa
     assert.equal(apres, avant);
   });
 
-  test("PARTICULARITÉ RÉELLE (documentée, non corrigée) : un tarif actif créé chez un AUTRE fournisseur pour le même article clôture le tarif actif du fournisseur consulté", async () => {
+  test("CORRIGÉ : un tarif créé chez un AUTRE fournisseur pour le même article ne clôture plus le tarif actif du fournisseur consulté", async () => {
     const reponseOrigine = await fetch(`${baseUrl}/api/fournisseurs/${fournisseurHistorique}/tarifs`, { headers: authHeaders() });
     const tarifsOrigine = await reponseOrigine.json();
-    const tarifPartageChezOrigine = (tarifsOrigine as { article: { id: number }; actif: boolean; dateFin: string | null }[]).find(
+    const tarifPartageChezOrigine = (tarifsOrigine as { article: { id: number }; actif: boolean; dateFin: string | null; prixHT: number }[]).find(
       (t) => t.article.id === articlePartage
     );
     assert.ok(tarifPartageChezOrigine, "le tarif doit toujours apparaître dans l'historique de ce fournisseur, jamais masqué");
     assert.equal(
       tarifPartageChezOrigine!.actif,
-      false,
-      "clôturé par l'import chez l'autre fournisseur : comportement réel du moteur existant (recherche par articleId seul, jamais articleId+fournisseurId — voir server/routes/listingsFournisseur.ts et articles.ts), non modifié par cette phase"
+      true,
+      "ne doit plus jamais être clôturé par un import chez un AUTRE fournisseur (recherche désormais scopée articleId+fournisseurId, voir server/routes/listingsFournisseur.ts et articles.ts)"
     );
-    assert.ok(tarifPartageChezOrigine!.dateFin !== null);
+    assert.equal(tarifPartageChezOrigine!.dateFin, null);
+    assert.equal(tarifPartageChezOrigine!.prixHT, 8);
 
     const reponseAutre = await fetch(`${baseUrl}/api/fournisseurs/${fournisseurAutre}/tarifs`, { headers: authHeaders() });
     const tarifsAutre = await reponseAutre.json();
-    const tarifPartageChezAutre = (tarifsAutre as { article: { id: number }; actif: boolean }[]).find(
+    const tarifPartageChezAutre = (tarifsAutre as { article: { id: number }; actif: boolean; prixHT: number }[]).find(
       (t) => t.article.id === articlePartage
     );
     assert.ok(tarifPartageChezAutre);
-    assert.equal(tarifPartageChezAutre!.actif, true, "le nouveau tarif actif est bien celui de l'autre fournisseur");
+    assert.equal(tarifPartageChezAutre!.actif, true, "l'autre fournisseur a bien lui aussi son propre tarif actif, simultanément");
+    assert.equal(tarifPartageChezAutre!.prixHT, 9);
   });
 });

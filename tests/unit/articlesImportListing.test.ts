@@ -120,6 +120,16 @@ after(async () => {
   await prisma.tarifArticle.deleteMany({ where: { articleId: { in: articleIds } } });
   await prisma.article.deleteMany({ where: { id: { in: articleIds } } });
   await prisma.article.deleteMany({ where: { nom: { startsWith: "IMPORT LISTING TEST" } } });
+  // Chantier « identité fournisseur + historique des imports » : POST /articles/import crée
+  // désormais un DocumentFournisseur (+ ses LigneDocumentFournisseur) par import réel effectué
+  // dans ce fichier — à nettoyer avant le fournisseur lui-même (contrainte de clé étrangère),
+  // exactement comme le fait déjà tests/unit/identiteFournisseurImportListing.test.ts.
+  const documents = await prisma.documentFournisseur.findMany({
+    where: { fournisseur: { nom: { startsWith: "IMPORT LISTING TEST" } } },
+    select: { id: true },
+  });
+  await prisma.ligneDocumentFournisseur.deleteMany({ where: { documentId: { in: documents.map((d) => d.id) } } });
+  await prisma.documentFournisseur.deleteMany({ where: { id: { in: documents.map((d) => d.id) } } });
   await prisma.fournisseur.deleteMany({ where: { nom: { startsWith: "IMPORT LISTING TEST" } } });
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));

@@ -20,6 +20,11 @@ type Mapping = {
   allergenes: string;
   categorie: string;
   fournisseur: string;
+  // Identité stable (voir cadrage « identité fournisseur + produit fournisseur ») : colonnes
+  // optionnelles, priment sur fournisseur/reference ci-dessus quand mappées. Un fichier qui ne les
+  // mappe pas continue de fonctionner exactement comme avant (rapprochement historique).
+  codeFournisseur: string;
+  codeProduitFournisseur: string;
 };
 
 const MAPPING_VIDE: Mapping = {
@@ -30,6 +35,8 @@ const MAPPING_VIDE: Mapping = {
   allergenes: "",
   categorie: "",
   fournisseur: "",
+  codeFournisseur: "",
+  codeProduitFournisseur: "",
 };
 
 const CHAMPS_A_MAPPER: { cle: keyof Mapping; label: string }[] = [
@@ -40,6 +47,8 @@ const CHAMPS_A_MAPPER: { cle: keyof Mapping; label: string }[] = [
   { cle: "allergenes", label: "Allergènes" },
   { cle: "categorie", label: "Catégorie" },
   { cle: "fournisseur", label: "Fournisseur (si plusieurs dans le fichier)" },
+  { cle: "codeFournisseur", label: "Code fournisseur (identité stable, optionnel)" },
+  { cle: "codeProduitFournisseur", label: "Code produit fournisseur (optionnel)" },
 ];
 
 type Props = {
@@ -55,6 +64,10 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
   const [entetes, setEntetes] = useState<string[]>([]);
   const [lignesBrutes, setLignesBrutes] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<Mapping>(MAPPING_VIDE);
+  // Métadonnées du fichier source (nom/type MIME/taille), jamais inventées : reprises du File
+  // choisi à l'étape 1, transmises telles quelles pour l'historique de l'import (Phase 6, voir
+  // DocumentFournisseur côté serveur).
+  const [fichierMeta, setFichierMeta] = useState<{ nom: string; type: string; taille: number } | null>(null);
 
   const [fournisseurNom, setFournisseurNom] = useState("");
   const [categories, setCategories] = useState<Categorie[]>([]);
@@ -98,6 +111,7 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
       setEntetes(entetesLues);
       setLignesBrutes(lignes);
       setMapping(MAPPING_VIDE);
+      setFichierMeta({ nom: fichier.name, type: fichier.type, taille: fichier.size });
       setErreur("");
       await chargerListesReference();
       setEtape(2);
@@ -116,6 +130,8 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
     const idxAllerg = entetes.indexOf(mapping.allergenes);
     const idxCategorie = entetes.indexOf(mapping.categorie);
     const idxFournisseur = entetes.indexOf(mapping.fournisseur);
+    const idxCodeFournisseur = entetes.indexOf(mapping.codeFournisseur);
+    const idxCodeProduit = entetes.indexOf(mapping.codeProduitFournisseur);
 
     const lignesConstruites = lignesBrutes
       .map((ligne) => {
@@ -131,6 +147,8 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
           allergenes: idxAllerg >= 0 ? String(ligne[idxAllerg] ?? "").trim() : "",
           categorie: idxCategorie >= 0 ? String(ligne[idxCategorie] ?? "").trim() : "",
           fournisseur: idxFournisseur >= 0 ? String(ligne[idxFournisseur] ?? "").trim() : "",
+          codeFournisseur: idxCodeFournisseur >= 0 ? String(ligne[idxCodeFournisseur] ?? "").trim() : "",
+          codeProduitFournisseur: idxCodeProduit >= 0 ? String(ligne[idxCodeProduit] ?? "").trim() : "",
         };
       })
       .filter((ligne): ligne is NonNullable<typeof ligne> => ligne !== null);
@@ -212,12 +230,17 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
         tvaId,
         type: "MATIERE_PREMIERE",
         lignes: lignesAvecConfirmation,
+        nomFichierOriginal: fichierMeta?.nom,
+        typeMime: fichierMeta?.type,
+        tailleOctets: fichierMeta?.taille,
       });
       setResultat(reponse);
       setEtape(4);
       onSave();
-    } catch {
-      setErreur("Impossible d'importer le listing.");
+    } catch (error) {
+      // Une ambiguïté fournisseur (409) porte un message explicite (voir importService.ts) —
+      // jamais remplacé par le message générique quand il est disponible.
+      setErreur(error instanceof Error ? error.message : "Impossible d'importer le listing.");
     } finally {
       setChargement(false);
     }
@@ -414,6 +437,45 @@ function LignePropositionImport({
       <div style={{ ...styleLigne, background: "#fdeeee" }}>
         <strong>⚠ {proposition.designation || "(désignation manquante)"}</strong>
         <div style={{ color: "#b00020", marginTop: 4 }}>Ignorée : {proposition.motif}</div>
+      </div>
+    );
+  }
+
+  if (proposition.statut === "fournisseur_ambigu") {
+    return (
+      <div style={{ ...styleLigne, background: "#fdeeee" }}>
+        <strong>⚠ {proposition.designation || "(désignation manquante)"}</strong>
+        <div style={{ color: "#b00020", marginTop: 4 }}>
+          Plusieurs fournisseurs existants correspondent au nom « {proposition.nom} » : cette ligne
+          sera ignorée à l'import. Résous l'ambiguïté sur les fiches fournisseurs avant de
+          réimporter.
+        </div>
+      </div>
+    );
+  }
+
+  if (proposition.statut === "fournisseur_inactif") {
+    return (
+      <div style={{ ...styleLigne, background: "#fdeeee" }}>
+        <strong>⚠ {proposition.designation || "(désignation manquante)"}</strong>
+        <div style={{ color: "#b00020", marginTop: 4 }}>
+          Le fournisseur « {proposition.identifiant} » existe mais est inactif : cette ligne sera
+          ignorée à l'import. Réactive-le explicitement (fiche fournisseur) avant de réimporter.
+        </div>
+      </div>
+    );
+  }
+
+  if (proposition.statut === "code_produit_designation_differente") {
+    return (
+      <div style={{ ...styleLigne, background: "#fff8e1" }}>
+        <strong>⚠ {proposition.designation || "(désignation manquante)"}</strong>
+        <div style={{ color: "#8a6d00", marginTop: 4 }}>
+          Le code produit « {proposition.codeProduitFournisseur} » est déjà connu chez ce fournisseur
+          avec une désignation très différente (« {proposition.designationConnue} ») : cette ligne
+          sera ignorée à l'import tant qu'une décision humaine n'a pas confirmé qu'il s'agit bien du
+          même produit.
+        </div>
       </div>
     );
   }

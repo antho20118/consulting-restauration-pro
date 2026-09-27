@@ -222,6 +222,16 @@ router.post("/:fournisseurId", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Fournisseur introuvable" });
       return;
     }
+    // Un fournisseur soft-supprimé ne doit jamais recevoir silencieusement un nouvel import, même
+    // par sélection explicite en menu déroulant (voir cadrage §8 : comportement cohérent dans TOUS
+    // les pipelines) — réactivation explicite requise avant de réimporter.
+    if (!fournisseur.actif) {
+      res.status(409).json({
+        error: `Le fournisseur "${fournisseur.nom}" existe mais est actuellement inactif : réactive-le explicitement avant d'importer.`,
+        fournisseurId: fournisseur.id,
+      });
+      return;
+    }
 
     if (!photoDataUrl) {
       res.status(400).json({ error: "Document (photo) requis" });
@@ -365,6 +375,16 @@ router.post("/factures/:fournisseurId", async (req: Request, res: Response) => {
     const fournisseur = await prisma.fournisseur.findUnique({ where: { id: fournisseurId } });
     if (!fournisseur) {
       res.status(404).json({ error: "Fournisseur introuvable" });
+      return;
+    }
+    // Un fournisseur soft-supprimé ne doit jamais recevoir silencieusement un nouvel import, même
+    // par sélection explicite en menu déroulant (voir cadrage §8 : comportement cohérent dans TOUS
+    // les pipelines) — réactivation explicite requise avant de réimporter.
+    if (!fournisseur.actif) {
+      res.status(409).json({
+        error: `Le fournisseur "${fournisseur.nom}" existe mais est actuellement inactif : réactive-le explicitement avant d'importer.`,
+        fournisseurId: fournisseur.id,
+      });
       return;
     }
 
@@ -564,8 +584,12 @@ router.post("/documents/:documentId/valider", async (req: Request, res: Response
         ? Math.round((ligne.prixLu / quantiteDetectee.quantite) * 10000) / 10000
         : ligne.prixLu;
 
+      // Scopé par (articleId, fournisseurId) — jamais articleId seul (voir cadrage « identité
+      // fournisseur + produit fournisseur + historique des tarifs », correction du bug critique :
+      // la validation d'un document d'un fournisseur B ne doit jamais clôturer le tarif actif d'un
+      // AUTRE fournisseur A pour ce même article).
       const tarifActif = await prisma.tarifArticle.findFirst({
-        where: { articleId: articleRetenuId, actif: true },
+        where: { articleId: articleRetenuId, fournisseurId: document.fournisseurId, actif: true },
       });
 
       await prisma.$transaction(async (tx) => {

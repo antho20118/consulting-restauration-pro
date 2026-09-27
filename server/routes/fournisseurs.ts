@@ -1,9 +1,31 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 
 import prisma from "../prisma.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 
 const router = Router();
+
+// Génère atomiquement le prochain codeFournisseur d'une société (format FOU-0001, FOU-0002, ...) —
+// voir cadrage « identité fournisseur + produit fournisseur + historique des tarifs ». Un seul
+// INSERT ... ON CONFLICT DO UPDATE ... RETURNING : atomique au niveau Postgres lui-même (jamais un
+// SELECT MAX(...)+1 ni un COUNT(*)+1, non sûrs sous créations concurrentes — deux transactions
+// concurrentes sur la même ligne de compteur se sérialisent au niveau du moteur, la seconde
+// attend la première puis repart de la valeur déjà incrémentée). Doit toujours être appelée à
+// l'intérieur de la même transaction que la création du Fournisseur qui utilisera ce code, pour
+// qu'un échec de la création n'incrémente jamais le compteur pour rien (transaction annulée dans
+// son ensemble).
+async function genererCodeFournisseur(tx: Prisma.TransactionClient, societeId: number): Promise<string> {
+  const lignes = await tx.$queryRaw<{ valeur: number }[]>`
+    INSERT INTO "SocieteCompteur" ("societeId", "typeCompteur", "valeur")
+    VALUES (${societeId}, 'FOURNISSEUR', 1)
+    ON CONFLICT ("societeId", "typeCompteur")
+    DO UPDATE SET "valeur" = "SocieteCompteur"."valeur" + 1
+    RETURNING "valeur"
+  `;
+  const valeur = lignes[0].valeur;
+  return `FOU-${String(valeur).padStart(4, "0")}`;
+}
 
 router.get("/", async (_req, res) => {
   try {
@@ -121,14 +143,21 @@ router.post("/", async (req, res) => {
   try {
     const { nom, telephone, email, siteWeb, societeId } = req.body;
 
-    const fournisseur = await prisma.fournisseur.create({
-      data: {
-        nom,
-        telephone: telephone || null,
-        email: email || null,
-        siteWeb: siteWeb || null,
-        societeId,
-      },
+    // codeFournisseur n'est jamais lu depuis req.body : généré ici, jamais saisi, jamais dérivé du
+    // nom (voir genererCodeFournisseur) — même transaction que la création pour que la génération
+    // et l'écriture réussissent ou échouent ensemble.
+    const fournisseur = await prisma.$transaction(async (tx) => {
+      const codeFournisseur = await genererCodeFournisseur(tx, societeId);
+      return tx.fournisseur.create({
+        data: {
+          nom,
+          telephone: telephone || null,
+          email: email || null,
+          siteWeb: siteWeb || null,
+          societeId,
+          codeFournisseur,
+        },
+      });
     });
 
     res.status(201).json(fournisseur);
@@ -170,6 +199,34 @@ router.delete("/:id", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Impossible de supprimer le fournisseur" });
+  }
+});
+
+// Réactivation explicite, distincte de PUT /:id — jamais automatique, jamais déclenchée en silence
+// par un import (voir server/routes/articles.ts, server/routes/listingsFournisseur.ts : un code ou
+// un nom retrouvant un fournisseur actif:false bloque toujours, sans jamais appeler cette route à
+// leur place). Ne modifie que actif : id et codeFournisseur restent strictement inchangés — jamais
+// régénérés, jamais réattribués.
+router.post("/:id/reactiver", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "Identifiant fournisseur invalide" });
+      return;
+    }
+
+    const existant = await prisma.fournisseur.findUnique({ where: { id } });
+    if (!existant) {
+      res.status(404).json({ error: "Fournisseur introuvable" });
+      return;
+    }
+
+    const fournisseur = await prisma.fournisseur.update({ where: { id }, data: { actif: true } });
+
+    res.json(fournisseur);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Impossible de réactiver le fournisseur" });
   }
 });
 

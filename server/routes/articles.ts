@@ -1,14 +1,40 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
 
 import prisma from "../prisma.js";
 import {
   analyserPropositionLigne,
+  parsePrix,
+  extraireQuantiteDesignation,
+  cleTarifActif,
+  SEUIL_CORRESPONDANCE_DESIGNATION,
+  similariteJaccard,
   type CandidatExistant,
   type ContexteAnalyseLigne,
+  type PropositionLigneImport,
 } from "../utils/importListing.js";
-import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
+import {
+  repondreErreurEcriture,
+  FournisseurAmbiguError,
+  FournisseurInactifError,
+  FournisseurCodeInconnuError,
+} from "../utils/erreursEcriture.js";
+
+// Ajoutée par le chantier « identité fournisseur + historique des imports » : jamais dans
+// importListing.ts (analyserPropositionLigne ne résout et ne crée jamais lui-même un fournisseur,
+// voir son propre commentaire) — l'ambiguïté ne peut être détectée qu'à l'endroit où le fournisseur
+// est effectivement résolu, donc ici, avant même d'appeler analyserPropositionLigne pour la ligne
+// concernée.
+type PropositionFournisseurAmbigu = {
+  statut: "fournisseur_ambigu";
+  designation: string;
+  reference: string | null;
+  nom: string;
+  fournisseurIds: number[];
+};
 
 const router = Router();
 
@@ -169,7 +195,7 @@ router.post("/", async (req: Request, res: Response) => {
 
       // Tarif (prix + unité + fournisseur) : uniquement si une unité et un prix ont été fournis
       if (uniteId && prixHT !== undefined && prixHT !== null) {
-        const fournisseurId = await trouverOuCreerFournisseur(tx, fournisseurNom, societeId);
+        const fournisseurId = await resoudreFournisseurOuLever(tx, fournisseurNom, societeId);
 
         // Conditionnement par défaut : le premier existant (non exposé dans ce formulaire simplifié)
         const conditionnement = await tx.conditionnement.findFirst({ orderBy: { id: "asc" } });
@@ -279,18 +305,17 @@ router.put("/:id", async (req: Request, res: Response) => {
       }
 
       if (uniteId && prixHT !== undefined && prixHT !== null) {
-        const fournisseurId = await trouverOuCreerFournisseur(tx, fournisseurNom, existant.societeId);
+        const fournisseurId = await resoudreFournisseurOuLever(tx, fournisseurNom, existant.societeId);
 
+        // Scopé par (articleId, fournisseurId) — jamais articleId seul (voir cadrage, correction du
+        // bug critique : un changement de fournisseur/prix ne doit jamais clôturer le tarif actif
+        // d'un AUTRE fournisseur pour ce même article).
         const tarifActif = await tx.tarifArticle.findFirst({
-          where: { articleId: id, actif: true },
+          where: { articleId: id, fournisseurId, actif: true },
           orderBy: { dateDebut: "desc" },
         });
 
-        const inchange =
-          tarifActif &&
-          tarifActif.uniteId === uniteId &&
-          tarifActif.fournisseurId === fournisseurId &&
-          tarifActif.prixHT === prixHT;
+        const inchange = tarifActif && tarifActif.uniteId === uniteId && tarifActif.prixHT === prixHT;
 
         if (!inchange) {
           if (tarifActif) {
@@ -393,6 +418,16 @@ router.delete("/:id", async (req: Request, res: Response) => {
 router.post("/import", async (req: Request, res: Response) => {
   try {
     const { societeId, fournisseurNom, categorieId, tvaId, type, lignes } = req.body;
+    // Métadonnées du fichier source (nom/type MIME/taille), transmises par le client depuis le
+    // File choisi à l'étape 1 — jamais inventées : voir Phase 6 (historique des imports Excel via
+    // DocumentFournisseur, réutilisé tel quel). codeFournisseur : identité par défaut du fichier
+    // (colonne optionnelle, voir cadrage « identité fournisseur + produit fournisseur » §6, niveau 1).
+    const { nomFichierOriginal, typeMime, tailleOctets, codeFournisseur } = req.body as {
+      nomFichierOriginal?: string;
+      typeMime?: string;
+      tailleOctets?: number;
+      codeFournisseur?: string;
+    };
 
     if (!Array.isArray(lignes) || lignes.length === 0) {
       res.status(400).json({ error: "Aucune ligne à importer" });
@@ -403,11 +438,66 @@ router.post("/import", async (req: Request, res: Response) => {
     // traiter dans une seule transaction interactive (délai par défaut de 5s chez Prisma, qui
     // se ferme avant la fin d'un import volumineux). Seules les écritures d'une même ligne
     // (clôture + ouverture de tarif, ou création d'article + tarif) sont transactionnelles.
-    const fournisseurIdParDefaut = await trouverOuCreerFournisseur(prisma, fournisseurNom, societeId);
+    const resolutionParDefaut = await trouverOuCreerFournisseur(prisma, fournisseurNom, societeId, codeFournisseur);
+    if (resolutionParDefaut.statut === "ambigu") {
+      res.status(409).json({
+        error:
+          `Plusieurs fournisseurs existants correspondent au nom "${resolutionParDefaut.nom}" : ` +
+          "impossible de déterminer lequel utiliser par défaut sans choix arbitraire. " +
+          "Résous cette ambiguïté (fiches fournisseurs) avant de réimporter.",
+        fournisseurIds: resolutionParDefaut.fournisseurIds,
+      });
+      return;
+    }
+    if (resolutionParDefaut.statut === "inactif") {
+      res.status(409).json({
+        error:
+          `Le fournisseur "${resolutionParDefaut.identifiant}" existe mais est actuellement inactif : ` +
+          "réactive-le explicitement (fiche fournisseur) avant de réimporter, ou choisis un autre fournisseur.",
+        fournisseurId: resolutionParDefaut.fournisseurId,
+      });
+      return;
+    }
+    if (resolutionParDefaut.statut === "code_inconnu") {
+      res.status(409).json({
+        error: `Aucun fournisseur ne correspond au code "${resolutionParDefaut.code}" : aucune création silencieuse à partir d'un code inconnu.`,
+        code: resolutionParDefaut.code,
+      });
+      return;
+    }
+    const fournisseurIdParDefaut = resolutionParDefaut.fournisseurId;
     // Un fichier combinant plusieurs fournisseurs (une colonne "Fournisseur" par ligne) prime sur
     // le fournisseur unique choisi dans la modale d'import ; mis en cache pour ne résoudre chaque
-    // nom qu'une fois même s'il revient sur des centaines de lignes.
-    const fournisseurIdParNom = new Map<string, number>();
+    // nom qu'une fois même s'il revient sur des centaines de lignes (résolution complète, jamais
+    // seulement l'id, pour pouvoir refuser une ligne dont le fournisseur est ambigu sans avoir à
+    // interroger la base une deuxième fois).
+    const resolutionParNom = new Map<string, ResolutionFournisseur>();
+    // Un DocumentFournisseur (type LISTING) par fournisseur physique réellement concerné par CET
+    // import — jamais un seul document arbitrairement rattaché au fournisseur par défaut : un
+    // fichier mélangeant plusieurs fournisseurs (colonne "Fournisseur" par ligne) doit voir chacun
+    // d'eux recevoir son propre historique d'import, jamais mélangé avec celui d'un autre.
+    const documentIdParFournisseur = new Map<number, number>();
+
+    async function documentPourFournisseur(fournisseurId: number): Promise<number> {
+      const existant = documentIdParFournisseur.get(fournisseurId);
+      if (existant) return existant;
+      const document = await prisma.documentFournisseur.create({
+        data: {
+          fournisseurId,
+          type: "LISTING",
+          // Écriture immédiate (pas d'étape de validation séparée comme pour le listing photo) :
+          // le document reflète directement l'état final, jamais "en attente" d'une décision qui
+          // a déjà été prise par l'utilisateur en prévisualisation.
+          statut: "VALIDE",
+          cle: `excel-${randomUUID()}`,
+          typeMime: typeMime || "application/octet-stream",
+          tailleOctets: typeof tailleOctets === "number" ? tailleOctets : 0,
+          nomFichierOriginal: nomFichierOriginal || null,
+        },
+      });
+      documentIdParFournisseur.set(fournisseurId, document.id);
+      return document.id;
+    }
 
     const [
       uniteKg,
@@ -446,14 +536,17 @@ router.post("/import", async (req: Request, res: Response) => {
     }));
 
     // Tarifs actifs des articles existants, préchargés en une seule requête plutôt qu'une par
-    // ligne rapprochée.
+    // ligne rapprochée — indexés par (articleId, fournisseurId), jamais par articleId seul (voir
+    // cadrage, correction du bug critique : le tarif actif d'un AUTRE fournisseur ne doit jamais
+    // pouvoir être trouvé, donc jamais clôturé, par la ligne d'un fournisseur différent).
     const tarifsActifsExistants = await prisma.tarifArticle.findMany({
       where: { actif: true, articleId: { in: articlesExistants.map((a) => a.id) } },
       orderBy: { dateDebut: "desc" },
     });
-    const tarifActifParArticle = new Map<number, (typeof tarifsActifsExistants)[number]>();
+    const tarifActifParArticleFournisseur = new Map<string, (typeof tarifsActifsExistants)[number]>();
     for (const t of tarifsActifsExistants) {
-      if (!tarifActifParArticle.has(t.articleId)) tarifActifParArticle.set(t.articleId, t);
+      const cle = cleTarifActif(t.articleId, t.fournisseurId);
+      if (!tarifActifParArticleFournisseur.has(cle)) tarifActifParArticleFournisseur.set(cle, t);
     }
 
     const uniteSymboleParId = new Map<number, string>();
@@ -462,12 +555,12 @@ router.post("/import", async (req: Request, res: Response) => {
     if (unitePiece) uniteSymboleParId.set(unitePiece.id, unitePiece.symbole);
 
     // Contexte transmis à analyserPropositionLigne (voir importListing.ts) : candidats et
-    // tarifActifParArticle sont les MÊMES objets que ceux mutés plus bas (push/set) à chaque
-    // création ou remplacement de tarif, pour qu'une ligne puisse se rapprocher d'un article créé
-    // plus tôt dans le même import, exactement comme avant ce correctif.
+    // tarifActifParArticleFournisseur sont les MÊMES objets que ceux mutés plus bas (push/set) à
+    // chaque création ou remplacement de tarif, pour qu'une ligne puisse se rapprocher d'un article
+    // créé plus tôt dans le même import, exactement comme avant ce correctif.
     const contexteLigne: ContexteAnalyseLigne = {
       candidats,
-      tarifActifParArticle,
+      tarifActifParArticleFournisseur,
       uniteKgId: uniteKg?.id ?? null,
       uniteLId: uniteL?.id ?? null,
       unitePieceId: unitePiece?.id ?? null,
@@ -487,21 +580,156 @@ router.post("/import", async (req: Request, res: Response) => {
       if (!designation) continue;
 
       const nomFournisseurLigne = ligne.fournisseur ? String(ligne.fournisseur).trim() : "";
+      const codeFournisseurLigne = ligne.codeFournisseur ? String(ligne.codeFournisseur).trim() : "";
       let fournisseurId = fournisseurIdParDefaut;
-      if (nomFournisseurLigne) {
-        const cleFournisseur = nomFournisseurLigne.toLowerCase();
-        const idConnu = fournisseurIdParNom.get(cleFournisseur);
-        if (idConnu) {
-          fournisseurId = idConnu;
-        } else {
-          fournisseurId = await trouverOuCreerFournisseur(prisma, nomFournisseurLigne, societeId);
-          fournisseurIdParNom.set(cleFournisseur, fournisseurId);
+      if (codeFournisseurLigne || nomFournisseurLigne) {
+        // Le code prime toujours sur le nom pour CETTE ligne (voir cadrage §6, niveau 1) — la clé de
+        // cache distingue les deux espaces pour ne jamais confondre un code et un nom qui se
+        // ressembleraient par coïncidence.
+        const cle = codeFournisseurLigne ? `code:${codeFournisseurLigne}` : `nom:${normaliserIdentiteFournisseur(nomFournisseurLigne)}`;
+        let resolution = resolutionParNom.get(cle);
+        if (!resolution) {
+          resolution = await trouverOuCreerFournisseur(prisma, nomFournisseurLigne, societeId, codeFournisseurLigne);
+          resolutionParNom.set(cle, resolution);
         }
+        // Ambiguïté/inactivité/code inconnu propres à CETTE ligne : jamais de choix arbitraire, jamais
+        // de réutilisation ou de création silencieuse — la ligne est refusée, les autres lignes
+        // valides du même import continuent d'être traitées normalement.
+        if (resolution.statut === "ambigu") {
+          erreurs.push(
+            `Plusieurs fournisseurs existants correspondent au nom "${resolution.nom}" pour la ligne ` +
+            `"${designation}" : ligne ignorée, ambiguïté à résoudre manuellement.`
+          );
+          continue;
+        }
+        if (resolution.statut === "inactif") {
+          erreurs.push(
+            `Le fournisseur "${resolution.identifiant}" existe mais est inactif pour la ligne ` +
+            `"${designation}" : ligne ignorée, réactivation explicite requise.`
+          );
+          continue;
+        }
+        if (resolution.statut === "code_inconnu") {
+          erreurs.push(
+            `Aucun fournisseur ne correspond au code "${resolution.code}" pour la ligne "${designation}" : ` +
+            "ligne ignorée, aucune création silencieuse à partir d'un code."
+          );
+          continue;
+        }
+        fournisseurId = resolution.fournisseurId;
       }
 
+      // Historique de CET import (Phase 6, réutilise DocumentFournisseur/LigneDocumentFournisseur
+      // tels quels — un document par fournisseur physique réellement concerné, jamais un seul
+      // document arbitrairement rattaché au fournisseur par défaut d'un fichier qui en mélange
+      // plusieurs).
+      const documentId = await documentPourFournisseur(fournisseurId);
+      const referenceLigne = ligne.reference ? String(ligne.reference).trim() || null : null;
+      const prixLu = parsePrix(ligne.prix);
+      const codeProduitLigne = ligne.codeProduitFournisseur ? String(ligne.codeProduitFournisseur).trim() : "";
+
+      // --- Niveau 4/7 (cadrage §6/§7) : code produit fournisseur DÉJÀ CONNU chez ce fournisseur —
+      // identité certaine par construction, jamais réévaluée par référence/désignation catalogue
+      // (contrairement au chemin sans code ci-dessous). Une désignation très différente de celle
+      // déjà connue pour ce code déclenche une alerte explicite, jamais un écrasement silencieux. ---
+      const produitExistant = codeProduitLigne
+        ? await prisma.produitFournisseur.findUnique({
+            where: { fournisseurId_codeProduitFournisseur: { fournisseurId, codeProduitFournisseur: codeProduitLigne } },
+          })
+        : null;
+
+      if (produitExistant) {
+        const similarite = similariteJaccard(designation, produitExistant.designationConnue);
+        if (similarite < SEUIL_CORRESPONDANCE_DESIGNATION) {
+          erreurs.push(
+            `Code produit "${codeProduitLigne}" déjà connu chez ce fournisseur avec une désignation très ` +
+            `différente ("${produitExistant.designationConnue}" vs "${designation}") : ligne ignorée, décision humaine requise.`
+          );
+          await prisma.ligneDocumentFournisseur.create({
+            data: { documentId, designationLue: designation, referenceLue: referenceLigne, prixLu, decision: "EN_ATTENTE" },
+          });
+          enAttente++;
+          continue;
+        }
+
+        if (prixLu === null) {
+          erreurs.push(`Prix illisible pour "${designation}"`);
+          continue;
+        }
+        if (!conditionnement) {
+          erreurs.push(`Aucun conditionnement configuré pour "${designation}"`);
+          continue;
+        }
+
+        const quantiteDetecteeCode = extraireQuantiteDesignation(designation, ligne.conditionnement);
+        let uniteIdCode: number | null = null;
+        let prixHTCode = prixLu;
+        if (quantiteDetecteeCode && quantiteDetecteeCode.quantite > 0) {
+          const uniteChoisie = quantiteDetecteeCode.unite === "kg" ? (uniteKg?.id ?? null) : (uniteL?.id ?? null);
+          if (uniteChoisie) {
+            uniteIdCode = uniteChoisie;
+            prixHTCode = Math.round((prixLu / quantiteDetecteeCode.quantite) * 10000) / 10000;
+          }
+        }
+        if (uniteIdCode === null && unitePiece) uniteIdCode = unitePiece.id;
+        if (uniteIdCode === null) {
+          erreurs.push(`Aucune unité disponible pour "${designation}"`);
+          continue;
+        }
+
+        const cleTarifCode = cleTarifActif(produitExistant.articleId, fournisseurId);
+        const tarifActifCode = tarifActifParArticleFournisseur.get(cleTarifCode) ?? null;
+        const inchangeCode = tarifActifCode !== null && tarifActifCode.uniteId === uniteIdCode && tarifActifCode.prixHT === prixHTCode;
+
+        if (inchangeCode) {
+          inchanges++;
+          await prisma.ligneDocumentFournisseur.create({
+            data: {
+              documentId, designationLue: designation, referenceLue: referenceLigne, prixLu,
+              decision: "VALIDEE", articleRetenuId: produitExistant.articleId,
+            },
+          });
+          continue;
+        }
+
+        const operationsCode = [];
+        if (tarifActifCode) {
+          operationsCode.push(
+            prisma.tarifArticle.update({ where: { id: tarifActifCode.id }, data: { actif: false, dateFin: new Date() } })
+          );
+        }
+        operationsCode.push(
+          prisma.tarifArticle.create({
+            data: {
+              articleId: produitExistant.articleId,
+              fournisseurId,
+              uniteId: uniteIdCode,
+              conditionnementId: conditionnement.id,
+              quantiteConditionnement: 1,
+              prixHT: prixHTCode,
+              produitFournisseurId: produitExistant.id,
+            },
+          })
+        );
+        const resultatsCode = await prisma.$transaction(operationsCode);
+        const tarifCreeParCode = resultatsCode[resultatsCode.length - 1];
+        tarifActifParArticleFournisseur.set(cleTarifCode, tarifCreeParCode);
+
+        await prisma.ligneDocumentFournisseur.create({
+          data: {
+            documentId, designationLue: designation, referenceLue: referenceLigne, prixLu,
+            decision: "VALIDEE", articleRetenuId: produitExistant.articleId, tarifCreeId: tarifCreeParCode.id,
+          },
+        });
+        misesAJour++;
+        continue;
+      }
+
+      // --- Chemin sans code déjà connu (niveau 5/6 du cadrage : code absent, ou code inédit chez ce
+      // fournisseur) — rapprochement historique inchangé (référence catalogue puis désignation). ---
       // Réévalue la proposition à l'instant de l'écriture, à partir de l'état courant de
-      // candidats/tarifActifParArticle (jamais une proposition transmise par le client) : c'est
-      // cette réévaluation fraîche qui permet de vérifier qu'une confirmation d'approximation
+      // candidats/tarifActifParArticleFournisseur (jamais une proposition transmise par le client) :
+      // c'est cette réévaluation fraîche qui permet de vérifier qu'une confirmation d'approximation
       // porte bien sur la correspondance qui sera réellement écrite (voir PHASE 3, PR #79).
       const proposition = analyserPropositionLigne(
         ligne,
@@ -511,6 +739,9 @@ router.post("/import", async (req: Request, res: Response) => {
 
       if (proposition.statut === "invalide") {
         erreurs.push(`${proposition.motif} pour "${designation}"`);
+        await prisma.ligneDocumentFournisseur.create({
+          data: { documentId, designationLue: designation, referenceLue: referenceLigne, prixLu, decision: "REJETEE" },
+        });
         continue;
       }
       if (!conditionnement) {
@@ -520,6 +751,21 @@ router.post("/import", async (req: Request, res: Response) => {
 
       if (proposition.statut === "tarif_inchange") {
         inchanges++;
+        // Un code produit inédit chez ce fournisseur, même sur un tarif inchangé, établit quand même
+        // l'identité pour les imports futurs — jamais recréé à chaque changement de prix (voir §7).
+        if (codeProduitLigne) {
+          await resoudreOuCreerProduitFournisseur(prisma, fournisseurId, codeProduitLigne, proposition.articleId, designation);
+        }
+        await prisma.ligneDocumentFournisseur.create({
+          data: {
+            documentId,
+            designationLue: designation,
+            referenceLue: referenceLigne,
+            prixLu,
+            decision: "VALIDEE",
+            articleRetenuId: proposition.articleId,
+          },
+        });
         continue;
       }
 
@@ -532,11 +778,30 @@ router.post("/import", async (req: Request, res: Response) => {
           // l'écriture est refusée.
           if (ligne.confirmationArticleId !== proposition.articleId) {
             enAttente++;
+            await prisma.ligneDocumentFournisseur.create({
+              data: {
+                documentId,
+                designationLue: designation,
+                referenceLue: referenceLigne,
+                prixLu,
+                articleProposeId: proposition.articleId,
+                confiance: proposition.score,
+              },
+            });
             continue;
           }
         }
 
-        const tarifActif = tarifActifParArticle.get(proposition.articleId);
+        let produitFournisseurIdAStamper: number | null = null;
+        if (codeProduitLigne) {
+          const produitCree = await resoudreOuCreerProduitFournisseur(
+            prisma, fournisseurId, codeProduitLigne, proposition.articleId, designation
+          );
+          produitFournisseurIdAStamper = produitCree.id;
+        }
+
+        const cle = cleTarifActif(proposition.articleId, fournisseurId);
+        const tarifActif = tarifActifParArticleFournisseur.get(cle);
 
         const operations = [];
         if (tarifActif) {
@@ -556,12 +821,26 @@ router.post("/import", async (req: Request, res: Response) => {
               conditionnementId: conditionnement.id,
               quantiteConditionnement: 1,
               prixHT: proposition.nouveauPrixHT,
+              produitFournisseurId: produitFournisseurIdAStamper,
             },
           })
         );
 
         const resultats = await prisma.$transaction(operations);
-        tarifActifParArticle.set(proposition.articleId, resultats[resultats.length - 1]);
+        const tarifCreeParRemplacement = resultats[resultats.length - 1];
+        tarifActifParArticleFournisseur.set(cle, tarifCreeParRemplacement);
+
+        await prisma.ligneDocumentFournisseur.create({
+          data: {
+            documentId,
+            designationLue: designation,
+            referenceLue: referenceLigne,
+            prixLu,
+            decision: "VALIDEE",
+            articleRetenuId: proposition.articleId,
+            tarifCreeId: tarifCreeParRemplacement.id,
+          },
+        });
 
         misesAJour++;
         continue;
@@ -617,6 +896,14 @@ router.post("/import", async (req: Request, res: Response) => {
           });
         }
 
+        let produitFournisseurIdAStamper: number | null = null;
+        if (codeProduitLigne) {
+          const produitCree = await resoudreOuCreerProduitFournisseur(
+            tx, fournisseurId, codeProduitLigne, created.id, designation
+          );
+          produitFournisseurIdAStamper = produitCree.id;
+        }
+
         const tarifCree = await tx.tarifArticle.create({
           data: {
             articleId: created.id,
@@ -625,14 +912,27 @@ router.post("/import", async (req: Request, res: Response) => {
             conditionnementId: conditionnement.id,
             quantiteConditionnement: 1,
             prixHT,
+            produitFournisseurId: produitFournisseurIdAStamper,
           },
         });
 
         return { nouvelArticle: created, tarifCree };
       });
 
+      await prisma.ligneDocumentFournisseur.create({
+        data: {
+          documentId,
+          designationLue: designation,
+          referenceLue: referenceLigne,
+          prixLu,
+          decision: "VALIDEE",
+          articleRetenuId: nouvelArticle.id,
+          tarifCreeId: tarifCree.id,
+        },
+      });
+
       candidats.push({ articleId: nouvelArticle.id, nom: designation, reference });
-      tarifActifParArticle.set(nouvelArticle.id, tarifCree);
+      tarifActifParArticleFournisseur.set(cleTarifActif(nouvelArticle.id, fournisseurId), tarifCree);
       crees++;
     }
 
@@ -673,7 +973,7 @@ router.post("/import/apercu", async (req: Request, res: Response) => {
       }),
       // Lecture seule : un fournisseur absent n'est jamais créé ici, contrairement à
       // POST /import — la prévisualisation ne doit jamais avoir d'effet de bord en base.
-      prisma.fournisseur.findMany({ where: { societeId }, select: { id: true, nom: true } }),
+      prisma.fournisseur.findMany({ where: { societeId }, select: { id: true, nom: true, actif: true } }),
     ]);
 
     const candidats: CandidatExistant[] = articlesExistants.map((a) => ({
@@ -686,14 +986,24 @@ router.post("/import/apercu", async (req: Request, res: Response) => {
       where: { actif: true, articleId: { in: articlesExistants.map((a) => a.id) } },
       orderBy: { dateDebut: "desc" },
     });
-    const tarifActifParArticle = new Map<number, (typeof tarifsActifsExistants)[number]>();
+    const tarifActifParArticleFournisseur = new Map<string, (typeof tarifsActifsExistants)[number]>();
     for (const t of tarifsActifsExistants) {
-      if (!tarifActifParArticle.has(t.articleId)) tarifActifParArticle.set(t.articleId, t);
+      const cle = cleTarifActif(t.articleId, t.fournisseurId);
+      if (!tarifActifParArticleFournisseur.has(cle)) tarifActifParArticleFournisseur.set(cle, t);
     }
 
-    const fournisseurIdParNomExistant = new Map<string, number>();
+    // Groupé par identité normalisée (jamais un simple id) : permet de détecter dès l'aperçu
+    // qu'un nom correspond à PLUSIEURS fournisseurs existants distincts, exactement comme le fera
+    // l'écriture réelle (trouverOuCreerFournisseur, même fonction normaliserIdentiteFournisseur) —
+    // aucune divergence possible entre les deux. actif conservé pour détecter dès l'aperçu un
+    // fournisseur inactif, exactement comme le fera l'écriture réelle.
+    const fournisseursParId = new Map(fournisseursExistants.map((f) => [f.id, f]));
+    const fournisseurIdsParIdentite = new Map<string, number[]>();
     for (const f of fournisseursExistants) {
-      fournisseurIdParNomExistant.set(f.nom.trim().toLowerCase(), f.id);
+      const cle = normaliserIdentiteFournisseur(f.nom);
+      const liste = fournisseurIdsParIdentite.get(cle);
+      if (liste) liste.push(f.id);
+      else fournisseurIdsParIdentite.set(cle, [f.id]);
     }
 
     const uniteSymboleParId = new Map<number, string>();
@@ -703,7 +1013,7 @@ router.post("/import/apercu", async (req: Request, res: Response) => {
 
     const contexteLigne: ContexteAnalyseLigne = {
       candidats,
-      tarifActifParArticle,
+      tarifActifParArticleFournisseur,
       uniteKgId: uniteKg?.id ?? null,
       uniteLId: uniteL?.id ?? null,
       unitePieceId: unitePiece?.id ?? null,
@@ -713,17 +1023,71 @@ router.post("/import/apercu", async (req: Request, res: Response) => {
     // Une ligne conserve son index d'origine (jamais filtrée ni réordonnée) : le client doit
     // pouvoir associer chaque proposition à la ligne source du fichier importé, y compris les
     // lignes invalides.
-    const propositions = lignes.map((ligne) => {
+    const propositions: (
+      | PropositionLigneImport
+      | PropositionFournisseurAmbigu
+      | { statut: "fournisseur_inactif"; designation: string; reference: string | null; identifiant: string; fournisseurId: number }
+      | { statut: "code_produit_designation_differente"; designation: string; reference: string | null; codeProduitFournisseur: string; designationConnue: string }
+    )[] = [];
+
+    for (const ligne of lignes) {
       const nomFournisseurLigne = ligne?.fournisseur ? String(ligne.fournisseur).trim() : "";
       const nomFournisseurResolu = nomFournisseurLigne || String(fournisseurNom ?? "").trim();
-      const fournisseurId =
-        fournisseurIdParNomExistant.get(nomFournisseurResolu.toLowerCase()) ?? null;
+      const cle = normaliserIdentiteFournisseur(nomFournisseurResolu);
+      const correspondances = fournisseurIdsParIdentite.get(cle) ?? [];
+      const designationLigne = String(ligne?.designation ?? "").trim();
+      const referenceLigne = ligne?.reference ? String(ligne.reference).trim() : null;
 
-      return analyserPropositionLigne(ligne, contexteLigne, {
-        fournisseurId,
-        fournisseurNom: nomFournisseurResolu,
-      });
-    });
+      // Plusieurs fournisseurs existants partagent ce nom (après normalisation) : jamais de choix
+      // arbitraire, même en aperçu — signalé explicitement plutôt que résolu au hasard.
+      if (correspondances.length > 1) {
+        propositions.push({
+          statut: "fournisseur_ambigu",
+          designation: designationLigne,
+          reference: referenceLigne,
+          nom: nomFournisseurResolu,
+          fournisseurIds: correspondances,
+        });
+        continue;
+      }
+
+      const fournisseurId = correspondances[0] ?? null;
+      const fournisseurTrouve = fournisseurId !== null ? fournisseursParId.get(fournisseurId) : undefined;
+      if (fournisseurTrouve && !fournisseurTrouve.actif) {
+        propositions.push({
+          statut: "fournisseur_inactif",
+          designation: designationLigne,
+          reference: referenceLigne,
+          identifiant: nomFournisseurResolu,
+          fournisseurId: fournisseurTrouve.id,
+        });
+        continue;
+      }
+
+      const codeProduitLigne = ligne?.codeProduitFournisseur ? String(ligne.codeProduitFournisseur).trim() : "";
+      if (codeProduitLigne && fournisseurId !== null) {
+        const produitExistant = await prisma.produitFournisseur.findUnique({
+          where: { fournisseurId_codeProduitFournisseur: { fournisseurId, codeProduitFournisseur: codeProduitLigne } },
+        });
+        if (produitExistant && similariteJaccard(designationLigne, produitExistant.designationConnue) < SEUIL_CORRESPONDANCE_DESIGNATION) {
+          propositions.push({
+            statut: "code_produit_designation_differente",
+            designation: designationLigne,
+            reference: referenceLigne,
+            codeProduitFournisseur: codeProduitLigne,
+            designationConnue: produitExistant.designationConnue,
+          });
+          continue;
+        }
+      }
+
+      propositions.push(
+        analyserPropositionLigne(ligne, contexteLigne, {
+          fournisseurId,
+          fournisseurNom: nomFournisseurResolu,
+        })
+      );
+    }
 
     res.json({ propositions });
   } catch (error) {
@@ -777,19 +1141,134 @@ router.post("/rechercher-par-reference", async (req: Request, res: Response) => 
   }
 });
 
+// Règle d'identité fournisseur (chantier « identité fournisseur + historique des imports ») :
+// trim + minuscule, rien d'autre — jamais un retrait d'accent ni une compaction des espaces
+// internes, jamais appliquée à la valeur stockée (seulement à la comparaison). Utilisée à la fois
+// par l'aperçu et par l'écriture réelle pour qu'aucune divergence ne puisse plus exister entre les
+// deux (l'aperçu comparait déjà en minuscule, l'écriture comparait en respectant la casse — c'est
+// cette divergence précise qui permettait de créer un doublon silencieux à l'écriture après une
+// prévisualisation qui reconnaissait pourtant le fournisseur existant).
+export function normaliserIdentiteFournisseur(nom: string): string {
+  return nom.trim().toLowerCase();
+}
+
+export type ResolutionFournisseur =
+  | { statut: "ok"; fournisseurId: number }
+  // Plusieurs fournisseurs existants partagent la même identité normalisée : jamais de choix
+  // arbitraire (premier, plus ancien, plus de tarifs...) — l'appelant doit refuser l'écriture et
+  // exposer l'ambiguïté explicitement, tant qu'un humain n'a pas tranché lequel réutiliser.
+  | { statut: "ambigu"; nom: string; fournisseurIds: number[] }
+  // Le fournisseur retrouvé (par code ou par nom) est actif:false — jamais réutilisé silencieusement,
+  // jamais réactivé automatiquement (voir cadrage §8/§9 : POST /fournisseurs/:id/reactiver est une
+  // action humaine distincte).
+  | { statut: "inactif"; identifiant: string; fournisseurId: number }
+  // codeFournisseur fourni mais aucun fournisseur ne correspond : jamais de création silencieuse à
+  // partir d'un code (voir cadrage §6, niveau 3) — contrairement à la résolution par nom.
+  | { statut: "code_inconnu"; code: string };
+
+// Résout un fournisseur en priorité par codeFournisseur si fourni (recherche stricte, jamais de
+// création, jamais de repli sur le nom — voir cadrage §6, niveau 1-3 : « aucune recherche globale
+// ... ne doit passer devant cette identité »), sinon par nom normalisé (chemin historique, inchangé
+// dans son principe sauf l'ajout du blocage sur fournisseur inactif ci-dessous).
 async function trouverOuCreerFournisseur(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
   fournisseurNom: string | undefined,
-  societeId: number
-): Promise<number> {
+  societeId: number,
+  codeFournisseur?: string | null
+): Promise<ResolutionFournisseur> {
+  const code = (codeFournisseur ?? "").trim();
+  if (code) {
+    const trouve = await tx.fournisseur.findUnique({
+      where: { societeId_codeFournisseur: { societeId, codeFournisseur: code } },
+    });
+    if (!trouve) {
+      return { statut: "code_inconnu", code };
+    }
+    if (!trouve.actif) {
+      return { statut: "inactif", identifiant: code, fournisseurId: trouve.id };
+    }
+    return { statut: "ok", fournisseurId: trouve.id };
+  }
+
   const nomFournisseur = (fournisseurNom || "").trim();
   const nomRecherche = nomFournisseur || "Non renseigné";
+  const cleNormalisee = normaliserIdentiteFournisseur(nomRecherche);
 
-  const existant = await tx.fournisseur.findFirst({ where: { nom: nomRecherche, societeId } });
-  if (existant) return existant.id;
+  // Comparaison en mémoire (jamais une contrainte DB pour l'instant, voir cadrage §9/§12) : évite
+  // toute dépendance à la collation Postgres et garantit une normalisation strictement identique à
+  // celle de l'aperçu (même fonction JS des deux côtés).
+  const candidats = await tx.fournisseur.findMany({ where: { societeId }, select: { id: true, nom: true, actif: true } });
+  const correspondances = candidats.filter((f) => normaliserIdentiteFournisseur(f.nom) === cleNormalisee);
+
+  if (correspondances.length === 1) {
+    const trouve = correspondances[0];
+    if (!trouve.actif) {
+      return { statut: "inactif", identifiant: nomRecherche, fournisseurId: trouve.id };
+    }
+    return { statut: "ok", fournisseurId: trouve.id };
+  }
+  if (correspondances.length > 1) {
+    return { statut: "ambigu", nom: nomRecherche, fournisseurIds: correspondances.map((f) => f.id) };
+  }
 
   const cree = await tx.fournisseur.create({ data: { nom: nomRecherche, societeId } });
-  return cree.id;
+  return { statut: "ok", fournisseurId: cree.id };
+}
+
+// Utilisée par la création/modification manuelle d'un article (un seul fournisseur en jeu, jamais
+// de traitement ligne par ligne à poursuivre) : une ambiguïté/inactivité/code inconnu interrompt
+// directement l'écriture en cours (transaction annulée), traduite en réponse HTTP explicite par
+// repondreErreurEcriture.
+async function resoudreFournisseurOuLever(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  fournisseurNom: string | undefined,
+  societeId: number,
+  codeFournisseur?: string | null
+): Promise<number> {
+  const resolution = await trouverOuCreerFournisseur(tx, fournisseurNom, societeId, codeFournisseur);
+  if (resolution.statut === "ambigu") {
+    throw new FournisseurAmbiguError(resolution.nom, resolution.fournisseurIds);
+  }
+  if (resolution.statut === "inactif") {
+    throw new FournisseurInactifError(resolution.identifiant, resolution.fournisseurId);
+  }
+  if (resolution.statut === "code_inconnu") {
+    throw new FournisseurCodeInconnuError(resolution.code);
+  }
+  return resolution.fournisseurId;
+}
+
+// Résout (ou crée) le ProduitFournisseur identifiant un couple (fournisseur, code produit) — voir
+// cadrage §4/§13 : le code produit fournisseur n'est unique QUE par fournisseur, jamais globalement
+// (deux fournisseurs différents peuvent légitimement partager le même code, ce sont alors deux
+// ProduitFournisseur distincts). Jamais de code inventé : articleId/designation proviennent toujours
+// de la ligne réellement importée. Robuste à la concurrence : une violation de la contrainte unique
+// (deux imports concurrents créant le même couple) est traitée comme "déjà créé par l'autre",
+// jamais comme une erreur — la ligne relit alors ce que l'autre transaction vient de committer.
+async function resoudreOuCreerProduitFournisseur(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  fournisseurId: number,
+  codeProduitFournisseur: string,
+  articleId: number,
+  designation: string
+): Promise<{ id: number; designationConnue: string }> {
+  const existant = await tx.produitFournisseur.findUnique({
+    where: { fournisseurId_codeProduitFournisseur: { fournisseurId, codeProduitFournisseur } },
+  });
+  if (existant) return existant;
+
+  try {
+    return await tx.produitFournisseur.create({
+      data: { fournisseurId, codeProduitFournisseur, articleId, designationConnue: designation },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return await tx.produitFournisseur.findUniqueOrThrow({
+        where: { fournisseurId_codeProduitFournisseur: { fournisseurId, codeProduitFournisseur } },
+      });
+    }
+    throw error;
+  }
 }
 
 export default router;

@@ -68,6 +68,14 @@ export default function FournisseursGrille({ groupes, onOuvrir, onEdit, onDelete
               </div>
               <div style={{ padding: "10px 12px" }}>
                 <div style={{ fontWeight: 600 }}>{groupe.nom}</div>
+                {/* Code affiché uniquement quand un seul fournisseur physique porte ce nom : pour un
+                    groupe homonyme, chaque fournisseur a son propre code, jamais résumé en un seul
+                    ici (voir l'onglet dédié pour le détail par fournisseur physique). */}
+                {!estHomonyme && groupe.fournisseurs[0].codeFournisseur && (
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#0f6848" }}>
+                    {groupe.fournisseurs[0].codeFournisseur}
+                  </div>
+                )}
                 <div style={{ fontSize: 12, color: "var(--couleur-texte-attenue)", marginTop: 2 }}>
                   {groupe.totalTarifs} tarif(s){estHomonyme ? ` · ${groupe.fournisseurs.length} fournisseurs` : ""}
                 </div>

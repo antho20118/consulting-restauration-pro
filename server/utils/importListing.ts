@@ -199,11 +199,27 @@ export type PropositionLigneImport =
       uniteSymbole: string;
     };
 
+// Clé du tarif actif d'UN article chez UN fournisseur précis — voir cadrage « identité fournisseur
+// + produit fournisseur + historique des tarifs », correction du bug critique : un tarif actif
+// n'est plus jamais recherché/remplacé par articleId seul (ce qui permettait à l'import d'un
+// fournisseur B de clôturer le tarif d'un fournisseur A pour le même article), mais toujours scopé
+// au fournisseur courant. Utilisée à la fois pour précharger la map (ContexteAnalyseLigne) et pour
+// y chercher le tarif actif de la ligne en cours.
+export function cleTarifActif(articleId: number, fournisseurId: number): string {
+  return `${articleId}:${fournisseurId}`;
+}
+
 export type ContexteAnalyseLigne = {
   candidats: CandidatExistant[];
-  // Tarif actif de chaque article candidat, préchargé une seule fois par l'appelant (jamais une
-  // requête par ligne).
-  tarifActifParArticle: Map<number, { prixHT: number; uniteId: number; fournisseurId: number }>;
+  // Tarif actif de chaque couple (article, fournisseur) candidat, préchargé une seule fois par
+  // l'appelant (jamais une requête par ligne) — clé : cleTarifActif(articleId, fournisseurId).
+  // produitFournisseurId : identité stable du produit chez ce fournisseur si connue (voir
+  // ProduitFournisseur), null pour un tarif créé sans code produit fournisseur — jamais reconstruite
+  // après coup.
+  tarifActifParArticleFournisseur: Map<
+    string,
+    { id: number; prixHT: number; uniteId: number; fournisseurId: number; produitFournisseurId: number | null }
+  >;
   uniteKgId: number | null;
   uniteLId: number | null;
   unitePieceId: number | null;
@@ -263,14 +279,15 @@ export function analyserPropositionLigne(
   }
 
   const typeCorrespondance: "reference" | "approximative" = parReference ? "reference" : "approximative";
-  const tarifActif = contexte.tarifActifParArticle.get(candidat.articleId) ?? null;
+  // Scopé par (article, fournisseur) — jamais par article seul (voir cadrage, correction du bug
+  // critique) : le tarif actif d'un AUTRE fournisseur pour ce même article n'est jamais consulté ici
+  // et ne sera donc jamais clôturé par cette ligne, quel que soit son prix ou son unité.
+  const tarifActif =
+    fournisseurIdResolu !== null
+      ? (contexte.tarifActifParArticleFournisseur.get(cleTarifActif(candidat.articleId, fournisseurIdResolu)) ?? null)
+      : null;
 
-  const inchange =
-    tarifActif !== null &&
-    tarifActif.uniteId === uniteId &&
-    fournisseurIdResolu !== null &&
-    tarifActif.fournisseurId === fournisseurIdResolu &&
-    tarifActif.prixHT === prixHT;
+  const inchange = tarifActif !== null && tarifActif.uniteId === uniteId && tarifActif.prixHT === prixHT;
 
   if (inchange) {
     return {

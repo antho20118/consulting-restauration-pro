@@ -158,12 +158,13 @@ model Article {
   tarifs TarifArticle[]
   stocks Stock[]
 
-  nutrition     ValeurNutritionnelle?
-  documents     Document[]
-  allergenes    ArticleAllergene[]
-  mouvements    MouvementStock[]
-  lignesRecette RecetteLigne[]
-  aliasImport   AliasIngredientImport[]
+  nutrition           ValeurNutritionnelle?
+  documents           Document[]
+  allergenes          ArticleAllergene[]
+  mouvements          MouvementStock[]
+  lignesRecette       RecetteLigne[]
+  aliasImport         AliasIngredientImport[]
+  produitsFournisseur ProduitFournisseur[]
 
   // Deux relations distinctes vers LigneDocumentFournisseur (voir ce modèle) : l'article que le
   // rapprochement a proposé n'est pas forcément celui que l'utilisateur a retenu (candidat
@@ -201,6 +202,13 @@ model AliasIngredientImport {
 model Fournisseur {
   id Int @id @default(autoincrement())
 
+  // Identité métier stable, générée automatiquement (voir SocieteCompteur) — jamais saisie, jamais
+  // dérivée du nom, jamais réutilisée après soft-delete. Nullable uniquement parce que les
+  // fournisseurs déjà en base avant ce chantier n'en ont pas encore (attribution différée, humaine,
+  // hors périmètre de cette migration — voir cadrage). Tout fournisseur créé à partir de ce chantier
+  // en reçoit un immédiatement.
+  codeFournisseur String?
+
   nom String
 
   telephone String?
@@ -217,6 +225,22 @@ model Fournisseur {
 
   tarifs    TarifArticle[]
   documents DocumentFournisseur[]
+  produits  ProduitFournisseur[]
+
+  @@unique([societeId, codeFournisseur])
+}
+
+// Compteur atomique par société, un par type de compteur (ex. "FOURNISSEUR") — incrémenté dans la
+// même transaction que la création qu'il numérote (verrouillage de ligne implicite Postgres sur
+// l'UPDATE, jamais un SELECT MAX(...)+1 ni un COUNT(*)+1, non sûrs sous créations concurrentes).
+model SocieteCompteur {
+  id Int @id @default(autoincrement())
+
+  societeId    Int
+  typeCompteur String
+  valeur       Int    @default(0)
+
+  @@unique([societeId, typeCompteur])
 }
 
 enum TypeImportTarifs {
@@ -286,6 +310,15 @@ model TarifArticle {
   article     Article     @relation(fields: [articleId], references: [id])
   fournisseur Fournisseur @relation(fields: [fournisseurId], references: [id])
 
+  // Identité stable du produit chez CE fournisseur (voir ProduitFournisseur) — nullable : un tarif
+  // créé sans code produit fournisseur connu (chemin historique, ou tarif antérieur à ce chantier)
+  // garde cette valeur à null pour toujours, jamais reconstruite après coup par supposition. Quand
+  // renseigné, produitFournisseur.fournisseurId doit toujours être égal à fournisseurId ci-dessus —
+  // invariant garanti par le code applicatif (jamais par le client), jamais par une contrainte SQL
+  // croisée entre deux FK.
+  produitFournisseurId Int?
+  produitFournisseur   ProduitFournisseur? @relation(fields: [produitFournisseurId], references: [id])
+
   // Ligne de document (facture ou listing) ayant créé précisément CE tarif — voir
   // LigneDocumentFournisseur.tarifCreeId (FK unique, portée par l'autre modèle). Null pour un tarif
   // créé manuellement (formulaire article), par l'ancien import Excel sécurisé des recettes, ou
@@ -295,6 +328,36 @@ model TarifArticle {
 
   @@index([articleId])
   @@index([fournisseurId])
+  @@index([produitFournisseurId])
+}
+
+// Identité stable d'un produit chez UN fournisseur précis — jamais un prix (voir TarifArticle pour
+// l'historique de prix, en relation 1-n avec ce modèle). Le code produit fournisseur n'est unique
+// que par fournisseur (@@unique ci-dessous) : le même code chez deux fournisseurs différents désigne
+// deux ProduitFournisseur distincts, jamais fusionnés (voir cadrage, chantier identité fournisseur +
+// produit fournisseur + historique des tarifs).
+model ProduitFournisseur {
+  id Int @id @default(autoincrement())
+
+  fournisseurId Int
+  fournisseur   Fournisseur @relation(fields: [fournisseurId], references: [id])
+
+  codeProduitFournisseur String
+
+  articleId Int
+  article   Article @relation(fields: [articleId], references: [id])
+
+  // Dernière désignation lue pour ce code chez ce fournisseur — jamais réécrite silencieusement si
+  // une désignation très différente est ensuite lue pour le même code (voir la proposition
+  // "alerte_code_produit_designation_differente", décision humaine requise).
+  designationConnue String
+
+  createdAt DateTime @default(now())
+
+  tarifs TarifArticle[]
+
+  @@unique([fournisseurId, codeProduitFournisseur])
+  @@index([articleId])
 }
 
 enum NatureLigneFournisseur {
