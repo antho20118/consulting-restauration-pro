@@ -165,6 +165,12 @@ model Article {
   lignesRecette RecetteLigne[]
   aliasImport   AliasIngredientImport[]
 
+  // Deux relations distinctes vers LigneDocumentFournisseur (voir ce modèle) : l'article que le
+  // rapprochement a proposé n'est pas forcément celui que l'utilisateur a retenu (candidat
+  // alternatif choisi, ou ligne rejetée) — jamais confondues, donc jamais une seule relation.
+  lignesDocumentPropose LigneDocumentFournisseur[] @relation("ArticleProposeParLigne")
+  lignesDocumentRetenu  LigneDocumentFournisseur[] @relation("ArticleRetenuParLigne")
+
   @@index([nom])
   @@index([reference])
   @@index([codeBarres])
@@ -209,7 +215,54 @@ model Fournisseur {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tarifs TarifArticle[]
+  tarifs    TarifArticle[]
+  documents DocumentFournisseur[]
+}
+
+enum TypeImportTarifs {
+  LISTING
+  FACTURE
+}
+
+enum StatutDocumentFournisseur {
+  EN_ATTENTE
+  VALIDE
+  IGNORE
+}
+
+// Document fournisseur original (listing ou facture, photographié ou déposé) — voir le cadrage
+// Phase 0/1 : niveau A du pipeline (« ce que le document dit »). Le fichier lui-même ne vit jamais
+// ici : `cle` est l'identifiant opaque du fichier sur le volume (voir
+// server/utils/storageDocumentsFournisseur.ts), à combiner avec `fournisseurId` pour le retrouver
+// — jamais un chemin, jamais le contenu binaire, jamais de base64.
+model DocumentFournisseur {
+  id Int @id @default(autoincrement())
+
+  fournisseurId Int
+  fournisseur   Fournisseur @relation(fields: [fournisseurId], references: [id])
+
+  type   TypeImportTarifs
+  statut StatutDocumentFournisseur @default(EN_ATTENTE)
+
+  // Référence opaque vers storageDocumentsFournisseur.ts (racine + "fournisseurs/<fournisseurId>/<cle>.<ext>")
+  // — jamais un chemin construit ici, jamais réutilisée pour un autre fournisseur.
+  cle                String  @unique
+  typeMime           String
+  tailleOctets       Int
+  nomFichierOriginal String?
+
+  // Renseignés uniquement pour une facture, extraits du document — jamais inventés si absents (même
+  // règle de non-invention déjà suivie par l'extraction IA des recettes). Toujours null pour un
+  // listing.
+  numero       String?
+  dateDocument DateTime?
+  montantTotal Float?
+
+  importeLe DateTime @default(now())
+
+  lignes LigneDocumentFournisseur[]
+
+  @@index([fournisseurId])
 }
 
 model TarifArticle {
@@ -233,8 +286,88 @@ model TarifArticle {
   article     Article     @relation(fields: [articleId], references: [id])
   fournisseur Fournisseur @relation(fields: [fournisseurId], references: [id])
 
+  // Ligne de document (facture ou listing) ayant créé précisément CE tarif — voir
+  // LigneDocumentFournisseur.tarifCreeId (FK unique, portée par l'autre modèle). Null pour un tarif
+  // créé manuellement (formulaire article), par l'ancien import Excel sécurisé des recettes, ou
+  // créé avant ce chantier : ces tarifs restent parfaitement valides sans source documentaire,
+  // jamais une source inventée a posteriori (voir cadrage, règle de non-invention).
+  ligneDocumentSource LigneDocumentFournisseur?
+
   @@index([articleId])
   @@index([fournisseurId])
+}
+
+enum NatureLigneFournisseur {
+  ARTICLE
+  FRAIS_LIVRAISON
+  AVOIR
+  NON_ALIMENTAIRE
+  REMISE
+}
+
+enum MotifCorrespondance {
+  REFERENCE_FOURNISSEUR
+  CODE_ARTICLE
+  ALIAS
+  DESIGNATION_EXACTE
+  DESIGNATION_APPROXIMATIVE
+}
+
+enum DecisionLigneFournisseur {
+  EN_ATTENTE
+  VALIDEE
+  REJETEE
+}
+
+// Une ligne d'un DocumentFournisseur, séparant strictement les trois niveaux du cadrage (jamais
+// mélangés) :
+//   A. ce que le document dit réellement (designationLue, prixLu, ...) ;
+//   B. ce que le moteur de rapprochement (Phase 3, pas encore modifié ici) propose
+//      (articleProposeId, confiance, candidatsAlternatifs) ;
+//   C. ce que l'utilisateur a réellement validé et appliqué (decision, articleRetenuId, tarifCreeId).
+// Le moteur de rapprochement lui-même n'est pas touché en Phase 2 : ces champs existent déjà pour
+// qu'il les remplisse en Phase 3, sans nouvelle migration à ce moment-là.
+model LigneDocumentFournisseur {
+  id Int @id @default(autoincrement())
+
+  documentId Int
+  document   DocumentFournisseur @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  // --- A. Données lues (jamais réinterprétées après coup) ---
+  designationLue    String
+  referenceLue      String?
+  quantiteLue       Float?
+  uniteLue          String?
+  conditionnementLu String?
+  prixLu            Float?
+
+  // Nature détectée AVANT le rapprochement (voir cadrage §6) : une ligne de frais de
+  // livraison/avoir/remise/non-alimentaire ne doit jamais entrer dans le pipeline de
+  // création/modification de tarif, même si elle ressemble à un article par ailleurs.
+  natureLigne NatureLigneFournisseur @default(ARTICLE)
+
+  // --- B. Correspondance proposée (jamais une décision) ---
+  articleProposeId     Int?
+  articlePropose       Article?             @relation("ArticleProposeParLigne", fields: [articleProposeId], references: [id])
+  confiance            Float?
+  motifCorrespondance  MotifCorrespondance?
+  // Candidats concurrents pour affichage seul (voir cadrage §5, "plusieurs candidats") — jamais
+  // utilisés pour créer/modifier un tarif automatiquement, uniquement pour que l'utilisateur puisse
+  // choisir explicitement parmi eux en prévisualisation.
+  candidatsAlternatifs Json?
+
+  // --- C. Décision humaine et tarif effectivement appliqué ---
+  decision        DecisionLigneFournisseur @default(EN_ATTENTE)
+  articleRetenuId Int?
+  articleRetenu   Article?                 @relation("ArticleRetenuParLigne", fields: [articleRetenuId], references: [id])
+  // FK unique : un tarif créé par une ligne ne peut être le tarif créé par aucune autre —
+  // garantit la traçabilité un-pour-un Article → TarifArticle → LigneDocumentFournisseur.
+  tarifCreeId     Int?                     @unique
+  tarifCree       TarifArticle?            @relation(fields: [tarifCreeId], references: [id])
+
+  @@index([documentId])
+  @@index([articleProposeId])
+  @@index([articleRetenuId])
 }
 
 model Stock {

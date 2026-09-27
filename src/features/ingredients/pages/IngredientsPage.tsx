@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import IngredientsTable from "../components/IngredientsTable";
 import IngredientForm from "../components/IngredientForm";
 import ImportListingModal from "../components/ImportListingModal";
+import ImportListingPhotoModal from "../components/ImportListingPhotoModal";
 import {
   getIngredients,
   supprimerIngredient,
@@ -16,6 +17,7 @@ export default function IngredientsPage() {
   const [ingredientEnEdition, setIngredientEnEdition] = useState<Ingredient | null>(null);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [importOuvert, setImportOuvert] = useState(false);
+  const [importPhotoOuvert, setImportPhotoOuvert] = useState(false);
   const [recherche, setRecherche] = useState("");
 
   async function chargerIngredients() {
@@ -102,6 +104,7 @@ export default function IngredientsPage() {
             + Nouvel ingrédient
           </button>
           <button onClick={() => setImportOuvert(true)}>Importer un listing</button>
+          <button onClick={() => setImportPhotoOuvert(true)}>Importer un listing par photo</button>
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 
@@ -170,6 +173,26 @@ export default function IngredientsPage() {
         >
           <ImportListingModal
             onClose={() => setImportOuvert(false)}
+            onSave={chargerIngredients}
+          />
+        </div>
+      )}
+
+      {importPhotoOuvert && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            overflowY: "auto",
+            padding: "40px 0",
+          }}
+        >
+          <ImportListingPhotoModal
+            onClose={() => setImportPhotoOuvert(false)}
             onSave={chargerIngredients}
           />
         </div>

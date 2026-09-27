@@ -11,6 +11,78 @@ export async function getFournisseurs(): Promise<Fournisseur[]> {
   return response.json();
 }
 
+export async function getFournisseur(id: number): Promise<Fournisseur> {
+  const response = await apiFetch(`${API_URL}/fournisseurs/${id}`);
+
+  if (response.status === 404) {
+    throw new Error("Fournisseur introuvable");
+  }
+  if (!response.ok) {
+    throw new Error("Impossible de récupérer ce fournisseur");
+  }
+
+  return response.json();
+}
+
+export type TarifFournisseur = {
+  id: number;
+  articleId: number;
+  prixHT: number;
+  quantiteConditionnement: number;
+  dateDebut: string;
+  dateFin: string | null;
+  actif: boolean;
+  article: { id: number; nom: string; reference: string | null };
+  unite: { symbole: string };
+  conditionnement: { nom: string };
+  ligneDocumentSource: {
+    id: number;
+    designationLue: string;
+    document: {
+      id: number;
+      type: "LISTING" | "FACTURE";
+      cle: string;
+      importeLe: string;
+      nomFichierOriginal: string | null;
+    };
+  } | null;
+};
+
+export async function getTarifsFournisseur(id: number): Promise<TarifFournisseur[]> {
+  const response = await apiFetch(`${API_URL}/fournisseurs/${id}/tarifs`);
+
+  if (!response.ok) {
+    throw new Error("Impossible de récupérer les tarifs de ce fournisseur");
+  }
+
+  return response.json();
+}
+
+export type DocumentFournisseurResume = {
+  id: number;
+  type: "LISTING" | "FACTURE";
+  statut: "EN_ATTENTE" | "VALIDE" | "IGNORE";
+  cle: string;
+  typeMime: string;
+  tailleOctets: number;
+  nomFichierOriginal: string | null;
+  numero: string | null;
+  dateDocument: string | null;
+  montantTotal: number | null;
+  importeLe: string;
+  _count: { lignes: number };
+};
+
+export async function getDocumentsFournisseur(id: number): Promise<DocumentFournisseurResume[]> {
+  const response = await apiFetch(`${API_URL}/fournisseurs/${id}/documents`);
+
+  if (!response.ok) {
+    throw new Error("Impossible de récupérer les documents de ce fournisseur");
+  }
+
+  return response.json();
+}
+
 export async function creerFournisseur(
   input: FournisseurInput & { societeId: number }
 ): Promise<Fournisseur> {

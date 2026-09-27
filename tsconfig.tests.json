@@ -8,7 +8,14 @@
     // WHATWG que celle de DOM — ce n'est pas un mensonge de typage, juste la définition la plus
     // permissive des deux pour un usage qui ne l'exploite jamais dans le navigateur.
     "lib": ["ES2023", "DOM"],
-    "types": ["node"],
+    // "vite/client" en plus de "node" (Phase 6) : tests/unit/analyserFactureLocal.test.ts importe
+    // un utilitaire de src/features/fournisseurs/utils/ qui réutilise tel quel (jamais dupliqué)
+    // analyserListingLocal.ts (Phase 4), lequel importe le type LigneListingExtraite depuis
+    // listingFournisseurService.ts — qui importe à son tour src/config/api.ts, utilisant
+    // import.meta.env. Sans ce type, tsc échoue sur ce fichier (ImportMeta.env inconnu), alors
+    // qu'il compile déjà correctement sous tsconfig.app.json (qui déclare ce même type). N'affecte
+    // que des déclarations de types ambiantes, aucun comportement à l'exécution.
+    "types": ["node", "vite/client"],
     "skipLibCheck": true,
 
     // "bundler" plutôt que "NodeNext" (contrairement à tsconfig.node.json) : les tests importent à
