@@ -98,15 +98,14 @@ test("1. référence nouvelle : création normale", async () => {
 test("2. doublon de référence non confirmé : refus (409), aucune création", async () => {
   const premier = await creerArticle("DOUBLON REF TEST Original A", "DOUBLONREF-002");
   articleIds.push(premier.corps.id);
-  const avant = await prisma.article.count();
 
   const { status, corps } = await creerArticle("DOUBLON REF TEST Doublon Non Confirme", "DOUBLONREF-002");
   assert.equal(status, 409);
   assert.match(corps.error, /référence/i);
   assert.equal(corps.doublons[0].id, premier.corps.id);
 
-  const apres = await prisma.article.count();
-  assert.equal(apres, avant, "aucun article ne doit avoir été créé");
+  const cree = await prisma.article.findFirst({ where: { nom: "DOUBLON REF TEST Doublon Non Confirme" } });
+  assert.equal(cree, null, "aucun article ne doit avoir été créé");
 });
 
 test("3. doublon de référence explicitement confirmé (bon articleId) : création autorisée", async () => {
@@ -131,7 +130,6 @@ test("4. confirmation désignant un AUTRE article : refus (409)", async () => {
   articleIds.push(premier.corps.id);
   const sansRapport = await creerArticle("DOUBLON REF TEST Sans Rapport", "DOUBLONREF-004-AUTRE");
   articleIds.push(sansRapport.corps.id);
-  const avant = await prisma.article.count();
 
   const { status } = await creerArticle(
     "DOUBLON REF TEST Doublon Mauvais Id",
@@ -140,8 +138,8 @@ test("4. confirmation désignant un AUTRE article : refus (409)", async () => {
   );
   assert.equal(status, 409);
 
-  const apres = await prisma.article.count();
-  assert.equal(apres, avant, "aucun article ne doit avoir été créé");
+  const cree = await prisma.article.findFirst({ where: { nom: "DOUBLON REF TEST Doublon Mauvais Id" } });
+  assert.equal(cree, null, "aucun article ne doit avoir été créé");
 });
 
 test("5. tentative API directe sans confirmationArticleId : refus (409)", async () => {
@@ -159,13 +157,12 @@ test("5. tentative API directe sans confirmationArticleId : refus (409)", async 
 test("6. confirmation falsifiée (articleId inexistant) : refus (409)", async () => {
   const premier = await creerArticle("DOUBLON REF TEST Original E", "DOUBLONREF-006");
   articleIds.push(premier.corps.id);
-  const avant = await prisma.article.count();
 
   const { status } = await creerArticle("DOUBLON REF TEST Confirmation Falsifiee", "DOUBLONREF-006", 999999999);
   assert.equal(status, 409);
 
-  const apres = await prisma.article.count();
-  assert.equal(apres, avant, "aucun article ne doit avoir été créé");
+  const cree = await prisma.article.findFirst({ where: { nom: "DOUBLON REF TEST Confirmation Falsifiee" } });
+  assert.equal(cree, null, "aucun article ne doit avoir été créé");
 });
 
 test("7. absence de référence : comportement actuel conservé, aucune vérification", async () => {
@@ -205,14 +202,14 @@ test("9. état périmé entre confirmation et écriture (article désactivé ent
   // confirmation est désactivé (ex. supprimé entretemps par un autre utilisateur).
   await prisma.article.update({ where: { id: premier.corps.id }, data: { actif: false } });
 
-  const avant = await prisma.article.count();
-  const { status } = await creerArticle("DOUBLON REF TEST Confirmation Perimee", "DOUBLONREF-009", premier.corps.id);
+  const { status, corps } = await creerArticle("DOUBLON REF TEST Confirmation Perimee", "DOUBLONREF-009", premier.corps.id);
   // Plus aucun article actif ne porte cette référence : la ligne est réévaluée comme "aucun
   // doublon", donc la création réussit normalement (le doublon d'origine n'existe plus activement).
   assert.equal(status, 201);
 
-  const apres = await prisma.article.count();
-  assert.equal(apres, avant + 1);
+  const cree = await prisma.article.findUnique({ where: { id: corps.id } });
+  assert.ok(cree, "l'article confirmé après péremption doit avoir été créé");
+  assert.equal(cree.reference, "DOUBLONREF-009");
 });
 
 test("10. plusieurs articles actifs partagent déjà la même référence : confirmer l'un d'eux suffit (aucun choix arbitraire)", async () => {
