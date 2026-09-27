@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 
 import {
@@ -15,13 +15,38 @@ import DocumentFournisseurDetailPanel from "../components/DocumentFournisseurDet
 import ImportFacturePhotoModal from "../components/ImportFacturePhotoModal";
 
 type Onglet = "informations" | "tarifs" | "listings" | "factures";
+const ONGLETS: Onglet[] = ["informations", "tarifs", "listings", "factures"];
+
+function estOnglet(valeur: string | null): valeur is Onglet {
+  return valeur !== null && (ONGLETS as string[]).includes(valeur);
+}
 
 export default function FournisseurDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const fournisseurId = Number(id);
 
-  const [onglet, setOnglet] = useState<Onglet>("informations");
+  // L'onglet actif est dérivé de l'URL (?onglet=...), jamais dupliqué dans un state local séparé :
+  // une seule source de vérité, pour que rechargement et navigation directe restent toujours
+  // cohérents avec ce qui est affiché. Un paramètre absent ou invalide retombe sur "informations".
+  const [searchParams, setSearchParams] = useSearchParams();
+  const ongletParam = searchParams.get("onglet");
+  const onglet: Onglet = estOnglet(ongletParam) ? ongletParam : "informations";
+
+  function setOnglet(cible: Onglet) {
+    setSearchParams(
+      (params) => {
+        const suivants = new URLSearchParams(params);
+        suivants.set("onglet", cible);
+        return suivants;
+      },
+      // replace plutôt que push : changer d'onglet est un changement de vue au sein d'une même
+      // fiche, pas une navigation vers une nouvelle page — le bouton précédent du navigateur doit
+      // faire sortir de la fiche, pas rejouer les onglets un par un.
+      { replace: true },
+    );
+  }
+
   const [fournisseur, setFournisseur] = useState<Fournisseur | null>(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
@@ -81,12 +106,40 @@ export default function FournisseurDetailPage() {
 
   return (
     <div style={{ padding: 20 }}>
+      <style>{`
+        .ffo-tab {
+          padding: 10px 18px;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          color: #444;
+          border-bottom: 3px solid transparent;
+          border-radius: 8px 8px 0 0;
+          transition: background-color .15s ease, color .15s ease;
+        }
+        .ffo-tab:hover { background: #f3f4f6; color: #16a085; }
+        .ffo-tab.active { background: #eafaf4; color: #0f6848; font-weight: 700; border-bottom-color: #16a085; }
+      `}</style>
+
       <button onClick={() => navigate("/fournisseurs")} style={{ marginBottom: 12 }}>
         ← Retour à la liste
       </button>
-      <h1>🚚 {fournisseur.nom}</h1>
+      <h1 style={{ marginBottom: 4 }}>🚚 {fournisseur.nom}</h1>
+      <div style={{ color: "#666", fontSize: 14, marginBottom: 20 }}>
+        {fournisseur.telephone ?? "—"} · {fournisseur.email ?? "—"} · {fournisseur.siteWeb ?? "—"}
+      </div>
 
-      <div style={{ display: "flex", gap: 8, borderBottom: "1px solid #ddd", marginBottom: 20 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 4,
+          flexWrap: "wrap",
+          borderBottom: "2px solid #e5e7eb",
+          marginBottom: 24,
+        }}
+      >
         {(
           [
             ["informations", "Informations"],
@@ -98,14 +151,7 @@ export default function FournisseurDetailPage() {
           <button
             key={cle}
             onClick={() => setOnglet(cle)}
-            style={{
-              padding: "8px 16px",
-              border: "none",
-              borderBottom: onglet === cle ? "3px solid #16a085" : "3px solid transparent",
-              background: "none",
-              fontWeight: onglet === cle ? 600 : 400,
-              cursor: "pointer",
-            }}
+            className={`ffo-tab${onglet === cle ? " active" : ""}`}
           >
             {label}
           </button>
@@ -124,21 +170,36 @@ export default function FournisseurDetailPage() {
       {onglet === "tarifs" && (
         <TableauTarifs
           tarifs={tarifs}
-          onOuvrirDocument={(documentId) => {
+          onOuvrirDocument={(documentId, typeDocument) => {
             setDocumentOuvertId(documentId);
-            setOnglet("listings");
+            setOnglet(typeDocument === "LISTING" ? "listings" : "factures");
           }}
         />
       )}
 
       {onglet === "listings" && (
-        <OngletDocuments
-          documents={listings}
-          fournisseurId={fournisseurId}
-          documentOuvertId={documentOuvertId}
-          onOuvrir={setDocumentOuvertId}
-          messageVide="Aucun listing importé pour l'instant."
-        />
+        <div>
+          <div
+            style={{
+              background: "#eef6fb",
+              border: "1px solid #bfdcee",
+              borderRadius: 8,
+              padding: "10px 14px",
+              marginBottom: 16,
+              fontSize: 13,
+              color: "#22506b",
+            }}
+          >
+            ℹ️ Les listings s'importent depuis la page <strong>Base ingrédients</strong>.
+          </div>
+          <OngletDocuments
+            documents={listings}
+            fournisseurId={fournisseurId}
+            documentOuvertId={documentOuvertId}
+            onOuvrir={setDocumentOuvertId}
+            messageVide="Aucun listing importé pour l'instant."
+          />
+        </div>
       )}
 
       {onglet === "factures" && (
@@ -226,7 +287,7 @@ function TableauTarifs({
   onOuvrirDocument,
 }: {
   tarifs: TarifFournisseur[];
-  onOuvrirDocument: (documentId: number) => void;
+  onOuvrirDocument: (documentId: number, typeDocument: "LISTING" | "FACTURE") => void;
 }) {
   if (tarifs.length === 0) {
     return <p style={{ color: "#666" }}>Aucun tarif enregistré pour ce fournisseur.</p>;
@@ -237,7 +298,10 @@ function TableauTarifs({
 
   return (
     <div>
-      <h3 style={{ fontSize: 15, marginBottom: 8 }}>Tarifs actuels</h3>
+      <section>
+      <div style={{ background: "#f8f9fa", borderRadius: 8, padding: "8px 14px", marginBottom: 12 }}>
+        <h3 style={{ fontSize: 15, margin: 0 }}>Tarifs actuels</h3>
+      </div>
       {actuels.length === 0 ? (
         <p style={{ color: "#666", fontSize: 13 }}>
           Aucun tarif actuellement actif chez ce fournisseur (un tarif plus récent chez un autre
@@ -245,6 +309,7 @@ function TableauTarifs({
           ci-dessous).
         </p>
       ) : (
+        <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginBottom: 8 }}>
           <thead>
             <tr style={{ textAlign: "left", borderBottom: "2px solid #ddd" }}>
@@ -273,7 +338,12 @@ function TableauTarifs({
                       <>
                         {source} —{" "}
                         <button
-                          onClick={() => onOuvrirDocument(tarif.ligneDocumentSource!.document.id)}
+                          onClick={() =>
+                            onOuvrirDocument(
+                              tarif.ligneDocumentSource!.document.id,
+                              tarif.ligneDocumentSource!.document.type,
+                            )
+                          }
                           style={{ fontSize: 12 }}
                         >
                           Voir le document
@@ -288,12 +358,18 @@ function TableauTarifs({
             })}
           </tbody>
         </table>
+        </div>
       )}
+      </section>
 
-      <h3 style={{ fontSize: 15, margin: "24px 0 8px" }}>Historique</h3>
+      <section style={{ marginTop: 24 }}>
+      <div style={{ background: "#f8f9fa", borderRadius: 8, padding: "8px 14px", marginBottom: 12 }}>
+        <h3 style={{ fontSize: 15, margin: 0 }}>Historique</h3>
+      </div>
       {historiques.length === 0 ? (
         <p style={{ color: "#666", fontSize: 13 }}>Aucun tarif clôturé pour ce fournisseur.</p>
       ) : (
+        <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ textAlign: "left", borderBottom: "2px solid #ddd" }}>
@@ -324,7 +400,12 @@ function TableauTarifs({
                   <td style={{ padding: 8 }}>
                     {tarif.ligneDocumentSource ? (
                       <button
-                        onClick={() => onOuvrirDocument(tarif.ligneDocumentSource!.document.id)}
+                        onClick={() =>
+                          onOuvrirDocument(
+                            tarif.ligneDocumentSource!.document.id,
+                            tarif.ligneDocumentSource!.document.type,
+                          )
+                        }
                         style={{ fontSize: 12 }}
                       >
                         Voir le document
@@ -338,7 +419,9 @@ function TableauTarifs({
             })}
           </tbody>
         </table>
+        </div>
       )}
+      </section>
     </div>
   );
 }
@@ -356,6 +439,16 @@ function OngletDocuments({
   onOuvrir: (id: number | null) => void;
   messageVide: string;
 }) {
+  const panneauRef = useRef<HTMLDivElement>(null);
+
+  // Sur une longue liste, le panneau ouvert apparaît sous tout le tableau : sans ce défilement
+  // automatique, il faudrait faire défiler manuellement au-delà des lignes restantes pour le voir.
+  useEffect(() => {
+    if (documentOuvertId !== null) {
+      panneauRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [documentOuvertId]);
+
   if (documents.length === 0) {
     return <p style={{ color: "#666" }}>{messageVide}</p>;
   }
@@ -390,7 +483,12 @@ function OngletDocuments({
       </table>
 
       {documentOuvertId !== null && (
-        <DocumentFournisseurDetailPanel documentId={documentOuvertId} fournisseurId={fournisseurId} />
+        <div ref={panneauRef} style={{ scrollMarginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+            <button onClick={() => onOuvrir(null)}>Fermer le document</button>
+          </div>
+          <DocumentFournisseurDetailPanel documentId={documentOuvertId} fournisseurId={fournisseurId} />
+        </div>
       )}
     </div>
   );
