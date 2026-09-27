@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
 import { hacherCode } from "../../server/utils/auth.js";
+import { normaliserTexte } from "../../server/utils/normaliserTexte.js";
 
 // Test d'intégration réel (app Express réelle, vrai Postgres) pour le chantier « FK 500→400,
 // portée transversale » : une violation de contrainte de clé étrangère (référence à un
@@ -130,27 +131,24 @@ after(async () => {
 });
 
 test("1. POST /depots avec societeId inexistant : 400, aucune écriture", async () => {
-  const avant = await prisma.depot.count();
   const { status } = await poster("/api/depots", { nom: "ERREURS FK TEST Depot", societeId: ID_INEXISTANT });
   assert.equal(status, 400);
-  const apres = await prisma.depot.count();
-  assert.equal(apres, avant, "aucun dépôt ne doit avoir été créé");
+  const cree = await prisma.depot.findFirst({ where: { nom: "ERREURS FK TEST Depot" } });
+  assert.equal(cree, null, "aucun dépôt ne doit avoir été créé");
 });
 
 test("2. POST /fournisseurs avec societeId inexistant : 400, aucune écriture", async () => {
-  const avant = await prisma.fournisseur.count();
   const { status } = await poster("/api/fournisseurs", { nom: "ERREURS FK TEST Fournisseur", societeId: ID_INEXISTANT });
   assert.equal(status, 400);
-  const apres = await prisma.fournisseur.count();
-  assert.equal(apres, avant, "aucun fournisseur ne doit avoir été créé");
+  const cree = await prisma.fournisseur.findFirst({ where: { nom: "ERREURS FK TEST Fournisseur" } });
+  assert.equal(cree, null, "aucun fournisseur ne doit avoir été créé");
 });
 
 test("3. POST /sous-categories-recette avec parentId inexistant : 400, aucune écriture", async () => {
-  const avant = await prisma.sousCategorieRecette.count();
   const { status } = await poster("/api/sous-categories-recette", { nom: "ERREURS FK TEST SousCategorie", parentId: ID_INEXISTANT });
   assert.equal(status, 400);
-  const apres = await prisma.sousCategorieRecette.count();
-  assert.equal(apres, avant, "aucune sous-catégorie ne doit avoir été créée");
+  const cree = await prisma.sousCategorieRecette.findFirst({ where: { nom: "ERREURS FK TEST SousCategorie" } });
+  assert.equal(cree, null, "aucune sous-catégorie ne doit avoir été créée");
 });
 
 test("4. PUT /sous-categories-recette/:id avec parentId inexistant : 400, valeur d'origine conservée", async () => {
@@ -166,31 +164,28 @@ test("4. PUT /sous-categories-recette/:id avec parentId inexistant : 400, valeur
 });
 
 test("5. POST /menus avec societeId inexistant : 400, aucune écriture", async () => {
-  const avant = await prisma.menu.count();
   const { status } = await poster("/api/menus", { nom: "ERREURS FK TEST Menu Societe", societeId: ID_INEXISTANT, lignes: [] });
   assert.equal(status, 400);
-  const apres = await prisma.menu.count();
-  assert.equal(apres, avant, "aucun menu ne doit avoir été créé");
+  const cree = await prisma.menu.findFirst({ where: { nom: "ERREURS FK TEST Menu Societe" } });
+  assert.equal(cree, null, "aucun menu ne doit avoir été créé");
 });
 
 test("6. POST /menus avec categorieId inexistant : 400, aucune écriture", async () => {
-  const avant = await prisma.menu.count();
   const { status } = await poster("/api/menus", { nom: "ERREURS FK TEST Menu Categorie", societeId, categorieId: ID_INEXISTANT, lignes: [] });
   assert.equal(status, 400);
-  const apres = await prisma.menu.count();
-  assert.equal(apres, avant, "aucun menu ne doit avoir été créé");
+  const cree = await prisma.menu.findFirst({ where: { nom: "ERREURS FK TEST Menu Categorie" } });
+  assert.equal(cree, null, "aucun menu ne doit avoir été créé");
 });
 
 test("7. POST /menus avec lignes[].recetteId inexistant : 400, aucune écriture", async () => {
-  const avant = await prisma.menu.count();
   const { status } = await poster("/api/menus", {
     nom: "ERREURS FK TEST Menu Ligne",
     societeId,
     lignes: [{ recetteId: ID_INEXISTANT, quantite: 1 }],
   });
   assert.equal(status, 400);
-  const apres = await prisma.menu.count();
-  assert.equal(apres, avant, "aucun menu ne doit avoir été créé");
+  const cree = await prisma.menu.findFirst({ where: { nom: "ERREURS FK TEST Menu Ligne" } });
+  assert.equal(cree, null, "aucun menu ne doit avoir été créé");
 });
 
 test("8. PUT /menus/:id avec categorieId inexistant : 400, valeur d'origine conservée", async () => {
@@ -210,17 +205,16 @@ test("8. PUT /menus/:id avec categorieId inexistant : 400, valeur d'origine cons
 });
 
 test("9. POST /alias-ingredients avec articleId inexistant : 400, aucune écriture", async () => {
-  const avant = await prisma.aliasIngredientImport.count();
+  const texteTest = "ERREURS FK TEST ingredient texte unique zzz";
   const { status } = await poster("/api/alias-ingredients", {
-    correspondances: [{ texte: "ERREURS FK TEST ingredient texte unique zzz", articleId: ID_INEXISTANT }],
+    correspondances: [{ texte: texteTest, articleId: ID_INEXISTANT }],
   });
   assert.equal(status, 400);
-  const apres = await prisma.aliasIngredientImport.count();
-  assert.equal(apres, avant, "aucune correspondance ne doit avoir été créée");
+  const cree = await prisma.aliasIngredientImport.findUnique({ where: { texteNormalise: normaliserTexte(texteTest) } });
+  assert.equal(cree, null, "aucune correspondance ne doit avoir été créée");
 });
 
 test("10. POST /articles avec categorieId inexistant : 400, aucune écriture (non-régression du comportement PR #80/#81)", async () => {
-  const avant = await prisma.article.count();
   const { status } = await poster("/api/articles", {
     nom: "ERREURS FK TEST Article Cat",
     categorieId: ID_INEXISTANT,
@@ -230,8 +224,8 @@ test("10. POST /articles avec categorieId inexistant : 400, aucune écriture (no
     type: "MATIERE_PREMIERE",
   });
   assert.equal(status, 400);
-  const apres = await prisma.article.count();
-  assert.equal(apres, avant, "aucun article ne doit avoir été créé");
+  const cree = await prisma.article.findFirst({ where: { nom: "ERREURS FK TEST Article Cat" } });
+  assert.equal(cree, null, "aucun article ne doit avoir été créé");
 });
 
 test("11. PUT /articles/:id avec categorieId inexistant : 400, article d'origine conservé", async () => {
@@ -247,7 +241,6 @@ test("11. PUT /articles/:id avec categorieId inexistant : 400, article d'origine
 });
 
 test("12. POST /recettes avec categorieId inexistant : 400, aucune écriture", async () => {
-  const avant = await prisma.recette.count();
   const { status } = await poster("/api/recettes", {
     nom: "ERREURS FK TEST Recette Cat",
     societeId,
@@ -256,8 +249,8 @@ test("12. POST /recettes avec categorieId inexistant : 400, aucune écriture", a
     lignes: [],
   });
   assert.equal(status, 400);
-  const apres = await prisma.recette.count();
-  assert.equal(apres, avant, "aucune recette ne doit avoir été créée");
+  const cree = await prisma.recette.findFirst({ where: { nom: "ERREURS FK TEST Recette Cat" } });
+  assert.equal(cree, null, "aucune recette ne doit avoir été créée");
 });
 
 test("13. PUT /recettes/:id avec sousCategorieId inexistant : 400, recette d'origine conservée", async () => {
@@ -274,7 +267,6 @@ test("13. PUT /recettes/:id avec sousCategorieId inexistant : 400, recette d'ori
 });
 
 test("14. Non-régression : POST /recettes avec portions=0 reste en 500 (erreur métier, pas une FK)", async () => {
-  const avant = await prisma.recette.count();
   const { status } = await poster("/api/recettes", {
     nom: "ERREURS FK TEST Recette Portions Zero",
     societeId,
@@ -282,8 +274,8 @@ test("14. Non-régression : POST /recettes avec portions=0 reste en 500 (erreur 
     lignes: [],
   });
   assert.equal(status, 500, "comportement déjà correct et volontairement inchangé (voir coutRecette.ts)");
-  const apres = await prisma.recette.count();
-  assert.equal(apres, avant, "aucune recette ne doit avoir été créée");
+  const cree = await prisma.recette.findFirst({ where: { nom: "ERREURS FK TEST Recette Portions Zero" } });
+  assert.equal(cree, null, "aucune recette ne doit avoir été créée");
 });
 
 test("15. Non-régression : POST /articles avec un article valide fonctionne normalement", async () => {
