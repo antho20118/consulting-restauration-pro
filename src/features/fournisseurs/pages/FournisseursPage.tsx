@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import FournisseursTable from "../components/FournisseursTable";
+import { useNavigate } from "react-router-dom";
+import FournisseursGrille from "../components/FournisseursGrille";
+import SelecteurFournisseurHomonyme from "../components/SelecteurFournisseurHomonyme";
 import FournisseurForm from "../components/FournisseurForm";
 import { getFournisseurs, supprimerFournisseur } from "../services/fournisseurService";
+import { regrouperFournisseursParNom, type GroupeFournisseur } from "../utils/regrouperFournisseurs";
 import type { Fournisseur } from "../types/fournisseur";
 
 export default function FournisseursPage() {
+  const navigate = useNavigate();
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
   const [fournisseurEnEdition, setFournisseurEnEdition] = useState<Fournisseur | null>(null);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [recherche, setRecherche] = useState("");
+  const [groupeSelectionne, setGroupeSelectionne] = useState<GroupeFournisseur | null>(null);
 
   async function chargerFournisseurs() {
     const data = await getFournisseurs();
@@ -24,6 +29,19 @@ export default function FournisseursPage() {
     if (!terme) return fournisseurs;
     return fournisseurs.filter((fournisseur) => fournisseur.nom.toLowerCase().includes(terme));
   }, [fournisseurs, recherche]);
+
+  const groupesFiltres = useMemo(
+    () => regrouperFournisseursParNom(fournisseursFiltres),
+    [fournisseursFiltres]
+  );
+
+  function ouvrirGroupe(groupe: GroupeFournisseur) {
+    if (groupe.fournisseurs.length === 1) {
+      navigate(`/fournisseurs/${groupe.fournisseurs[0].id}`);
+      return;
+    }
+    setGroupeSelectionne(groupe);
+  }
 
   function ouvrirCreation() {
     setFournisseurEnEdition(null);
@@ -66,11 +84,32 @@ export default function FournisseursPage() {
         />
       </div>
 
-      <FournisseursTable
-        fournisseurs={fournisseursFiltres}
+      <FournisseursGrille
+        groupes={groupesFiltres}
+        onOuvrir={ouvrirGroupe}
         onEdit={ouvrirEdition}
         onDelete={supprimer}
       />
+
+      {groupeSelectionne && (
+        <SelecteurFournisseurHomonyme
+          nom={groupeSelectionne.nom}
+          fournisseurs={groupeSelectionne.fournisseurs}
+          onChoisir={(fournisseur) => {
+            setGroupeSelectionne(null);
+            navigate(`/fournisseurs/${fournisseur.id}`);
+          }}
+          onEdit={(fournisseur) => {
+            setGroupeSelectionne(null);
+            ouvrirEdition(fournisseur);
+          }}
+          onDelete={(fournisseur) => {
+            setGroupeSelectionne(null);
+            supprimer(fournisseur);
+          }}
+          onClose={() => setGroupeSelectionne(null)}
+        />
+      )}
 
       {formulaireOuvert && (
         <div
