@@ -155,8 +155,17 @@ test("Articles / Tarifs : tarifs actuels et historique distincts, source Listing
   await expect(page.getByRole("heading", { name: "Tarifs actuels", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Historique", exact: true })).toBeVisible();
 
-  const tableauActuels = page.locator('h3:has-text("Tarifs actuels") + table');
-  const tableauHistorique = page.locator('h3:has-text("Historique") + table');
+  // Ancré sur la section sémantique (via son titre), pas sur une adjacence CSS h3+table — reste
+  // valable même si l'agencement visuel autour du titre change (audit ergonomique, refonte fiche
+  // fournisseur).
+  const sectionActuels = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Tarifs actuels", exact: true }) });
+  const sectionHistorique = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Historique", exact: true }) });
+  const tableauActuels = sectionActuels.locator("table");
+  const tableauHistorique = sectionHistorique.locator("table");
 
   // Les deux tarifs actifs (Listing et Facture) apparaissent dans "Tarifs actuels", avec leur source
   // affichée explicitement (jamais devinée) et jamais dans "Historique".
@@ -176,12 +185,37 @@ test("Articles / Tarifs : tarifs actuels et historique distincts, source Listing
   await expect(tableauHistorique.getByText("Source documentaire non disponible")).toBeVisible();
 
   // Consultation réelle de la source documentaire (chaîne TarifArticle → LigneDocumentFournisseur →
-  // DocumentFournisseur), pas seulement son libellé.
-  await ligneActuelleListing.getByRole("button", { name: "Voir le document" }).click();
+  // DocumentFournisseur), pas seulement son libellé. Correction de l'ancien bug (audit ergonomique,
+  // item 8) : "Voir le document" naviguait systématiquement vers l'onglet Listings, même pour une
+  // source Facture — la navigation doit maintenant suivre le type réel du document source.
+  await ligneActuelleFacture.getByRole("button", { name: "Voir le document" }).click();
+  await expect(page).toHaveURL(/onglet=factures/);
+  await expect(page.getByRole("button", { name: "Factures" })).toHaveClass(/active/);
+  await expect(page.getByRole("button", { name: "Listings" })).not.toHaveClass(/active/);
+  // Le nom de fichier seul apparaît aussi dans la ligne du tableau (maintenant visible puisqu'on est
+  // sur le bon onglet Factures, contrairement à l'ancien bug) : on cible ici précisément le panneau
+  // de détail via son préfixe propre, pas la simple présence du nom de fichier quelque part sur la page.
+  await expect(page.getByText("Fichier : e2e-historique-facture.png")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("E2E HISTORIQUE TARIFS Article Facture", { exact: false }).first()).toBeVisible();
 
-  await expect(page.getByText("e2e-historique-listing.png")).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Articles / Tarifs" }).click();
+  await ligneActuelleListing.getByRole("button", { name: "Voir le document" }).click();
+  await expect(page).toHaveURL(/onglet=listings/);
+  await expect(page.getByRole("button", { name: "Listings" })).toHaveClass(/active/);
+  await expect(page.getByRole("button", { name: "Factures" })).not.toHaveClass(/active/);
+
+  await expect(page.getByText("Fichier : e2e-historique-listing.png")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("E2E HISTORIQUE TARIFS Article Listing", { exact: false }).first()).toBeVisible();
   await expect(page.getByText(/Article retenu \(décision humaine\)/)).toBeVisible();
+
+  // Persistance de l'onglet actif dans l'URL (audit ergonomique, item 9) : un rechargement de page
+  // sur un onglet donné doit rester sur ce même onglet, pas retomber sur "Informations".
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Listings" })).toHaveClass(/active/);
+  // exact:true — le nom du fournisseur de test ("E2E HISTORIQUE TARIFS Fournisseur") contient lui
+  // aussi la sous-chaîne "Historique" (dans le <h1>), une correspondance non exacte matcherait donc
+  // à tort ce titre de page au lieu du seul <h3>"Historique" de l'onglet Articles / Tarifs.
+  await expect(page.getByRole("heading", { name: "Historique", exact: true })).toHaveCount(0);
 
   // Retour à la liste des fournisseurs.
   await page.getByRole("button", { name: "← Retour à la liste" }).click();

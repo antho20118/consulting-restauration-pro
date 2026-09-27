@@ -68,8 +68,9 @@ test("fiche fournisseur : liste → ouverture → 4 onglets → retour liste", a
   await expect(page).toHaveURL(new RegExp(`/fournisseurs/${fournisseurId}$`));
   await expect(page.getByRole("heading", { name: /E2E FICHE FOURNISSEUR Test/ })).toBeVisible();
 
-  // Onglet 1 : Informations (actif par défaut)
-  await expect(page.getByText("0102030405")).toBeVisible();
+  // Onglet 1 : Informations (actif par défaut). Le téléphone est aussi affiché en permanence dans
+  // l'en-tête (audit ergonomique) ; on vérifie ici précisément le contenu propre à cet onglet.
+  await expect(page.getByText("Téléphone : 0102030405")).toBeVisible();
 
   // Onglet 2 : Articles / Tarifs
   await page.getByRole("button", { name: "Articles / Tarifs" }).click();
