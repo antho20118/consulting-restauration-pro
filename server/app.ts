@@ -24,6 +24,8 @@ import achatsRouter from "./routes/achats.js";
 import productionRouter from "./routes/production.js";
 import haccpRouter from "./routes/haccp.js";
 import consultingRouter from "./routes/consulting.js";
+import documentsFournisseursRouter from "./routes/documentsFournisseurs.js";
+import listingsFournisseurRouter from "./routes/listingsFournisseur.js";
 
 const app = express();
 
@@ -68,6 +70,8 @@ app.use("/api/achats", achatsRouter);
 app.use("/api/production", productionRouter);
 app.use("/api/haccp", haccpRouter);
 app.use("/api/consulting", consultingRouter);
+app.use("/api/documents-fournisseurs", documentsFournisseursRouter);
+app.use("/api/listings-fournisseur", listingsFournisseurRouter);
 
 app.get("/health", (_req, res) => {
   res.json({

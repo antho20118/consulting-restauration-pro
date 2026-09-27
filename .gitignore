@@ -10,3 +10,6 @@ coverage
 /test-results
 /playwright-report
 /blob-report
+# Substitut local du Railway Volume (voir server/utils/storageDocumentsFournisseur.ts) : jamais
+# utilisé en production, où DOCUMENTS_STORAGE_PATH doit pointer vers le volume réel.
+/data-dev

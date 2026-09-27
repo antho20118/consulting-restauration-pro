@@ -9,6 +9,7 @@ const IngredientsPage = lazy(() => import("../features/ingredients/pages/Ingredi
 const RecettesPage = lazy(() => import("../features/recettes/pages/RecettesPage"));
 const MenusPage = lazy(() => import("../features/menus/pages/MenusPage"));
 const FournisseursPage = lazy(() => import("../features/fournisseurs/pages/FournisseursPage"));
+const FournisseurDetailPage = lazy(() => import("../features/fournisseurs/pages/FournisseurDetailPage"));
 const MouvementsPage = lazy(() => import("../features/mouvements/pages/MouvementsPage"));
 const DepotsPage = lazy(() => import("../features/depots/pages/DepotsPage"));
 const ParametresPage = lazy(() => import("../features/parametres/pages/ParametresPage"));
@@ -23,6 +24,7 @@ export default function AppRoutes() {
           <Route path="menus" element={<MenusPage />} />
           <Route path="ingredients" element={<IngredientsPage />} />
           <Route path="fournisseurs" element={<FournisseursPage />} />
+          <Route path="fournisseurs/:id" element={<FournisseurDetailPage />} />
           <Route path="mouvements" element={<MouvementsPage />} />
           <Route path="depots" element={<DepotsPage />} />
           <Route path="parametres" element={<ParametresPage />} />

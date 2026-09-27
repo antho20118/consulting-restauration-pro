@@ -1,4 +1,5 @@
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
+import { useNavigate } from "react-router-dom";
 import type { Fournisseur } from "../types/fournisseur";
 
 type Props = {
@@ -8,6 +9,7 @@ type Props = {
 };
 
 export default function FournisseursTable({ fournisseurs, onEdit, onDelete }: Props) {
+  const navigate = useNavigate();
   const columns: GridColDef<Fournisseur>[] = [
     {
       field: "nom",
@@ -41,11 +43,12 @@ export default function FournisseursTable({ fournisseurs, onEdit, onDelete }: Pr
     {
       field: "actions",
       headerName: "Actions",
-      width: 160,
+      width: 220,
       sortable: false,
       filterable: false,
       renderCell: (params) => (
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn-table" onClick={() => navigate(`/fournisseurs/${params.row.id}`)}>Fiche</button>
           <button className="btn-table" onClick={() => onEdit(params.row)}>Modifier</button>
           <button className="btn-table btn-danger" onClick={() => onDelete(params.row)}>Supprimer</button>
         </div>
