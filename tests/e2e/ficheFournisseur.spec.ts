@@ -62,8 +62,10 @@ test("fiche fournisseur : liste → ouverture → 4 onglets → retour liste", a
   await page.goto("/fournisseurs");
   await page.getByText("E2E FICHE FOURNISSEUR Test").waitFor();
 
-  const ligne = page.locator(".MuiDataGrid-row", { hasText: "E2E FICHE FOURNISSEUR Test" });
-  await ligne.getByRole("button", { name: "Fiche" }).click();
+  // Chantier « refonte liste fournisseurs » : la liste est désormais une grille de cartes (voir
+  // FournisseursGrille.tsx), plus une DataGrid — un fournisseur non homonyme s'ouvre directement au
+  // clic sur sa carte, sans passer par le sélecteur d'homonymes.
+  await page.getByText("E2E FICHE FOURNISSEUR Test").click();
 
   await expect(page).toHaveURL(new RegExp(`/fournisseurs/${fournisseurId}$`));
   await expect(page.getByRole("heading", { name: /E2E FICHE FOURNISSEUR Test/ })).toBeVisible();
