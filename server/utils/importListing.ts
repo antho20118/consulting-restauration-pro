@@ -32,6 +32,32 @@ export function similariteJaccard(a: string, b: string): number {
   return inter / union;
 }
 
+// Normalise un code produit fournisseur lu depuis un fichier importé (Excel/CSV) avant toute
+// comparaison ou écriture en base. Corrige uniquement des différences invisibles à l'oeil qui
+// n'ont jamais de sens métier : espace insécable (fréquent dans les exports Excel) ramené en
+// espace normal, caractères de largeur nulle (BOM/zero-width, parfois injectés par un export CSV)
+// supprimés, puis espaces de bord retirés. Ne touche NI à la casse NI aux zéros initiaux : aucune
+// preuve ne permet de considérer que "001234" et "1234" désignent le même code produit (une perte
+// de zéros initiaux côté Excel, quand la colonne est au format Nombre, est une perte de données
+// irréversible au moment de la saisie/export du fichier fournisseur, pas un défaut de comparaison
+// corrigible ici — voir la sonde empirique sur le paquet xlsx, Étape 1 de l'audit).
+// Un a un plutot qu'en classe de caracteres [ ] : le caractere zero-width joiner combine a
+// d'autres dans une classe de caracteres est interprete par les linters comme une sequence
+// d'emoji jointe (regle no-misleading-character-class), ce qui n'a rien a voir ici : ce sont
+// des caracteres invisibles de mise en forme de texte, jamais destines a composer un emoji.
+const CARACTERES_LARGEUR_NULLE = ["\u200B", "\u200C", "\u200D", "\uFEFF"].map(
+  (c) => new RegExp(c, "g")
+);
+const RE_ESPACE_INSECABLE = new RegExp("\u00A0", "g");
+
+export function normaliserCodeProduitFournisseur(code: string): string {
+  let resultat = code || "";
+  for (const re of CARACTERES_LARGEUR_NULLE) {
+    resultat = resultat.replace(re, "");
+  }
+  return resultat.replace(RE_ESPACE_INSECABLE, " ").trim();
+}
+
 export function parsePrix(val: unknown): number | null {
   if (typeof val === "number") return val;
   const m = String(val ?? "")

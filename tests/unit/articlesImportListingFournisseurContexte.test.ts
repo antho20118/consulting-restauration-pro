@@ -115,7 +115,7 @@ test("1. import avec fournisseurId=VIBEL : le tarif créé est bien rattaché à
     categorieId,
     tvaId,
     type: "MATIERE_PREMIERE",
-    lignes: [{ designation: "CONTEXTE TEST Article Vibel", prix: "10.00" }],
+    lignes: [{ designation: "CONTEXTE TEST Article Vibel", prix: "10.00", codeProduitFournisseur: "CTX-001" }],
   });
   assert.equal(status, 200);
   assert.equal(corps.crees, 1);
@@ -133,7 +133,7 @@ test("2. une colonne 'fournisseur' de ligne pointant vers un autre fournisseur e
     tvaId,
     type: "MATIERE_PREMIERE",
     lignes: [
-      { designation: "CONTEXTE TEST Article Ligne Super U", prix: "12.00", fournisseur: "CONTEXTE TEST SUPER U" },
+      { designation: "CONTEXTE TEST Article Ligne Super U", prix: "12.00", fournisseur: "CONTEXTE TEST SUPER U", codeProduitFournisseur: "CTX-002" },
     ],
   });
   assert.equal(status, 200);
@@ -173,7 +173,7 @@ test("3. un import VIBEL de contexte ne clôture jamais le tarif actif de SUPER 
     categorieId,
     tvaId,
     type: "MATIERE_PREMIERE",
-    lignes: [{ designation: "CONTEXTE TEST Article Partage", prix: "7.50", confirmationArticleId: article.id }],
+    lignes: [{ designation: "CONTEXTE TEST Article Partage", prix: "7.50", confirmationArticleId: article.id, codeProduitFournisseur: "CTX-003" }],
   });
   assert.equal(status, 200);
   assert.equal(corps.misesAJour, 1);
@@ -259,7 +259,7 @@ test("7. aperçu (POST /import/apercu) avec fournisseurId de contexte : la colon
   const { status, corps } = await apercu({
     societeId,
     fournisseurId: vibelId,
-    lignes: [{ designation: "CONTEXTE TEST Apercu", prix: "5.00", fournisseur: "CONTEXTE TEST SUPER U" }],
+    lignes: [{ designation: "CONTEXTE TEST Apercu", prix: "5.00", fournisseur: "CONTEXTE TEST SUPER U", codeProduitFournisseur: "CTX-007" }],
   });
   assert.equal(status, 200);
   assert.equal(corps.propositions.length, 1);

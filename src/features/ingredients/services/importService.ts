@@ -92,6 +92,15 @@ export type PropositionLigneImport =
       reference: string | null;
       codeProduitFournisseur: string;
       designationConnue: string;
+    }
+  // Import lancé depuis la fiche fournisseur (fournisseurId de contexte fourni) sans code produit
+  // fournisseur sur cette ligne — jamais écrite, faute d'identité fiable qui empêcherait la
+  // recréation d'un article en double à chaque réimport (voir correction « identification des
+  // articles lors des imports de listings fournisseurs »).
+  | {
+      statut: "code_produit_manquant";
+      designation: string;
+      reference: string | null;
     };
 
 export type ResultatImport = {

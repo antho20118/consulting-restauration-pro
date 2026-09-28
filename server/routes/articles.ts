@@ -12,6 +12,7 @@ import {
   cleTarifActif,
   SEUIL_CORRESPONDANCE_DESIGNATION,
   similariteJaccard,
+  normaliserCodeProduitFournisseur,
   type CandidatExistant,
   type ContexteAnalyseLigne,
   type PropositionLigneImport,
@@ -604,7 +605,7 @@ router.post("/import", async (req: Request, res: Response) => {
     let enAttente = 0;
     const erreurs: string[] = [];
 
-    for (const ligne of lignes) {
+    for (const [indexLigne, ligne] of lignes.entries()) {
       const designation = String(ligne.designation ?? "").trim();
       if (!designation) continue;
 
@@ -660,7 +661,24 @@ router.post("/import", async (req: Request, res: Response) => {
       const documentId = await documentPourFournisseur(fournisseurId);
       const referenceLigne = ligne.reference ? String(ligne.reference).trim() || null : null;
       const prixLu = parsePrix(ligne.prix);
-      const codeProduitLigne = ligne.codeProduitFournisseur ? String(ligne.codeProduitFournisseur).trim() : "";
+      const codeProduitLigne = normaliserCodeProduitFournisseur(
+        ligne.codeProduitFournisseur ? String(ligne.codeProduitFournisseur) : ""
+      );
+
+      // Code produit fournisseur obligatoire pour tout import lancé depuis la fiche fournisseur
+      // (fournisseurIdContexte défini) : c'est la seule identité fiable qui empêche la recréation
+      // d'un Article à chaque réimport (voir audit strict — cause racine A). Le flux historique
+      // (import générique sans contexte, potentiellement multi-fournisseurs et sans colonne code
+      // mappée) n'est volontairement pas concerné, pour ne pas casser un usage existant sans
+      // besoin vérifié.
+      if (fournisseurIdContexte !== undefined && !codeProduitLigne) {
+        erreurs.push(
+          `Ligne ${indexLigne + 1} ("${designation}") : code produit fournisseur manquant, ligne ignorée ` +
+          "— un code produit est obligatoire pour un import depuis la fiche fournisseur, afin d'éviter la " +
+          "création d'un article en double à chaque réimport."
+        );
+        continue;
+      }
 
       // --- Niveau 4/7 (cadrage §6/§7) : code produit fournisseur DÉJÀ CONNU chez ce fournisseur —
       // identité certaine par construction, jamais réévaluée par référence/désignation catalogue
@@ -1094,6 +1112,7 @@ router.post("/import/apercu", async (req: Request, res: Response) => {
       | PropositionFournisseurAmbigu
       | { statut: "fournisseur_inactif"; designation: string; reference: string | null; identifiant: string; fournisseurId: number }
       | { statut: "code_produit_designation_differente"; designation: string; reference: string | null; codeProduitFournisseur: string; designationConnue: string }
+      | { statut: "code_produit_manquant"; designation: string; reference: string | null }
     )[] = [];
 
     for (const ligne of lignes) {
@@ -1142,7 +1161,21 @@ router.post("/import/apercu", async (req: Request, res: Response) => {
         }
       }
 
-      const codeProduitLigne = ligne?.codeProduitFournisseur ? String(ligne.codeProduitFournisseur).trim() : "";
+      const codeProduitLigne = normaliserCodeProduitFournisseur(
+        ligne?.codeProduitFournisseur ? String(ligne.codeProduitFournisseur) : ""
+      );
+
+      // Même règle qu'à l'écriture réelle (POST /import) : code produit obligatoire pour un import
+      // lancé depuis la fiche fournisseur, jamais pour le flux générique historique.
+      if (fournisseurIdContexteValide !== null && !codeProduitLigne) {
+        propositions.push({
+          statut: "code_produit_manquant",
+          designation: designationLigne,
+          reference: referenceLigne,
+        });
+        continue;
+      }
+
       if (codeProduitLigne && fournisseurId !== null) {
         const produitExistant = await prisma.produitFournisseur.findUnique({
           where: { fournisseurId_codeProduitFournisseur: { fournisseurId, codeProduitFournisseur: codeProduitLigne } },

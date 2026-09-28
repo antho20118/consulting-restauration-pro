@@ -54,9 +54,16 @@ const CHAMPS_A_MAPPER: { cle: keyof Mapping; label: string }[] = [
 // Sans fournisseur imposé par le contexte : tous les champs, comportement historique inchangé.
 // Avec fournisseur imposé (fiche fournisseur → Listings → Importer) : "fournisseur" et
 // "codeFournisseur" n'ont plus aucun effet côté serveur (voir cadrage §10, articles.ts) — les
-// proposer resterait trompeur, ils sont donc retirés du mapping affiché.
+// proposer resterait trompeur, ils sont donc retirés du mapping affiché. "codeProduitFournisseur"
+// devient en revanche obligatoire dans ce contexte (voir cadrage « identification des articles » :
+// le serveur refuse toute ligne sans code produit fournisseur pour un import de fiche fournisseur)
+// — le libellé doit le dire explicitement, sinon "optionnel" induit l'utilisateur en erreur.
 const CHAMPS_A_MAPPER_SANS_FOURNISSEUR = CHAMPS_A_MAPPER.filter(
   ({ cle }) => cle !== "fournisseur" && cle !== "codeFournisseur"
+).map(({ cle, label }) =>
+  cle === "codeProduitFournisseur"
+    ? { cle, label: "Code produit fournisseur * (obligatoire pour cet import)" }
+    : { cle, label }
 );
 
 type Props = {
@@ -182,6 +189,16 @@ export default function ImportListingModal({ fournisseurId, fournisseurNom: four
     }
     if (!mapping.designation || !mapping.prix) {
       setErreur("Désignation et Prix sont obligatoires.");
+      return;
+    }
+    // Import lancé depuis la fiche fournisseur : le serveur refuse de toute façon toute ligne sans
+    // code produit fournisseur (voir cadrage « identification des articles »), mais bloquer ici
+    // évite à l'utilisateur de lancer une analyse pour ne découvrir le rejet qu'à l'étape suivante.
+    if (fournisseurId !== undefined && !mapping.codeProduitFournisseur) {
+      setErreur(
+        "Le code produit fournisseur est obligatoire pour un import depuis la fiche fournisseur : " +
+        "mappe la colonne correspondante avant de lancer l'analyse."
+      );
       return;
     }
 
@@ -510,6 +527,19 @@ function LignePropositionImport({
           avec une désignation très différente (« {proposition.designationConnue} ») : cette ligne
           sera ignorée à l'import tant qu'une décision humaine n'a pas confirmé qu'il s'agit bien du
           même produit.
+        </div>
+      </div>
+    );
+  }
+
+  if (proposition.statut === "code_produit_manquant") {
+    return (
+      <div style={{ ...styleLigne, background: "#fdeeee" }}>
+        <strong>⚠ {proposition.designation || "(désignation manquante)"}</strong>
+        <div style={{ color: "#b00020", marginTop: 4 }}>
+          Code produit fournisseur manquant : cette ligne sera ignorée à l'import. Un code produit
+          est obligatoire pour un import depuis la fiche fournisseur, afin d'éviter la création d'un
+          article en double à chaque réimport.
         </div>
       </div>
     );
