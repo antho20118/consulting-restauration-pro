@@ -8,6 +8,17 @@ export interface CategorieRecette {
   nom: string;
 }
 
+export interface SousCategorieRecette {
+  id: number;
+  nom: string;
+  // Hiérarchie à un niveau (voir prisma/schema.prisma) : null pour une sous-catégorie racine,
+  // sinon l'id d'une sous-catégorie racine — jamais l'id d'une autre sous-catégorie enfant (pas
+  // de chaîne à plusieurs niveaux, pas de cycle), contrainte imposée ici côté choix proposés à
+  // l'utilisateur (voir SousCategoriesRecetteManager.tsx), le serveur n'imposant pas cette limite
+  // lui-même.
+  parentId: number | null;
+}
+
 export interface Unite {
   id: number;
   nom: string;

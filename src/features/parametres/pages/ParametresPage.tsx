@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import SocieteSection from "../components/SocieteSection";
 import CategoriesManager from "../components/CategoriesManager";
 import CategoriesRecetteManager from "../components/CategoriesRecetteManager";
+import SousCategoriesRecetteManager from "../components/SousCategoriesRecetteManager";
 import UnitesManager from "../components/UnitesManager";
 import TvaManager from "../components/TvaManager";
 import IdentifiantsSection from "../components/IdentifiantsSection";
@@ -38,6 +39,10 @@ export default function ParametresPage() {
 
       <Section titre="Catégories de recettes">
         <CategoriesRecetteManager />
+      </Section>
+
+      <Section titre="Sous-catégories de recettes">
+        <SousCategoriesRecetteManager />
       </Section>
 
       <Section titre="Unités">

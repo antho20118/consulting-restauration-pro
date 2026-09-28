@@ -3,6 +3,7 @@ import type {
   Categorie,
   CategorieRecette,
   Societe,
+  SousCategorieRecette,
   Tva,
   TvaInput,
   Unite,
@@ -76,6 +77,44 @@ export async function modifierCategorieRecette(id: number, nom: string): Promise
 export async function supprimerCategorieRecette(id: number): Promise<void> {
   const response = await apiFetch(`${API_URL}/categories-recette/${id}`, { method: "DELETE" });
   await verifierReponse(response, "Impossible de supprimer la catégorie de recette");
+}
+
+export async function getSousCategoriesRecette(): Promise<SousCategorieRecette[]> {
+  const response = await apiFetch(`${API_URL}/sous-categories-recette`);
+  await verifierReponse(response, "Impossible de récupérer les sous-catégories de recettes");
+  return response.json();
+}
+
+export async function creerSousCategorieRecette(
+  nom: string,
+  parentId: number | null
+): Promise<SousCategorieRecette> {
+  const response = await apiFetch(`${API_URL}/sous-categories-recette`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nom, parentId }),
+  });
+  await verifierReponse(response, "Impossible de créer la sous-catégorie de recette");
+  return response.json();
+}
+
+export async function modifierSousCategorieRecette(
+  id: number,
+  nom: string,
+  parentId: number | null
+): Promise<SousCategorieRecette> {
+  const response = await apiFetch(`${API_URL}/sous-categories-recette/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nom, parentId }),
+  });
+  await verifierReponse(response, "Impossible de modifier la sous-catégorie de recette");
+  return response.json();
+}
+
+export async function supprimerSousCategorieRecette(id: number): Promise<void> {
+  const response = await apiFetch(`${API_URL}/sous-categories-recette/${id}`, { method: "DELETE" });
+  await verifierReponse(response, "Impossible de supprimer la sous-catégorie de recette");
 }
 
 export async function getUnites(): Promise<Unite[]> {
