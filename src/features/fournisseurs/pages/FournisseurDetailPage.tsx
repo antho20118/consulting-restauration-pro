@@ -110,23 +110,6 @@ export default function FournisseurDetailPage() {
 
   return (
     <div style={{ padding: 20 }}>
-      <style>{`
-        .ffo-tab {
-          padding: 10px 18px;
-          border: none;
-          background: transparent;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 500;
-          color: #444;
-          border-bottom: 3px solid transparent;
-          border-radius: 8px 8px 0 0;
-          transition: background-color .15s ease, color .15s ease;
-        }
-        .ffo-tab:hover { background: #f3f4f6; color: #16a085; }
-        .ffo-tab.active { background: #eafaf4; color: #0f6848; font-weight: 700; border-bottom-color: #16a085; }
-      `}</style>
-
       <button onClick={() => navigate("/fournisseurs")} style={{ marginBottom: 12 }}>
         ← Retour à la liste
       </button>
@@ -144,7 +127,7 @@ export default function FournisseurDetailPage() {
       <div
         style={{
           display: "flex",
-          gap: 4,
+          gap: 8,
           flexWrap: "wrap",
           borderBottom: "2px solid #e5e7eb",
           marginBottom: 24,
@@ -161,7 +144,15 @@ export default function FournisseurDetailPage() {
           <button
             key={cle}
             onClick={() => setOnglet(cle)}
-            className={`ffo-tab${onglet === cle ? " active" : ""}`}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 20,
+              border: "1px solid var(--couleur-bordure)",
+              background: onglet === cle ? "var(--couleur-primaire)" : "transparent",
+              color: onglet === cle ? "white" : "inherit",
+              cursor: "pointer",
+              fontWeight: onglet === cle ? 600 : 400,
+            }}
           >
             {label}
           </button>

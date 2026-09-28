@@ -190,8 +190,11 @@ test("Articles / Tarifs : tarifs actuels et historique distincts, source Listing
   // source Facture — la navigation doit maintenant suivre le type réel du document source.
   await ligneActuelleFacture.getByRole("button", { name: "Voir le document" }).click();
   await expect(page).toHaveURL(/onglet=factures/);
-  await expect(page.getByRole("button", { name: "Factures" })).toHaveClass(/active/);
-  await expect(page.getByRole("button", { name: "Listings" })).not.toHaveClass(/active/);
+  // Onglet actif rendu en style inline (voir FournisseurDetailPage.tsx, alignement visuel sur
+  // RecettesPage) : plus de classe CSS dédiée, la preuve visuelle est le font-weight distinctif
+  // (600 actif / 400 inactif), pas un nom de classe.
+  await expect(page.getByRole("button", { name: "Factures" })).toHaveCSS("font-weight", "600");
+  await expect(page.getByRole("button", { name: "Listings" })).toHaveCSS("font-weight", "400");
   // Le nom de fichier seul apparaît aussi dans la ligne du tableau (maintenant visible puisqu'on est
   // sur le bon onglet Factures, contrairement à l'ancien bug) : on cible ici précisément le panneau
   // de détail via son préfixe propre, pas la simple présence du nom de fichier quelque part sur la page.
@@ -201,8 +204,8 @@ test("Articles / Tarifs : tarifs actuels et historique distincts, source Listing
   await page.getByRole("button", { name: "Articles / Tarifs" }).click();
   await ligneActuelleListing.getByRole("button", { name: "Voir le document" }).click();
   await expect(page).toHaveURL(/onglet=listings/);
-  await expect(page.getByRole("button", { name: "Listings" })).toHaveClass(/active/);
-  await expect(page.getByRole("button", { name: "Factures" })).not.toHaveClass(/active/);
+  await expect(page.getByRole("button", { name: "Listings" })).toHaveCSS("font-weight", "600");
+  await expect(page.getByRole("button", { name: "Factures" })).toHaveCSS("font-weight", "400");
 
   await expect(page.getByText("Fichier : e2e-historique-listing.png")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("E2E HISTORIQUE TARIFS Article Listing", { exact: false }).first()).toBeVisible();
@@ -211,7 +214,7 @@ test("Articles / Tarifs : tarifs actuels et historique distincts, source Listing
   // Persistance de l'onglet actif dans l'URL (audit ergonomique, item 9) : un rechargement de page
   // sur un onglet donné doit rester sur ce même onglet, pas retomber sur "Informations".
   await page.reload();
-  await expect(page.getByRole("button", { name: "Listings" })).toHaveClass(/active/);
+  await expect(page.getByRole("button", { name: "Listings" })).toHaveCSS("font-weight", "600");
   // exact:true — le nom du fournisseur de test ("E2E HISTORIQUE TARIFS Fournisseur") contient lui
   // aussi la sous-chaîne "Historique" (dans le <h1>), une correspondance non exacte matcherait donc
   // à tort ce titre de page au lieu du seul <h3>"Historique" de l'onglet Articles / Tarifs.
