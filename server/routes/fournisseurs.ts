@@ -29,10 +29,14 @@ export async function genererCodeFournisseur(tx: Prisma.TransactionClient, socie
   return `FOU-${String(valeur).padStart(4, "0")}`;
 }
 
-router.get("/", async (_req, res) => {
+// inclureInactifs=true : aussi les fournisseurs désactivés (actif=false), pour permettre leur
+// réactivation (voir POST /:id/reactiver) — sans ce paramètre, un fournisseur désactivé
+// disparaissait de toute liste sans aucun moyen d'y revenir depuis l'interface.
+router.get("/", async (req, res) => {
   try {
+    const inclureInactifs = req.query.inclureInactifs === "true";
     const fournisseurs = await prisma.fournisseur.findMany({
-      where: { actif: true },
+      where: inclureInactifs ? {} : { actif: true },
       include: { _count: { select: { tarifs: true } } },
       orderBy: { nom: "asc" },
     });

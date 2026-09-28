@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import FournisseursGrille from "../components/FournisseursGrille";
 import SelecteurFournisseurHomonyme from "../components/SelecteurFournisseurHomonyme";
 import FournisseurForm from "../components/FournisseurForm";
-import { getFournisseurs, supprimerFournisseur } from "../services/fournisseurService";
+import { getFournisseurs, reactiverFournisseur, supprimerFournisseur } from "../services/fournisseurService";
 import { regrouperFournisseursParNom, type GroupeFournisseur } from "../utils/regrouperFournisseurs";
 import type { Fournisseur } from "../types/fournisseur";
 
@@ -14,21 +14,52 @@ export default function FournisseursPage() {
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [recherche, setRecherche] = useState("");
   const [groupeSelectionne, setGroupeSelectionne] = useState<GroupeFournisseur | null>(null);
+  const [inclureInactifs, setInclureInactifs] = useState(false);
 
   async function chargerFournisseurs() {
-    const data = await getFournisseurs();
+    const data = await getFournisseurs({ inclureInactifs });
     setFournisseurs(data);
   }
 
   useEffect(() => {
-    getFournisseurs().then(setFournisseurs);
-  }, []);
+    let annule = false;
+
+    // Sans ce garde, une réponse plus lente pour l'état précédent (inclureInactifs=false) peut
+    // arriver après celle du nouvel état et écraser silencieusement la liste avec des résultats
+    // obsolètes — l'ordre de résolution des deux requêtes n'est jamais garanti.
+    getFournisseurs({ inclureInactifs }).then((data) => {
+      if (!annule) setFournisseurs(data);
+    });
+
+    return () => {
+      annule = true;
+    };
+  }, [inclureInactifs]);
+
+  // La désactivation (DELETE /:id, soft-delete) fait disparaître un fournisseur de la liste
+  // active : les fournisseurs désactivés sont donc séparés ici, jamais mélangés au regroupement
+  // par homonymie (regrouperFournisseursParNom, pensé pour des fournisseurs actifs uniquement) —
+  // affichés dans leur propre section, avec pour seule action possible la réactivation.
+  const fournisseursActifs = useMemo(
+    () => fournisseurs.filter((fournisseur) => fournisseur.actif !== false),
+    [fournisseurs]
+  );
+  const fournisseursInactifs = useMemo(
+    () => fournisseurs.filter((fournisseur) => fournisseur.actif === false),
+    [fournisseurs]
+  );
 
   const fournisseursFiltres = useMemo(() => {
     const terme = recherche.trim().toLowerCase();
-    if (!terme) return fournisseurs;
-    return fournisseurs.filter((fournisseur) => fournisseur.nom.toLowerCase().includes(terme));
-  }, [fournisseurs, recherche]);
+    if (!terme) return fournisseursActifs;
+    return fournisseursActifs.filter((fournisseur) => fournisseur.nom.toLowerCase().includes(terme));
+  }, [fournisseursActifs, recherche]);
+
+  const fournisseursInactifsFiltres = useMemo(() => {
+    const terme = recherche.trim().toLowerCase();
+    if (!terme) return fournisseursInactifs;
+    return fournisseursInactifs.filter((fournisseur) => fournisseur.nom.toLowerCase().includes(terme));
+  }, [fournisseursInactifs, recherche]);
 
   const groupesFiltres = useMemo(
     () => regrouperFournisseursParNom(fournisseursFiltres),
@@ -62,6 +93,12 @@ export default function FournisseursPage() {
     chargerFournisseurs();
   }
 
+  async function reactiver(fournisseur: Fournisseur) {
+    if (!confirm(`Réactiver le fournisseur "${fournisseur.nom}" ?`)) return;
+    await reactiverFournisseur(fournisseur.id);
+    chargerFournisseurs();
+  }
+
   return (
     <div style={{ padding: 20 }}>
       <h1>🚚 Fournisseurs</h1>
@@ -70,18 +107,32 @@ export default function FournisseursPage() {
         style={{
           display: "flex",
           justifyContent: "space-between",
+          alignItems: "center",
           marginBottom: 20,
+          gap: 16,
+          flexWrap: "wrap",
         }}
       >
         <button className="btn-primary" onClick={ouvrirCreation}>+ Nouveau fournisseur</button>
 
-        <input
-          type="text"
-          placeholder="Rechercher..."
-          value={recherche}
-          onChange={(e) => setRecherche(e.target.value)}
-          style={{ width: 300, padding: 8 }}
-        />
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--couleur-texte-attenue)" }}>
+            <input
+              type="checkbox"
+              checked={inclureInactifs}
+              onChange={(e) => setInclureInactifs(e.target.checked)}
+            />
+            Afficher aussi les fournisseurs désactivés
+          </label>
+
+          <input
+            type="text"
+            placeholder="Rechercher..."
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+            style={{ width: 300, padding: 8 }}
+          />
+        </div>
       </div>
 
       <FournisseursGrille
@@ -90,6 +141,39 @@ export default function FournisseursPage() {
         onEdit={ouvrirEdition}
         onDelete={supprimer}
       />
+
+      {inclureInactifs && fournisseursInactifsFiltres.length > 0 && (
+        <div style={{ marginTop: 30 }}>
+          <h3 style={{ color: "var(--couleur-texte-attenue)" }}>Fournisseurs désactivés</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {fournisseursInactifsFiltres.map((fournisseur) => (
+              <div
+                key={fournisseur.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "10px 14px",
+                  background: "#f4f6f8",
+                  borderRadius: "var(--rayon-petit)",
+                }}
+              >
+                <div>
+                  <strong>{fournisseur.nom}</strong>
+                  {fournisseur.codeFournisseur && (
+                    <span style={{ marginLeft: 8, fontSize: 12, color: "var(--couleur-texte-attenue)" }}>
+                      {fournisseur.codeFournisseur}
+                    </span>
+                  )}
+                </div>
+                <button className="btn-primary" onClick={() => reactiver(fournisseur)}>
+                  Réactiver
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {groupeSelectionne && (
         <SelecteurFournisseurHomonyme

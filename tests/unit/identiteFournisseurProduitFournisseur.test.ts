@@ -174,6 +174,24 @@ test("A5/A6 — soft-delete conserve id/code/historique ; réactivation explicit
   assert.equal(corpsReactivation.nom, "PFI TEST Fournisseur Reactivation");
 });
 
+test("A7 — un fournisseur désactivé disparaît de GET /fournisseurs par défaut, mais reste listé avec inclureInactifs=true", async () => {
+  const { corps: fournisseur } = await creerFournisseur("PFI TEST Fournisseur ListeInactifs");
+  await fetch(`${baseUrl}/api/fournisseurs/${fournisseur.id}`, { method: "DELETE", headers: authHeaders() });
+
+  const listeParDefaut = await fetch(`${baseUrl}/api/fournisseurs`, { headers: authHeaders() });
+  const corpsParDefaut = await listeParDefaut.json();
+  assert.ok(
+    !corpsParDefaut.some((f: { id: number }) => f.id === fournisseur.id),
+    "un fournisseur désactivé ne doit jamais apparaître dans la liste par défaut"
+  );
+
+  const listeAvecInactifs = await fetch(`${baseUrl}/api/fournisseurs?inclureInactifs=true`, { headers: authHeaders() });
+  const corpsAvecInactifs = await listeAvecInactifs.json();
+  const trouve = corpsAvecInactifs.find((f: { id: number }) => f.id === fournisseur.id);
+  assert.ok(trouve, "le fournisseur désactivé doit apparaître avec inclureInactifs=true");
+  assert.equal(trouve.actif, false);
+});
+
 test("B1 — import résolu par codeFournisseur (niveau 1) : réutilise le fournisseur actif, aucune création", async () => {
   const { corps: f } = await creerFournisseur("PFI TEST Fournisseur ParCode");
   const avant = await prisma.fournisseur.count({ where: { nom: "PFI TEST Fournisseur ParCode" } });

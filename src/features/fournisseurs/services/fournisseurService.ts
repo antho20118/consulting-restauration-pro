@@ -1,8 +1,9 @@
 import { API_URL, apiFetch } from "../../../config/api";
 import type { Fournisseur, FournisseurInput } from "../types/fournisseur";
 
-export async function getFournisseurs(): Promise<Fournisseur[]> {
-  const response = await apiFetch(`${API_URL}/fournisseurs`);
+export async function getFournisseurs(options?: { inclureInactifs?: boolean }): Promise<Fournisseur[]> {
+  const suffixe = options?.inclureInactifs ? "?inclureInactifs=true" : "";
+  const response = await apiFetch(`${API_URL}/fournisseurs${suffixe}`);
 
   if (!response.ok) {
     throw new Error("Impossible de récupérer les fournisseurs");
@@ -122,4 +123,17 @@ export async function supprimerFournisseur(id: number): Promise<void> {
   if (!response.ok) {
     throw new Error("Impossible de supprimer le fournisseur");
   }
+}
+
+// Réactivation explicite d'un fournisseur désactivé (POST /:id/reactiver, distinct de PUT /:id) —
+// jamais automatique côté serveur (voir server/routes/fournisseurs.ts), donc jamais implicite ici
+// non plus.
+export async function reactiverFournisseur(id: number): Promise<Fournisseur> {
+  const response = await apiFetch(`${API_URL}/fournisseurs/${id}/reactiver`, { method: "POST" });
+
+  if (!response.ok) {
+    throw new Error("Impossible de réactiver le fournisseur");
+  }
+
+  return response.json();
 }
