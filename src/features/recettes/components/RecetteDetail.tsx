@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import AlertesConsulting from "./AlertesConsulting";
 import SuggestionsEconomie from "./SuggestionsEconomie";
 import { getEvaluationHACCP } from "../services/recetteService";
-import type { EtapeEvalueeHACCP, Recette } from "../types/recette";
+import type { EtapeEvalueeHACCP, Recette, RegleHACCP } from "../types/recette";
 
 type Props = {
   recette: Recette;
@@ -11,6 +11,38 @@ type Props = {
   onEdit: (recette: Recette) => void;
   onDelete: (recette: Recette) => void;
 };
+
+// Le serveur renvoie déjà la règle HACCP complète (voir server/utils/haccp.ts) pour chaque étape
+// détectée par mots-clés — jusqu'ici seul le nom de la règle était affiché, le reste (risque,
+// mesure préventive, limite critique, surveillance, action corrective) était reçu puis jeté.
+function DetailReglesHACCP({ regles }: { regles: RegleHACCP[] }) {
+  if (regles.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+      {regles.map((regle) => (
+        <div key={regle.code} style={{ fontSize: 13 }}>
+          <div style={{ fontWeight: 600, marginBottom: 2 }}>{regle.nom}</div>
+          <div>
+            <strong>Risque :</strong> {regle.risque}
+          </div>
+          <div>
+            <strong>Mesure préventive :</strong> {regle.mesurePreventive}
+          </div>
+          <div>
+            <strong>Limite critique :</strong> {regle.limiteCritique}
+          </div>
+          <div>
+            <strong>Surveillance :</strong> {regle.surveillance}
+          </div>
+          <div>
+            <strong>Action corrective :</strong> {regle.actionCorrective}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Props) {
   const [evaluationHACCP, setEvaluationHACCP] = useState<EtapeEvalueeHACCP[] | null>(null);
@@ -158,6 +190,9 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
                     Contrôle non documenté — précisez la limite critique respectée.
                   </div>
                 )}
+                {evaluation && evaluation.reglesDetectees.length > 0 && (
+                  <DetailReglesHACCP regles={evaluation.reglesDetectees} />
+                )}
               </div>
             )}
             {suggestionNonDeclaree && (
@@ -172,9 +207,9 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
                   fontSize: 13,
                 }}
               >
-                <strong>🔍 Point HACCP potentiel détecté</strong> (
-                {evaluation!.reglesDetectees.map((r) => r.nom).join(", ")}) — vérifiez si cette étape doit
-                être marquée « point critique » et son contrôle documenté.
+                <strong>🔍 Point HACCP potentiel détecté</strong> — vérifiez si cette étape doit être
+                marquée « point critique » et son contrôle documenté.
+                <DetailReglesHACCP regles={evaluation!.reglesDetectees} />
               </div>
             )}
           </div>
