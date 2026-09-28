@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "db:seed": "tsx prisma/seed.ts",
     "db:backfill-code-fournisseur": "tsx prisma/backfillCodeFournisseur.ts",
+    "db:fusionner-doublons-fournisseurs": "tsx prisma/fusionnerDoublonsFournisseurs.ts",
     "postinstall": "prisma generate && node scripts/copierAssetsTesseract.mjs",
     "typecheck": "tsc -b --pretty false",
     "test": "node --import tsx --test tests/unit/*.test.ts tests/smoke/*.test.ts",
