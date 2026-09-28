@@ -15,6 +15,7 @@ const DepotsPage = lazy(() => import("../features/depots/pages/DepotsPage"));
 const ParametresPage = lazy(() => import("../features/parametres/pages/ParametresPage"));
 const ProductionPage = lazy(() => import("../features/production/pages/ProductionPage"));
 const ProductionPlanifierPage = lazy(() => import("../features/production/pages/ProductionPlanifierPage"));
+const HaccpPage = lazy(() => import("../features/haccp/pages/HaccpPage"));
 
 export default function AppRoutes() {
   return (
@@ -31,6 +32,7 @@ export default function AppRoutes() {
           <Route path="depots" element={<DepotsPage />} />
           <Route path="production" element={<ProductionPage />} />
           <Route path="production/:recetteId" element={<ProductionPlanifierPage />} />
+          <Route path="haccp" element={<HaccpPage />} />
           <Route path="parametres" element={<ParametresPage />} />
         </Route>
       </Routes>
