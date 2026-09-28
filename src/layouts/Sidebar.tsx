@@ -8,6 +8,7 @@ const menu = [
   { label: "🍽️ Menus", path: "/menus" },
   { label: "🥕 Base ingrédients", path: "/ingredients" },
   { label: "🚚 Fournisseurs", path: "/fournisseurs" },
+  { label: "🏭 Production", path: "/production" },
   { label: "📦 Mouvements de stock", path: "/mouvements" },
   { label: "🏭 Dépôts", path: "/depots" },
   { label: "⚙ Paramètres", path: "/parametres" },

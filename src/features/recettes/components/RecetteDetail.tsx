@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import AlertesConsulting from "./AlertesConsulting";
-import CalculateurProduction from "./CalculateurProduction";
 import SuggestionsEconomie from "./SuggestionsEconomie";
 import { getEvaluationHACCP } from "../services/recetteService";
 import type { EtapeEvalueeHACCP, Recette } from "../types/recette";
@@ -215,7 +215,6 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
       <div className="fiche-technique-sans-impression">
         <AlertesConsulting recetteId={recette.id} />
         <SuggestionsEconomie recetteId={recette.id} />
-        <CalculateurProduction recette={recette} />
       </div>
 
       <div
@@ -228,6 +227,19 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onClose}>Fermer</button>
           <button onClick={() => window.print()}>Imprimer</button>
+          <Link
+            to={`/production/${recette.id}`}
+            className="btn-primary"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "8px 14px",
+              borderRadius: "var(--rayon-petit)",
+              textDecoration: "none",
+            }}
+          >
+            🏭 Planifier une production
+          </Link>
           <button className="btn-primary" onClick={() => onEdit(recette)}>
             Modifier
           </button>

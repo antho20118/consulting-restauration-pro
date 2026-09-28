@@ -13,6 +13,8 @@ const FournisseurDetailPage = lazy(() => import("../features/fournisseurs/pages/
 const MouvementsPage = lazy(() => import("../features/mouvements/pages/MouvementsPage"));
 const DepotsPage = lazy(() => import("../features/depots/pages/DepotsPage"));
 const ParametresPage = lazy(() => import("../features/parametres/pages/ParametresPage"));
+const ProductionPage = lazy(() => import("../features/production/pages/ProductionPage"));
+const ProductionPlanifierPage = lazy(() => import("../features/production/pages/ProductionPlanifierPage"));
 
 export default function AppRoutes() {
   return (
@@ -27,6 +29,8 @@ export default function AppRoutes() {
           <Route path="fournisseurs/:id" element={<FournisseurDetailPage />} />
           <Route path="mouvements" element={<MouvementsPage />} />
           <Route path="depots" element={<DepotsPage />} />
+          <Route path="production" element={<ProductionPage />} />
+          <Route path="production/:recetteId" element={<ProductionPlanifierPage />} />
           <Route path="parametres" element={<ParametresPage />} />
         </Route>
       </Routes>
