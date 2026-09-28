@@ -84,11 +84,11 @@ export default function IngredientsTable({ ingredients, onEdit, onDelete }: Prop
       <DataGrid
         rows={ingredients}
         columns={columns}
-        pageSizeOptions={[10, 25, 50]}
+        pageSizeOptions={[25, 50, 100]}
         initialState={{
           pagination: {
             paginationModel: {
-              pageSize: 25,
+              pageSize: 100,
             },
           },
         }}
