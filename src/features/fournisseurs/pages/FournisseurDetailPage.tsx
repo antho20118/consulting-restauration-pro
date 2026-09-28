@@ -13,6 +13,8 @@ import type { Fournisseur } from "../types/fournisseur";
 import FournisseurForm from "../components/FournisseurForm";
 import DocumentFournisseurDetailPanel from "../components/DocumentFournisseurDetailPanel";
 import ImportFacturePhotoModal from "../components/ImportFacturePhotoModal";
+import ImportListingModal from "../../ingredients/components/ImportListingModal";
+import ImportListingPhotoModal from "../../ingredients/components/ImportListingPhotoModal";
 
 type Onglet = "informations" | "tarifs" | "listings" | "factures";
 const ONGLETS: Onglet[] = ["informations", "tarifs", "listings", "factures"];
@@ -56,6 +58,8 @@ export default function FournisseurDetailPage() {
   const [documents, setDocuments] = useState<DocumentFournisseurResume[]>([]);
   const [documentOuvertId, setDocumentOuvertId] = useState<number | null>(null);
   const [importFactureOuvert, setImportFactureOuvert] = useState(false);
+  const [importListingOuvert, setImportListingOuvert] = useState(false);
+  const [importListingPhotoOuvert, setImportListingPhotoOuvert] = useState(false);
 
   async function charger() {
     if (!Number.isInteger(fournisseurId) || fournisseurId <= 0) {
@@ -196,7 +200,11 @@ export default function FournisseurDetailPage() {
               color: "#22506b",
             }}
           >
-            ℹ️ Les listings s'importent depuis la page <strong>Base ingrédients</strong>.
+            Les listings importés ici sont automatiquement rattachés à <strong>{fournisseur.nom}</strong>.
+          </div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+            <button onClick={() => setImportListingOuvert(true)}>Importer un listing</button>
+            <button onClick={() => setImportListingPhotoOuvert(true)}>Importer un listing par photo</button>
           </div>
           <OngletDocuments
             documents={listings}
@@ -242,6 +250,55 @@ export default function FournisseurDetailPage() {
             onSave={() => {
               charger();
               toast.success("Fournisseur modifié");
+            }}
+          />
+        </div>
+      )}
+
+      {importListingOuvert && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            overflowY: "auto",
+            padding: "40px 0",
+          }}
+        >
+          <ImportListingModal
+            fournisseurId={fournisseurId}
+            fournisseurNom={fournisseur.nom}
+            onClose={() => setImportListingOuvert(false)}
+            onSave={() => {
+              charger();
+              toast.success("Listing importé");
+            }}
+          />
+        </div>
+      )}
+
+      {importListingPhotoOuvert && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            overflowY: "auto",
+            padding: "40px 0",
+          }}
+        >
+          <ImportListingPhotoModal
+            fournisseurId={fournisseurId}
+            onClose={() => setImportListingPhotoOuvert(false)}
+            onSave={() => {
+              charger();
+              toast.success("Listing importé");
             }}
           />
         </div>

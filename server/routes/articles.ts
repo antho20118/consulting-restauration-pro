@@ -422,11 +422,17 @@ router.post("/import", async (req: Request, res: Response) => {
     // File choisi à l'étape 1 — jamais inventées : voir Phase 6 (historique des imports Excel via
     // DocumentFournisseur, réutilisé tel quel). codeFournisseur : identité par défaut du fichier
     // (colonne optionnelle, voir cadrage « identité fournisseur + produit fournisseur » §6, niveau 1).
-    const { nomFichierOriginal, typeMime, tailleOctets, codeFournisseur } = req.body as {
+    // fournisseurId : fournisseur imposé par le contexte de navigation (fiche fournisseur → onglet
+    // Listings → Importer, voir cadrage « déplacement de l'import listing ») — quand fourni, prime
+    // strictement sur fournisseurNom/codeFournisseur ci-dessus ET sur toute colonne fournisseur/
+    // codeFournisseur d'une ligne individuelle : le contenu du fichier ne peut jamais substituer un
+    // autre fournisseur à celui déterminé par le contexte d'où l'import a été lancé.
+    const { nomFichierOriginal, typeMime, tailleOctets, codeFournisseur, fournisseurId: fournisseurIdContexte } = req.body as {
       nomFichierOriginal?: string;
       typeMime?: string;
       tailleOctets?: number;
       codeFournisseur?: string;
+      fournisseurId?: number;
     };
 
     if (!Array.isArray(lignes) || lignes.length === 0) {
@@ -438,34 +444,57 @@ router.post("/import", async (req: Request, res: Response) => {
     // traiter dans une seule transaction interactive (délai par défaut de 5s chez Prisma, qui
     // se ferme avant la fin d'un import volumineux). Seules les écritures d'une même ligne
     // (clôture + ouverture de tarif, ou création d'article + tarif) sont transactionnelles.
-    const resolutionParDefaut = await trouverOuCreerFournisseur(prisma, fournisseurNom, societeId, codeFournisseur);
-    if (resolutionParDefaut.statut === "ambigu") {
-      res.status(409).json({
-        error:
-          `Plusieurs fournisseurs existants correspondent au nom "${resolutionParDefaut.nom}" : ` +
-          "impossible de déterminer lequel utiliser par défaut sans choix arbitraire. " +
-          "Résous cette ambiguïté (fiches fournisseurs) avant de réimporter.",
-        fournisseurIds: resolutionParDefaut.fournisseurIds,
-      });
-      return;
+    let fournisseurIdParDefaut: number;
+    if (fournisseurIdContexte !== undefined) {
+      if (!Number.isInteger(fournisseurIdContexte) || fournisseurIdContexte <= 0) {
+        res.status(400).json({ error: "Identifiant fournisseur invalide" });
+        return;
+      }
+      const fournisseurContexte = await prisma.fournisseur.findUnique({ where: { id: fournisseurIdContexte } });
+      if (!fournisseurContexte) {
+        res.status(404).json({ error: "Fournisseur introuvable" });
+        return;
+      }
+      if (!fournisseurContexte.actif) {
+        res.status(409).json({
+          error:
+            `Le fournisseur "${fournisseurContexte.nom}" existe mais est actuellement inactif : ` +
+            "réactive-le explicitement (fiche fournisseur) avant de réimporter.",
+          fournisseurId: fournisseurContexte.id,
+        });
+        return;
+      }
+      fournisseurIdParDefaut = fournisseurContexte.id;
+    } else {
+      const resolutionParDefaut = await trouverOuCreerFournisseur(prisma, fournisseurNom, societeId, codeFournisseur);
+      if (resolutionParDefaut.statut === "ambigu") {
+        res.status(409).json({
+          error:
+            `Plusieurs fournisseurs existants correspondent au nom "${resolutionParDefaut.nom}" : ` +
+            "impossible de déterminer lequel utiliser par défaut sans choix arbitraire. " +
+            "Résous cette ambiguïté (fiches fournisseurs) avant de réimporter.",
+          fournisseurIds: resolutionParDefaut.fournisseurIds,
+        });
+        return;
+      }
+      if (resolutionParDefaut.statut === "inactif") {
+        res.status(409).json({
+          error:
+            `Le fournisseur "${resolutionParDefaut.identifiant}" existe mais est actuellement inactif : ` +
+            "réactive-le explicitement (fiche fournisseur) avant de réimporter, ou choisis un autre fournisseur.",
+          fournisseurId: resolutionParDefaut.fournisseurId,
+        });
+        return;
+      }
+      if (resolutionParDefaut.statut === "code_inconnu") {
+        res.status(409).json({
+          error: `Aucun fournisseur ne correspond au code "${resolutionParDefaut.code}" : aucune création silencieuse à partir d'un code inconnu.`,
+          code: resolutionParDefaut.code,
+        });
+        return;
+      }
+      fournisseurIdParDefaut = resolutionParDefaut.fournisseurId;
     }
-    if (resolutionParDefaut.statut === "inactif") {
-      res.status(409).json({
-        error:
-          `Le fournisseur "${resolutionParDefaut.identifiant}" existe mais est actuellement inactif : ` +
-          "réactive-le explicitement (fiche fournisseur) avant de réimporter, ou choisis un autre fournisseur.",
-        fournisseurId: resolutionParDefaut.fournisseurId,
-      });
-      return;
-    }
-    if (resolutionParDefaut.statut === "code_inconnu") {
-      res.status(409).json({
-        error: `Aucun fournisseur ne correspond au code "${resolutionParDefaut.code}" : aucune création silencieuse à partir d'un code inconnu.`,
-        code: resolutionParDefaut.code,
-      });
-      return;
-    }
-    const fournisseurIdParDefaut = resolutionParDefaut.fournisseurId;
     // Un fichier combinant plusieurs fournisseurs (une colonne "Fournisseur" par ligne) prime sur
     // le fournisseur unique choisi dans la modale d'import ; mis en cache pour ne résoudre chaque
     // nom qu'une fois même s'il revient sur des centaines de lignes (résolution complète, jamais
@@ -582,7 +611,12 @@ router.post("/import", async (req: Request, res: Response) => {
       const nomFournisseurLigne = ligne.fournisseur ? String(ligne.fournisseur).trim() : "";
       const codeFournisseurLigne = ligne.codeFournisseur ? String(ligne.codeFournisseur).trim() : "";
       let fournisseurId = fournisseurIdParDefaut;
-      if (codeFournisseurLigne || nomFournisseurLigne) {
+      // Fournisseur imposé par le contexte (fiche fournisseur) : toute colonne fournisseur/
+      // codeFournisseur d'une ligne individuelle est ignorée pour la résolution — jamais de
+      // substitution, voir cadrage §10. Sans contexte (import générique depuis Ingrédients),
+      // comportement historique inchangé : une ligne peut désigner un autre fournisseur que celui
+      // choisi par défaut dans la modale (fichier multi-fournisseurs).
+      if (fournisseurIdContexte === undefined && (codeFournisseurLigne || nomFournisseurLigne)) {
         // Le code prime toujours sur le nom pour CETTE ligne (voir cadrage §6, niveau 1) — la clé de
         // cache distingue les deux espaces pour ne jamais confondre un code et un nom qui se
         // ressembleraient par coïncidence.
@@ -951,10 +985,42 @@ router.post("/import", async (req: Request, res: Response) => {
 router.post("/import/apercu", async (req: Request, res: Response) => {
   try {
     const { societeId, fournisseurNom, lignes } = req.body;
+    const { fournisseurId: fournisseurIdContexte } = req.body as { fournisseurId?: number };
 
     if (!Array.isArray(lignes) || lignes.length === 0) {
       res.status(400).json({ error: "Aucune ligne à analyser" });
       return;
+    }
+
+    // Même garantie qu'à l'écriture réelle (POST /import) : un fournisseur imposé par le contexte
+    // de navigation est vérifié une seule fois pour tout l'aperçu, jamais réévalué ligne par ligne
+    // à partir du fichier (voir cadrage §10).
+    let fournisseurIdContexteValide: number | null = null;
+    let nomFournisseurContexte = "";
+    if (fournisseurIdContexte !== undefined) {
+      if (!Number.isInteger(fournisseurIdContexte) || fournisseurIdContexte <= 0) {
+        res.status(400).json({ error: "Identifiant fournisseur invalide" });
+        return;
+      }
+      const fournisseurContexte = await prisma.fournisseur.findUnique({ where: { id: fournisseurIdContexte } });
+      if (!fournisseurContexte) {
+        res.status(404).json({ error: "Fournisseur introuvable" });
+        return;
+      }
+      if (!fournisseurContexte.actif) {
+        res.status(409).json({
+          error:
+            `Le fournisseur "${fournisseurContexte.nom}" existe mais est actuellement inactif : ` +
+            "réactive-le explicitement (fiche fournisseur) avant de réimporter.",
+          fournisseurId: fournisseurContexte.id,
+        });
+        return;
+      }
+      fournisseurIdContexteValide = fournisseurContexte.id;
+      // Le nom réellement affiché en proposition vient toujours du fournisseur résolu en base,
+      // jamais d'un fournisseurNom éventuellement transmis par le client (qui n'a plus de raison
+      // d'être envoyé une fois le fournisseur imposé par le contexte).
+      nomFournisseurContexte = fournisseurContexte.nom;
     }
 
     const [
@@ -1031,37 +1097,49 @@ router.post("/import/apercu", async (req: Request, res: Response) => {
     )[] = [];
 
     for (const ligne of lignes) {
-      const nomFournisseurLigne = ligne?.fournisseur ? String(ligne.fournisseur).trim() : "";
-      const nomFournisseurResolu = nomFournisseurLigne || String(fournisseurNom ?? "").trim();
-      const cle = normaliserIdentiteFournisseur(nomFournisseurResolu);
-      const correspondances = fournisseurIdsParIdentite.get(cle) ?? [];
       const designationLigne = String(ligne?.designation ?? "").trim();
       const referenceLigne = ligne?.reference ? String(ligne.reference).trim() : null;
 
-      // Plusieurs fournisseurs existants partagent ce nom (après normalisation) : jamais de choix
-      // arbitraire, même en aperçu — signalé explicitement plutôt que résolu au hasard.
-      if (correspondances.length > 1) {
-        propositions.push({
-          statut: "fournisseur_ambigu",
-          designation: designationLigne,
-          reference: referenceLigne,
-          nom: nomFournisseurResolu,
-          fournisseurIds: correspondances,
-        });
-        continue;
-      }
+      let fournisseurId: number | null;
+      let nomFournisseurResolu: string;
 
-      const fournisseurId = correspondances[0] ?? null;
-      const fournisseurTrouve = fournisseurId !== null ? fournisseursParId.get(fournisseurId) : undefined;
-      if (fournisseurTrouve && !fournisseurTrouve.actif) {
-        propositions.push({
-          statut: "fournisseur_inactif",
-          designation: designationLigne,
-          reference: referenceLigne,
-          identifiant: nomFournisseurResolu,
-          fournisseurId: fournisseurTrouve.id,
-        });
-        continue;
+      if (fournisseurIdContexteValide !== null) {
+        // Fournisseur imposé par le contexte (fiche fournisseur) : jamais réévalué à partir d'une
+        // colonne fournisseur/codeFournisseur de la ligne — voir cadrage §10, même principe qu'à
+        // l'écriture réelle (POST /import).
+        fournisseurId = fournisseurIdContexteValide;
+        nomFournisseurResolu = nomFournisseurContexte;
+      } else {
+        const nomFournisseurLigne = ligne?.fournisseur ? String(ligne.fournisseur).trim() : "";
+        nomFournisseurResolu = nomFournisseurLigne || String(fournisseurNom ?? "").trim();
+        const cle = normaliserIdentiteFournisseur(nomFournisseurResolu);
+        const correspondances = fournisseurIdsParIdentite.get(cle) ?? [];
+
+        // Plusieurs fournisseurs existants partagent ce nom (après normalisation) : jamais de choix
+        // arbitraire, même en aperçu — signalé explicitement plutôt que résolu au hasard.
+        if (correspondances.length > 1) {
+          propositions.push({
+            statut: "fournisseur_ambigu",
+            designation: designationLigne,
+            reference: referenceLigne,
+            nom: nomFournisseurResolu,
+            fournisseurIds: correspondances,
+          });
+          continue;
+        }
+
+        fournisseurId = correspondances[0] ?? null;
+        const fournisseurTrouve = fournisseurId !== null ? fournisseursParId.get(fournisseurId) : undefined;
+        if (fournisseurTrouve && !fournisseurTrouve.actif) {
+          propositions.push({
+            statut: "fournisseur_inactif",
+            designation: designationLigne,
+            reference: referenceLigne,
+            identifiant: nomFournisseurResolu,
+            fournisseurId: fournisseurTrouve.id,
+          });
+          continue;
+        }
       }
 
       const codeProduitLigne = ligne?.codeProduitFournisseur ? String(ligne.codeProduitFournisseur).trim() : "";

@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import toast from "react-hot-toast";
 import { Camera } from "lucide-react";
 
 import { redimensionnerImage } from "../../../common/redimensionnerImage";
 import { extraireTexteDePhoto } from "../../recettes/utils/ocrPhoto";
-import { getFournisseurs } from "../../fournisseurs/services/fournisseurService";
-import type { Fournisseur } from "../../fournisseurs/types/fournisseur";
 import { analyserListingLocal } from "../utils/analyseListingLocal";
 import {
   ImportIANonConfigureeError,
@@ -19,6 +17,7 @@ import {
 } from "../services/listingFournisseurService";
 
 type Props = {
+  fournisseurId: number;
   onClose: () => void;
   onSave: () => void;
 };
@@ -38,13 +37,14 @@ const LIBELLE_NATURE: Record<string, string> = {
   NON_ALIMENTAIRE: "Non alimentaire — jamais transformé en tarif",
 };
 
-export default function ImportListingPhotoModal({ onClose, onSave }: Props) {
+// Import lancé depuis l'onglet Listings de la fiche fournisseur (voir cadrage « déplacement de
+// l'import listing ») : le fournisseur est imposé par le contexte de navigation, jamais choisi ici
+// — même principe que ImportFacturePhotoModal.tsx, aucun sélecteur de fournisseur.
+export default function ImportListingPhotoModal({ fournisseurId, onClose, onSave }: Props) {
   const [etape, setEtape] = useState<1 | 2 | 3 | 4>(1);
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState("");
 
-  const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
-  const [fournisseurId, setFournisseurId] = useState(0);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [nomFichier, setNomFichier] = useState("");
 
@@ -57,13 +57,6 @@ export default function ImportListingPhotoModal({ onClose, onSave }: Props) {
   const [rejets, setRejets] = useState<Set<number>>(new Set());
 
   const [resultat, setResultat] = useState<{ valides: number; rejetees: number; refusees: string[] } | null>(null);
-
-  useEffect(() => {
-    getFournisseurs().then((liste) => {
-      setFournisseurs(liste);
-      if (liste.length > 0) setFournisseurId(liste[0].id);
-    });
-  }, []);
 
   async function choisirPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const fichier = e.target.files?.[0];
@@ -185,19 +178,6 @@ export default function ImportListingPhotoModal({ onClose, onSave }: Props) {
 
       {etape === 1 && (
         <div>
-          <label>Fournisseur</label>
-          <select
-            value={fournisseurId}
-            onChange={(e) => setFournisseurId(Number(e.target.value))}
-            style={{ width: "100%", padding: 10, marginBottom: 20 }}
-          >
-            {fournisseurs.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.nom}
-              </option>
-            ))}
-          </select>
-
           <label
             style={{
               display: "flex",

@@ -90,12 +90,13 @@ test("import listing par photo : sélection fournisseur, photo, analyse OCR loca
   // App.tsx, bascule connecte/AppRoutes), contrairement au bouton dont le nom accessible change.
   await expect(page.getByLabel("Identifiant")).toBeHidden({ timeout: 15_000 });
 
-  await page.goto("/ingredients");
+  // Import déplacé vers la fiche fournisseur (voir cadrage « déplacement de l'import listing ») :
+  // le fournisseur cible n'est plus choisi dans le modal, il est déterminé par l'URL de la fiche.
+  await page.goto(`/fournisseurs/${fournisseurId}?onglet=listings`);
   await page.getByRole("button", { name: "Importer un listing par photo" }).click();
 
   await expect(page.getByText("Importer un listing fournisseur par photo")).toBeVisible();
 
-  await page.locator("select").first().selectOption({ label: "E2E LISTING PHOTO Fournisseur" });
   await page.locator('input[type="file"]').setInputFiles(CHEMIN_PHOTO);
 
   await expect(page.locator('label:has-text("Changer la photo")')).toBeVisible();
@@ -117,4 +118,17 @@ test("import listing par photo : sélection fournisseur, photo, analyse OCR loca
 
   const lignes = await prisma.ligneDocumentFournisseur.findMany({ where: { documentId: document.id } });
   expect(lignes.length).toBeGreaterThan(0);
+});
+
+test("l'onglet Ingrédients ne propose plus d'import de listing fournisseur (voir cadrage « déplacement de l'import listing »)", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Identifiant").fill("admin");
+  await page.getByLabel("Code").fill("1234");
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await expect(page.getByLabel("Identifiant")).toBeHidden({ timeout: 15_000 });
+
+  await page.goto("/ingredients");
+  await expect(page.getByRole("button", { name: "+ Nouvel ingrédient" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Importer un listing", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Importer un listing par photo" })).toHaveCount(0);
 });

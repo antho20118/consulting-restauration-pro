@@ -51,12 +51,26 @@ const CHAMPS_A_MAPPER: { cle: keyof Mapping; label: string }[] = [
   { cle: "codeProduitFournisseur", label: "Code produit fournisseur (optionnel)" },
 ];
 
+// Sans fournisseur imposé par le contexte : tous les champs, comportement historique inchangé.
+// Avec fournisseur imposé (fiche fournisseur → Listings → Importer) : "fournisseur" et
+// "codeFournisseur" n'ont plus aucun effet côté serveur (voir cadrage §10, articles.ts) — les
+// proposer resterait trompeur, ils sont donc retirés du mapping affiché.
+const CHAMPS_A_MAPPER_SANS_FOURNISSEUR = CHAMPS_A_MAPPER.filter(
+  ({ cle }) => cle !== "fournisseur" && cle !== "codeFournisseur"
+);
+
 type Props = {
+  // Fournisseur imposé par le contexte de navigation (fiche fournisseur → onglet Listings →
+  // Importer, voir cadrage « déplacement de l'import listing ») : quand fourni, aucune saisie ni
+  // colonne fournisseur/codeFournisseur n'est proposée dans ce modal — une seule source de vérité.
+  // Absent (import générique, hors de ce chantier), le comportement historique est inchangé.
+  fournisseurId?: number;
+  fournisseurNom?: string;
   onClose: () => void;
   onSave: () => void;
 };
 
-export default function ImportListingModal({ onClose, onSave }: Props) {
+export default function ImportListingModal({ fournisseurId, fournisseurNom: fournisseurNomContexte, onClose, onSave }: Props) {
   const [etape, setEtape] = useState<1 | 2 | 3 | 4>(1);
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(false);
@@ -69,7 +83,8 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
   // DocumentFournisseur côté serveur).
   const [fichierMeta, setFichierMeta] = useState<{ nom: string; type: string; taille: number } | null>(null);
 
-  const [fournisseurNom, setFournisseurNom] = useState("");
+  const [fournisseurNom, setFournisseurNom] = useState(fournisseurNomContexte ?? "");
+  const champsAMapper = fournisseurId !== undefined ? CHAMPS_A_MAPPER_SANS_FOURNISSEUR : CHAMPS_A_MAPPER;
   const [categories, setCategories] = useState<Categorie[]>([]);
   const [categorieId, setCategorieId] = useState(0);
   const [tvas, setTvas] = useState<Tva[]>([]);
@@ -161,7 +176,7 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
   // référence ou les créations, pour qu'aucune correspondance approximative ne puisse être écrite
   // sans être d'abord passée sous les yeux de l'utilisateur.
   async function analyser() {
-    if (!fournisseurNom.trim() && !mapping.fournisseur) {
+    if (fournisseurId === undefined && !fournisseurNom.trim() && !mapping.fournisseur) {
       setErreur("Indique le nom du fournisseur, ou mappe une colonne Fournisseur.");
       return;
     }
@@ -183,6 +198,7 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
       const { propositions: propositionsRecues } = await apercuListing({
         societeId: 1,
         fournisseurNom,
+        fournisseurId,
         lignes: lignesConstruites,
       });
       setLignes(lignesConstruites);
@@ -226,6 +242,7 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
       const reponse = await importerListing({
         societeId: 1,
         fournisseurNom,
+        fournisseurId,
         categorieId,
         tvaId,
         type: "MATIERE_PREMIERE",
@@ -271,14 +288,32 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
 
       {etape === 2 && (
         <div>
-          <label>Nom du fournisseur (par défaut, si la colonne Fournisseur n'est pas mappée ou vide sur une ligne)</label>
-          <input
-            type="text"
-            placeholder="ex. Metro, Pomona, Transgourmet…"
-            value={fournisseurNom}
-            onChange={(e) => setFournisseurNom(e.target.value)}
-            style={{ width: "100%", padding: 10, marginBottom: 20 }}
-          />
+          {fournisseurId !== undefined ? (
+            <div
+              style={{
+                background: "#eafaf4",
+                border: "1px solid #bfe6d6",
+                borderRadius: 8,
+                padding: "8px 12px",
+                marginBottom: 20,
+                fontSize: 13,
+                color: "#0f6848",
+              }}
+            >
+              Ce listing sera importé pour <strong>{fournisseurNomContexte || "ce fournisseur"}</strong>.
+            </div>
+          ) : (
+            <>
+              <label>Nom du fournisseur (par défaut, si la colonne Fournisseur n'est pas mappée ou vide sur une ligne)</label>
+              <input
+                type="text"
+                placeholder="ex. Metro, Pomona, Transgourmet…"
+                value={fournisseurNom}
+                onChange={(e) => setFournisseurNom(e.target.value)}
+                style={{ width: "100%", padding: 10, marginBottom: 20 }}
+              />
+            </>
+          )}
 
           <label>Catégorie par défaut (si la colonne "Catégorie" n'est pas mappée ou vide)</label>
           <select
@@ -310,7 +345,7 @@ export default function ImportListingModal({ onClose, onSave }: Props) {
             Fais correspondre les colonnes de ton fichier ({lignesBrutes.length} lignes détectées) :
           </div>
 
-          {CHAMPS_A_MAPPER.map(({ cle, label }) => (
+          {champsAMapper.map(({ cle, label }) => (
             <div
               key={cle}
               style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}

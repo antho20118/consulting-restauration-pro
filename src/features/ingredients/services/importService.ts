@@ -107,6 +107,10 @@ export type ResultatImport = {
 export async function apercuListing(payload: {
   societeId: number;
   fournisseurNom: string;
+  // Fournisseur imposé par le contexte de navigation (fiche fournisseur → Listings → Importer,
+  // voir cadrage « déplacement de l'import listing ») : quand fourni, prime strictement sur
+  // fournisseurNom et sur toute colonne fournisseur/codeFournisseur d'une ligne individuelle.
+  fournisseurId?: number;
   lignes: LigneImport[];
 }): Promise<{ propositions: PropositionLigneImport[] }> {
   const response = await apiFetch(`${API_URL}/articles/import/apercu`, {
@@ -129,6 +133,11 @@ export async function importerListing(payload: {
   // quand fourni. Un code inconnu ou inactif fait échouer tout l'import (409) plutôt que de créer
   // silencieusement un fournisseur.
   codeFournisseur?: string;
+  // Fournisseur imposé par le contexte de navigation (fiche fournisseur → Listings → Importer,
+  // voir cadrage « déplacement de l'import listing ») : quand fourni, prime strictement sur
+  // fournisseurNom/codeFournisseur ci-dessus et sur toute colonne fournisseur/codeFournisseur
+  // d'une ligne individuelle — jamais de substitution par le contenu du fichier.
+  fournisseurId?: number;
   categorieId: number;
   tvaId: number;
   type: string;
