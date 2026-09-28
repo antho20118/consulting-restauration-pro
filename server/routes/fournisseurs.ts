@@ -14,8 +14,10 @@ const router = Router();
 // attend la première puis repart de la valeur déjà incrémentée). Doit toujours être appelée à
 // l'intérieur de la même transaction que la création du Fournisseur qui utilisera ce code, pour
 // qu'un échec de la création n'incrémente jamais le compteur pour rien (transaction annulée dans
-// son ensemble).
-async function genererCodeFournisseur(tx: Prisma.TransactionClient, societeId: number): Promise<string> {
+// son ensemble). Exportée : réutilisée par trouverOuCreerFournisseur (articles.ts) pour que la
+// création automatique d'un fournisseur pendant un import assigne elle aussi un code, exactement
+// comme la création manuelle — jamais une seconde implémentation qui risquerait de diverger.
+export async function genererCodeFournisseur(tx: Prisma.TransactionClient, societeId: number): Promise<string> {
   const lignes = await tx.$queryRaw<{ valeur: number }[]>`
     INSERT INTO "SocieteCompteur" ("societeId", "typeCompteur", "valeur")
     VALUES (${societeId}, 'FOURNISSEUR', 1)

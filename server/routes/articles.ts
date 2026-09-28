@@ -23,6 +23,7 @@ import {
   FournisseurInactifError,
   FournisseurCodeInconnuError,
 } from "../utils/erreursEcriture.js";
+import { genererCodeFournisseur } from "./fournisseurs.js";
 
 // Ajoutée par le chantier « identité fournisseur + historique des imports » : jamais dans
 // importListing.ts (analyserPropositionLigne ne résout et ne crée jamais lui-même un fournisseur,
@@ -1322,7 +1323,12 @@ async function trouverOuCreerFournisseur(
     return { statut: "ambigu", nom: nomRecherche, fournisseurIds: correspondances.map((f) => f.id) };
   }
 
-  const cree = await tx.fournisseur.create({ data: { nom: nomRecherche, societeId } });
+  // Un fournisseur créé automatiquement pendant un import reçoit lui aussi un codeFournisseur —
+  // jamais laissé à null, exactement comme la création manuelle (POST /fournisseurs) : sans quoi
+  // ce fournisseur resterait invisible dans le regroupement/l'affichage par code, et son
+  // codeFournisseur ne pourrait plus jamais être renseigné après coup (voir genererCodeFournisseur).
+  const codeGenere = await genererCodeFournisseur(tx, societeId);
+  const cree = await tx.fournisseur.create({ data: { nom: nomRecherche, societeId, codeFournisseur: codeGenere } });
   return { statut: "ok", fournisseurId: cree.id };
 }
 
