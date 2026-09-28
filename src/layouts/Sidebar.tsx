@@ -15,11 +15,17 @@ const menu = [
   { label: "⚙ Paramètres", path: "/parametres" },
 ];
 
-export default function Sidebar() {
+type Props = {
+  ouverte: boolean;
+  onFermer: () => void;
+};
+
+export default function Sidebar({ ouverte, onFermer }: Props) {
   const location = useLocation();
 
   return (
     <aside
+      className={`app-sidebar${ouverte ? " ouverte" : ""}`}
       style={{
         width: 260,
         background: "#202729",
@@ -34,6 +40,10 @@ export default function Sidebar() {
         <Link
           key={item.path}
           to={item.path}
+          // Sans-effet sur desktop (le tiroir hors écran n'existe qu'en dessous de 768px, voir
+          // index.css) : ferme simplement le tiroir mobile après avoir choisi une page, plutôt que
+          // de le laisser ouvert par-dessus la page suivante.
+          onClick={onFermer}
           style={{
             display: "block",
             padding: 12,
