@@ -60,7 +60,11 @@ export default function ProductionPlanifierPage() {
     setProposition(null);
     setErreurAchat(null);
     try {
-      const res = await planifierProduction(id, { mode, valeur: cible }, depotId);
+      // Le champ "Poids fini" se saisit en kg (plus pratique qu'en grammes pour une quantité de
+      // production réaliste) mais l'API attend toujours des grammes (voir CibleProduction,
+      // server/utils/planifierProduction.ts) — conversion uniquement à cette frontière.
+      const valeur = mode === "poidsFiniG" ? cible * 1000 : cible;
+      const res = await planifierProduction(id, { mode, valeur }, depotId);
       setPlanification(res);
     } catch (e) {
       setErreurPlan(e instanceof Error ? e.message : "Erreur inconnue");
@@ -151,7 +155,7 @@ export default function ProductionPlanifierPage() {
               onClick={() => setMode("poidsFiniG")}
               style={{ fontWeight: mode === "poidsFiniG" ? "bold" : "normal" }}
             >
-              Poids fini (g)
+              Poids fini (kg)
             </button>
           </div>
           <ChampNombre valeur={cible} onChanger={(n) => setCible(n ?? 0)} style={{ width: 140, padding: 10, boxSizing: "border-box" }} />
@@ -183,7 +187,7 @@ export default function ProductionPlanifierPage() {
       {planification && (
         <div className="fiche-technique-impression" style={{ marginBottom: 24 }}>
           <p style={{ color: "#666" }}>
-            Cible : {planification.mode === "portions" ? `${planification.portionsCible} portion(s)` : `${planification.poidsFiniCibleG} g fini`}
+            Cible : {planification.mode === "portions" ? `${planification.portionsCible} portion(s)` : `${(planification.poidsFiniCibleG / 1000).toFixed(2)} kg fini`}
             {" · "}échelle ×{planification.echelle.toFixed(2)}
           </p>
 
