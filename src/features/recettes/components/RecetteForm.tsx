@@ -377,6 +377,8 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
         padding: 20,
         borderRadius: 10,
         width: 700,
+        maxWidth: "calc(100vw - 32px)",
+        boxSizing: "border-box",
         boxShadow: "0 0 20px rgba(0,0,0,.2)",
         maxHeight: "85vh",
         overflowY: "auto",

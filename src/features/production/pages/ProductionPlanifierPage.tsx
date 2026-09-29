@@ -192,32 +192,34 @@ export default function ProductionPlanifierPage() {
           </p>
 
           <h3>Besoins matières</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
-            <thead>
-              <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
-                <th style={{ padding: "6px 0" }}>Ingrédient</th>
-                <th style={{ padding: "6px 0" }}>Quantité de production</th>
-                <th style={{ padding: "6px 0" }}>Stock disponible</th>
-                <th style={{ padding: "6px 0" }}>Besoin net</th>
-              </tr>
-            </thead>
-            <tbody>
-              {planification.lignes.map((ligne) => (
-                <tr key={ligne.articleId} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                  <td style={{ padding: "6px 0" }}>{ligne.article.nom}</td>
-                  <td style={{ padding: "6px 0" }}>
-                    {(ligne.quantiteProduction / ligne.unite.facteurBase).toFixed(2)} {ligne.unite.symbole}
-                  </td>
-                  <td style={{ padding: "6px 0" }}>
-                    {(ligne.stockDisponible / ligne.unite.facteurBase).toFixed(2)} {ligne.unite.symbole}
-                  </td>
-                  <td style={{ padding: "6px 0" }}>
-                    {(ligne.besoinNet / ligne.unite.facteurBase).toFixed(2)} {ligne.unite.symbole}
-                  </td>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
+              <thead>
+                <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
+                  <th style={{ padding: "6px 0" }}>Ingrédient</th>
+                  <th style={{ padding: "6px 0" }}>Quantité de production</th>
+                  <th style={{ padding: "6px 0" }}>Stock disponible</th>
+                  <th style={{ padding: "6px 0" }}>Besoin net</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {planification.lignes.map((ligne) => (
+                  <tr key={ligne.articleId} style={{ borderBottom: "1px solid #f0f0f0" }}>
+                    <td style={{ padding: "6px 0" }}>{ligne.article.nom}</td>
+                    <td style={{ padding: "6px 0" }}>
+                      {(ligne.quantiteProduction / ligne.unite.facteurBase).toFixed(2)} {ligne.unite.symbole}
+                    </td>
+                    <td style={{ padding: "6px 0" }}>
+                      {(ligne.stockDisponible / ligne.unite.facteurBase).toFixed(2)} {ligne.unite.symbole}
+                    </td>
+                    <td style={{ padding: "6px 0" }}>
+                      {(ligne.besoinNet / ligne.unite.facteurBase).toFixed(2)} {ligne.unite.symbole}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <div className="feuille-production-sans-impression" style={{ marginBottom: 20 }}>
             <button className="btn-primary" onClick={genererPropositionAchat} disabled={chargementAchat}>
@@ -230,21 +232,23 @@ export default function ProductionPlanifierPage() {
           {proposition && (
             <>
               <h3>Proposition d'achat</h3>
-              <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
-                <thead>
-                  <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
-                    <th style={{ padding: "6px 0" }}>Article</th>
-                    <th style={{ padding: "6px 0" }}>Fournisseur</th>
-                    <th style={{ padding: "6px 0" }}>À commander</th>
-                    <th style={{ padding: "6px 0", textAlign: "right" }}>Coût HT</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {proposition.lignes.map((ligne) => (
-                    <LigneAchatRow key={ligne.articleId} ligne={ligne} />
-                  ))}
-                </tbody>
-              </table>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
+                      <th style={{ padding: "6px 0" }}>Article</th>
+                      <th style={{ padding: "6px 0" }}>Fournisseur</th>
+                      <th style={{ padding: "6px 0" }}>À commander</th>
+                      <th style={{ padding: "6px 0", textAlign: "right" }}>Coût HT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {proposition.lignes.map((ligne) => (
+                      <LigneAchatRow key={ligne.articleId} ligne={ligne} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <div style={{ textAlign: "right", fontWeight: "bold" }}>Total HT : {proposition.totalHT.toFixed(2)} €</div>
 
               <div className="feuille-production-sans-impression" style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>

@@ -39,6 +39,8 @@ export default function FournisseurForm({ fournisseur, onClose, onSave }: Props)
         padding: 20,
         borderRadius: 10,
         width: 420,
+        maxWidth: "calc(100vw - 32px)",
+        boxSizing: "border-box",
         boxShadow: "0 0 20px rgba(0,0,0,.2)",
         maxHeight: "85vh",
         overflowY: "auto",

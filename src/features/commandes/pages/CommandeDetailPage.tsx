@@ -91,42 +91,44 @@ export default function CommandeDetailPage() {
         {commande.dateReception && <> · réceptionnée le {new Date(commande.dateReception).toLocaleDateString("fr-FR")}</>}
       </p>
 
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 16, marginBottom: 20 }}>
-        <thead>
-          <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
-            <th style={{ padding: "8px 6px" }}>Article</th>
-            <th style={{ padding: "8px 6px" }}>Conditionnement</th>
-            <th style={{ padding: "8px 6px" }}>Quantité commandée</th>
-            <th style={{ padding: "8px 6px" }}>Quantité reçue</th>
-            <th style={{ padding: "8px 6px", textAlign: "right" }}>Prix unitaire</th>
-          </tr>
-        </thead>
-        <tbody>
-          {commande.lignes.map((ligne) => (
-            <tr key={ligne.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
-              <td style={{ padding: "8px 6px" }}>{ligne.article.nom}</td>
-              <td style={{ padding: "8px 6px" }}>
-                {ligne.conditionnements} × {ligne.conditionnementLibelle}
-              </td>
-              <td style={{ padding: "8px 6px" }}>{formaterQuantite(ligne.quantiteCommandeeBase, ligne.article.uniteBase)}</td>
-              <td style={{ padding: "8px 6px" }}>
-                {enAttente ? (
-                  <ChampNombre
-                    valeur={quantitesRecues[ligne.id] ?? 0}
-                    onChanger={(n) => setQuantitesRecues((q) => ({ ...q, [ligne.id]: n ?? 0 }))}
-                    style={{ width: 100, padding: 6 }}
-                  />
-                ) : ligne.quantiteRecueBase !== null ? (
-                  formaterQuantite(ligne.quantiteRecueBase, ligne.article.uniteBase)
-                ) : (
-                  "—"
-                )}
-              </td>
-              <td style={{ padding: "8px 6px", textAlign: "right" }}>{ligne.prixUnitaireBase.toFixed(4)} € / {ligne.article.uniteBase}</td>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 16, marginBottom: 20 }}>
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
+              <th style={{ padding: "8px 6px" }}>Article</th>
+              <th style={{ padding: "8px 6px" }}>Conditionnement</th>
+              <th style={{ padding: "8px 6px" }}>Quantité commandée</th>
+              <th style={{ padding: "8px 6px" }}>Quantité reçue</th>
+              <th style={{ padding: "8px 6px", textAlign: "right" }}>Prix unitaire</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {commande.lignes.map((ligne) => (
+              <tr key={ligne.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
+                <td style={{ padding: "8px 6px" }}>{ligne.article.nom}</td>
+                <td style={{ padding: "8px 6px" }}>
+                  {ligne.conditionnements} × {ligne.conditionnementLibelle}
+                </td>
+                <td style={{ padding: "8px 6px" }}>{formaterQuantite(ligne.quantiteCommandeeBase, ligne.article.uniteBase)}</td>
+                <td style={{ padding: "8px 6px" }}>
+                  {enAttente ? (
+                    <ChampNombre
+                      valeur={quantitesRecues[ligne.id] ?? 0}
+                      onChanger={(n) => setQuantitesRecues((q) => ({ ...q, [ligne.id]: n ?? 0 }))}
+                      style={{ width: 100, padding: 6 }}
+                    />
+                  ) : ligne.quantiteRecueBase !== null ? (
+                    formaterQuantite(ligne.quantiteRecueBase, ligne.article.uniteBase)
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td style={{ padding: "8px 6px", textAlign: "right" }}>{ligne.prixUnitaireBase.toFixed(4)} € / {ligne.article.uniteBase}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {enAttente && (
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>

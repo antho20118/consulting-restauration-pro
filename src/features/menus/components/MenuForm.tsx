@@ -104,6 +104,8 @@ export default function MenuForm({ menu, onClose, onSave }: Props) {
         padding: 20,
         borderRadius: 10,
         width: 650,
+        maxWidth: "calc(100vw - 32px)",
+        boxSizing: "border-box",
         boxShadow: "0 0 20px rgba(0,0,0,.2)",
         maxHeight: "85vh",
         overflowY: "auto",

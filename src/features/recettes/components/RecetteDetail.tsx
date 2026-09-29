@@ -69,6 +69,8 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
         padding: 24,
         borderRadius: 10,
         width: 750,
+        maxWidth: "calc(100vw - 32px)",
+        boxSizing: "border-box",
         boxShadow: "0 0 20px rgba(0,0,0,.2)",
         maxHeight: "90vh",
         overflowY: "auto",
@@ -134,28 +136,30 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
       )}
 
       <h3>Ingrédients</h3>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 20 }}>
-        <thead>
-          <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
-            <th style={{ padding: "6px 0" }}>Ingrédient</th>
-            <th style={{ padding: "6px 0" }}>Quantité</th>
-            <th style={{ padding: "6px 0", textAlign: "right" }}>Coût</th>
-          </tr>
-        </thead>
-        <tbody>
-          {recette.lignes.map((ligne) => (
-            <tr key={ligne.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
-              <td style={{ padding: "6px 0" }}>{ligne.article.nom}</td>
-              <td style={{ padding: "6px 0" }}>
-                {ligne.quantite} {ligne.unite.symbole}
-              </td>
-              <td style={{ padding: "6px 0", textAlign: "right" }}>
-                {ligne.coutLigne.toFixed(2)} €
-              </td>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 20 }}>
+          <thead>
+            <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
+              <th style={{ padding: "6px 0" }}>Ingrédient</th>
+              <th style={{ padding: "6px 0" }}>Quantité</th>
+              <th style={{ padding: "6px 0", textAlign: "right" }}>Coût</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {recette.lignes.map((ligne) => (
+              <tr key={ligne.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
+                <td style={{ padding: "6px 0" }}>{ligne.article.nom}</td>
+                <td style={{ padding: "6px 0" }}>
+                  {ligne.quantite} {ligne.unite.symbole}
+                </td>
+                <td style={{ padding: "6px 0", textAlign: "right" }}>
+                  {ligne.coutLigne.toFixed(2)} €
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <h3>Procédé pas à pas</h3>
       {recette.etapes.length === 0 && <p style={{ color: "#888" }}>Aucune étape renseignée.</p>}

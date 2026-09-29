@@ -39,6 +39,8 @@ export default function LoginPage({ onConnexion }: { onConnexion: () => void }) 
           borderRadius: 10,
           padding: 32,
           width: 320,
+          maxWidth: "calc(100vw - 32px)",
+          boxSizing: "border-box",
           boxShadow: "0 1px 3px rgba(0,0,0,.2)",
         }}
       >

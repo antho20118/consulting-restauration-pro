@@ -47,7 +47,8 @@ export default function SelecteurFournisseurHomonyme({
           borderRadius: "var(--rayon)",
           boxShadow: "var(--ombre-carte)",
           width: 760,
-          maxWidth: "90vw",
+          maxWidth: "calc(100vw - 32px)",
+          boxSizing: "border-box",
           padding: 20,
         }}
       >

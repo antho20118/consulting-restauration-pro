@@ -41,40 +41,42 @@ export default function HaccpPage() {
             >
               <h3 style={{ margin: "0 0 10px" }}>⚠ {regle.nom}</h3>
 
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <tbody>
-                  <tr>
-                    <td style={{ padding: "4px 12px 4px 0", fontWeight: 600, whiteSpace: "nowrap", verticalAlign: "top" }}>
-                      Risque
-                    </td>
-                    <td style={{ padding: "4px 0" }}>{regle.risque}</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: "4px 12px 4px 0", fontWeight: 600, whiteSpace: "nowrap", verticalAlign: "top" }}>
-                      Mesure préventive
-                    </td>
-                    <td style={{ padding: "4px 0" }}>{regle.mesurePreventive}</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: "4px 12px 4px 0", fontWeight: 600, whiteSpace: "nowrap", verticalAlign: "top" }}>
-                      Limite critique
-                    </td>
-                    <td style={{ padding: "4px 0" }}>{regle.limiteCritique}</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: "4px 12px 4px 0", fontWeight: 600, whiteSpace: "nowrap", verticalAlign: "top" }}>
-                      Surveillance
-                    </td>
-                    <td style={{ padding: "4px 0" }}>{regle.surveillance}</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: "4px 12px 4px 0", fontWeight: 600, whiteSpace: "nowrap", verticalAlign: "top" }}>
-                      Action corrective
-                    </td>
-                    <td style={{ padding: "4px 0" }}>{regle.actionCorrective}</td>
-                  </tr>
-                </tbody>
-              </table>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <tbody>
+                    <tr>
+                      <td style={{ padding: "4px 12px 4px 0", fontWeight: 600, whiteSpace: "nowrap", verticalAlign: "top" }}>
+                        Risque
+                      </td>
+                      <td style={{ padding: "4px 0" }}>{regle.risque}</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: "4px 12px 4px 0", fontWeight: 600, whiteSpace: "nowrap", verticalAlign: "top" }}>
+                        Mesure préventive
+                      </td>
+                      <td style={{ padding: "4px 0" }}>{regle.mesurePreventive}</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: "4px 12px 4px 0", fontWeight: 600, whiteSpace: "nowrap", verticalAlign: "top" }}>
+                        Limite critique
+                      </td>
+                      <td style={{ padding: "4px 0" }}>{regle.limiteCritique}</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: "4px 12px 4px 0", fontWeight: 600, whiteSpace: "nowrap", verticalAlign: "top" }}>
+                        Surveillance
+                      </td>
+                      <td style={{ padding: "4px 0" }}>{regle.surveillance}</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: "4px 12px 4px 0", fontWeight: 600, whiteSpace: "nowrap", verticalAlign: "top" }}>
+                        Action corrective
+                      </td>
+                      <td style={{ padding: "4px 0" }}>{regle.actionCorrective}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
 
               <div style={{ marginTop: 10, fontSize: 13, color: "var(--couleur-texte-attenue)" }}>
                 Détection automatique sur les mots-clés :{" "}

@@ -231,6 +231,8 @@ export default function RecettesPage() {
         style={{
           display: "flex",
           justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 16,
           marginBottom: 20,
         }}
       >

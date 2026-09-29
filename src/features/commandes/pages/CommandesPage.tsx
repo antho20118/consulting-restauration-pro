@@ -36,33 +36,35 @@ export default function CommandesPage() {
       {commandes && commandes.length === 0 && <p style={{ color: "#666" }}>Aucune commande pour l'instant.</p>}
 
       {commandes && commandes.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
-              <th style={{ padding: "8px 6px" }}>Fournisseur</th>
-              <th style={{ padding: "8px 6px" }}>Dépôt</th>
-              <th style={{ padding: "8px 6px" }}>Statut</th>
-              <th style={{ padding: "8px 6px" }}>Créée le</th>
-              <th style={{ padding: "8px 6px" }} />
-            </tr>
-          </thead>
-          <tbody>
-            {commandes.map((commande) => {
-              const statutInfo = LIBELLE_STATUT[commande.statut];
-              return (
-                <tr key={commande.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                  <td style={{ padding: "8px 6px" }}>{commande.fournisseur.nom}</td>
-                  <td style={{ padding: "8px 6px" }}>{commande.depot.nom}</td>
-                  <td style={{ padding: "8px 6px", color: statutInfo.couleur, fontWeight: 600 }}>{statutInfo.texte}</td>
-                  <td style={{ padding: "8px 6px" }}>{new Date(commande.creeLe).toLocaleDateString("fr-FR")}</td>
-                  <td style={{ padding: "8px 6px" }}>
-                    <Link to={`/commandes/${commande.id}`}>Voir</Link>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
+                <th style={{ padding: "8px 6px" }}>Fournisseur</th>
+                <th style={{ padding: "8px 6px" }}>Dépôt</th>
+                <th style={{ padding: "8px 6px" }}>Statut</th>
+                <th style={{ padding: "8px 6px" }}>Créée le</th>
+                <th style={{ padding: "8px 6px" }} />
+              </tr>
+            </thead>
+            <tbody>
+              {commandes.map((commande) => {
+                const statutInfo = LIBELLE_STATUT[commande.statut];
+                return (
+                  <tr key={commande.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
+                    <td style={{ padding: "8px 6px" }}>{commande.fournisseur.nom}</td>
+                    <td style={{ padding: "8px 6px" }}>{commande.depot.nom}</td>
+                    <td style={{ padding: "8px 6px", color: statutInfo.couleur, fontWeight: 600 }}>{statutInfo.texte}</td>
+                    <td style={{ padding: "8px 6px" }}>{new Date(commande.creeLe).toLocaleDateString("fr-FR")}</td>
+                    <td style={{ padding: "8px 6px" }}>
+                      <Link to={`/commandes/${commande.id}`}>Voir</Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
