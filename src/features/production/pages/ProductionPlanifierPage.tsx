@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import toast from "react-hot-toast";
 import ChampNombre from "../../../common/ChampNombre";
 import { getDepots } from "../../depots/services/depotService";
 import { getRecetteDetail } from "../../recettes/services/recetteService";
 import { planifierProduction, proposerAchat } from "../services/productionService";
 import type { BesoinAchat, CibleProduction, LigneAchat, PlanificationProduction, PropositionAchat } from "../types/production";
 import type { Depot } from "../../depots/types/depot";
+import { creerCommandes } from "../../commandes/services/commandeService";
+import type { Commande } from "../../commandes/types/commande";
 
 // Écran « PRODUIRE » pour une recette précise : planifie les quantités réellement nécessaires
 // (stock déduit), puis génère une proposition d'achat au conditionnement fournisseur — consomme
@@ -31,6 +34,9 @@ export default function ProductionPlanifierPage() {
   const [proposition, setProposition] = useState<PropositionAchat | null>(null);
   const [chargementAchat, setChargementAchat] = useState(false);
   const [erreurAchat, setErreurAchat] = useState<string | null>(null);
+
+  const [chargementCommande, setChargementCommande] = useState(false);
+  const [commandesEnregistrees, setCommandesEnregistrees] = useState<Commande[] | null>(null);
 
   useEffect(() => {
     getRecetteDetail(id).then((recette) => {
@@ -63,22 +69,51 @@ export default function ProductionPlanifierPage() {
     }
   }
 
+  function besoinsAchat(): BesoinAchat[] {
+    if (!planification) return [];
+    return planification.lignes.map((ligne) => ({
+      articleId: ligne.articleId,
+      quantite: ligne.quantiteProduction,
+      facteurUniteRecette: 1,
+    }));
+  }
+
   async function genererPropositionAchat() {
     if (!planification) return;
     setChargementAchat(true);
     setErreurAchat(null);
+    setCommandesEnregistrees(null);
     try {
-      const besoins: BesoinAchat[] = planification.lignes.map((ligne) => ({
-        articleId: ligne.articleId,
-        quantite: ligne.quantiteProduction,
-        facteurUniteRecette: 1,
-      }));
-      const res = await proposerAchat(besoins, depotId);
+      const res = await proposerAchat(besoinsAchat(), depotId);
       setProposition(res);
     } catch (e) {
       setErreurAchat(e instanceof Error ? e.message : "Erreur inconnue");
     } finally {
       setChargementAchat(false);
+    }
+  }
+
+  // Recalcule toujours côté serveur au moment de l'enregistrement (voir calculerPropositionAchat,
+  // jamais la proposition affichée transmise telle quelle) — depotId est ici obligatoire : une
+  // commande réelle a toujours un dépôt de destination, contrairement à la prévisualisation.
+  async function enregistrerCommande() {
+    if (!depotId) {
+      toast.error("Choisis un dépôt avant d'enregistrer la commande.");
+      return;
+    }
+    setChargementCommande(true);
+    try {
+      const commandes = await creerCommandes(besoinsAchat(), depotId);
+      if (commandes.length === 0) {
+        toast("Rien à commander : le stock couvre déjà tous les besoins.", { icon: "ℹ️" });
+      } else {
+        toast.success(`${commandes.length} commande(s) enregistrée(s).`);
+      }
+      setCommandesEnregistrees(commandes);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impossible d'enregistrer la commande");
+    } finally {
+      setChargementCommande(false);
     }
   }
 
@@ -207,6 +242,28 @@ export default function ProductionPlanifierPage() {
                 </tbody>
               </table>
               <div style={{ textAlign: "right", fontWeight: "bold" }}>Total HT : {proposition.totalHT.toFixed(2)} €</div>
+
+              <div className="feuille-production-sans-impression" style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+                <button className="btn-primary" onClick={enregistrerCommande} disabled={chargementCommande || !depotId}>
+                  {chargementCommande ? "Enregistrement…" : "Enregistrer la commande"}
+                </button>
+              </div>
+              {!depotId && (
+                <p className="feuille-production-sans-impression" style={{ textAlign: "right", fontSize: 13, color: "#666" }}>
+                  Choisis un dépôt pour pouvoir enregistrer la commande.
+                </p>
+              )}
+
+              {commandesEnregistrees && commandesEnregistrees.length > 0 && (
+                <div className="feuille-production-sans-impression" style={{ marginTop: 12, fontSize: 14 }}>
+                  {commandesEnregistrees.map((commande) => (
+                    <p key={commande.id} style={{ margin: "4px 0" }}>
+                      ✅ Commande #{commande.id} enregistrée chez <strong>{commande.fournisseur.nom}</strong> —{" "}
+                      <Link to={`/commandes/${commande.id}`}>voir la commande</Link>
+                    </p>
+                  ))}
+                </div>
+              )}
             </>
           )}
 

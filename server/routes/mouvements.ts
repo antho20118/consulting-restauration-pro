@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 
 import prisma from "../prisma.js";
 import { libelleUniteBase } from "../utils/uniteConversion.js";
+import { appliquerMouvementStock, StockInsuffisantError } from "../utils/mouvementStock.js";
 
 const router = Router();
 
@@ -71,31 +72,10 @@ router.post("/", async (req: Request, res: Response) => {
       await tx.article.findUniqueOrThrow({ where: { id: articleId } });
       await tx.depot.findUniqueOrThrow({ where: { id: depotId } });
 
-      const delta = type === "ENTREE" ? quantite : -quantite;
+      const { id } = await appliquerMouvementStock(tx, { articleId, depotId, type, quantite, motif });
 
-      const stockActuel = await tx.stock.findUnique({
-        where: { articleId_depotId: { articleId, depotId } },
-      });
-
-      const nouvelleQuantite = (stockActuel?.quantite ?? 0) + delta;
-      if (nouvelleQuantite < 0) {
-        throw new StockInsuffisantError();
-      }
-
-      await tx.stock.upsert({
-        where: { articleId_depotId: { articleId, depotId } },
-        update: { quantite: nouvelleQuantite },
-        create: { articleId, depotId, quantite: nouvelleQuantite },
-      });
-
-      return tx.mouvementStock.create({
-        data: {
-          articleId,
-          depotId,
-          type,
-          quantite,
-          motif: motif || null,
-        },
+      return tx.mouvementStock.findUniqueOrThrow({
+        where: { id },
         include: { article: inclusionArticleAvecUnite, depot: true },
       });
     });
@@ -121,7 +101,5 @@ router.post("/", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Impossible d'enregistrer le mouvement de stock" });
   }
 });
-
-class StockInsuffisantError extends Error {}
 
 export default router;

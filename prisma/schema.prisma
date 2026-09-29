@@ -67,6 +67,7 @@ model Depot {
 
   stocks     Stock[]
   mouvements MouvementStock[]
+  commandes  CommandeFournisseur[]
 }
 
 model Categorie {
@@ -165,6 +166,7 @@ model Article {
   lignesRecette       RecetteLigne[]
   aliasImport         AliasIngredientImport[]
   produitsFournisseur ProduitFournisseur[]
+  lignesCommande      LigneCommandeFournisseur[]
 
   // Deux relations distinctes vers LigneDocumentFournisseur (voir ce modèle) : l'article que le
   // rapprochement a proposé n'est pas forcément celui que l'utilisateur a retenu (candidat
@@ -226,6 +228,7 @@ model Fournisseur {
   tarifs    TarifArticle[]
   documents DocumentFournisseur[]
   produits  ProduitFournisseur[]
+  commandes CommandeFournisseur[]
 
   @@unique([societeId, codeFournisseur])
 }
@@ -537,8 +540,77 @@ model MouvementStock {
   article Article @relation(fields: [articleId], references: [id])
   depot   Depot   @relation(fields: [depotId], references: [id])
 
+  // Ligne de commande fournisseur ayant créé précisément CE mouvement à la réception (voir
+  // CommandeFournisseur) — nullable : un mouvement saisi à la main (formulaire "Mouvements de
+  // stock") n'en a pas. FK unique, même principe que LigneDocumentFournisseur.tarifCreeId : une
+  // ligne de commande ne peut créer qu'un seul mouvement.
+  ligneCommande LigneCommandeFournisseur?
+
   @@index([articleId])
   @@index([depotId])
+}
+
+enum StatutCommandeFournisseur {
+  EN_ATTENTE
+  RECUE
+  RECUE_PARTIELLEMENT
+  ANNULEE
+}
+
+// Commande passée à UN fournisseur pour UN dépôt de destination — voir cadrage « boucle achats
+// complète » : POST /achats/proposition ne fait que proposer, sans jamais rien écrire en base ;
+// cette commande est ce qui est effectivement enregistré quand l'utilisateur valide la proposition
+// (groupée par fournisseur, une commande réelle ne part jamais chez plusieurs fournisseurs à la
+// fois).
+model CommandeFournisseur {
+  id Int @id @default(autoincrement())
+
+  fournisseurId Int
+  fournisseur   Fournisseur @relation(fields: [fournisseurId], references: [id])
+
+  depotId Int
+  depot   Depot @relation(fields: [depotId], references: [id])
+
+  statut StatutCommandeFournisseur @default(EN_ATTENTE)
+
+  creeLe        DateTime  @default(now())
+  dateReception DateTime?
+
+  lignes LigneCommandeFournisseur[]
+
+  @@index([fournisseurId])
+  @@index([depotId])
+}
+
+model LigneCommandeFournisseur {
+  id Int @id @default(autoincrement())
+
+  commandeId Int
+  commande   CommandeFournisseur @relation(fields: [commandeId], references: [id], onDelete: Cascade)
+
+  articleId Int
+  article   Article @relation(fields: [articleId], references: [id])
+
+  // Snapshot au moment de la commande (jamais recalculé après coup) : un futur renommage du
+  // Conditionnement ne doit jamais réécrire silencieusement une commande déjà passée — même
+  // principe que LigneDocumentFournisseur.designationLue.
+  conditionnementLibelle String
+  conditionnements       Int
+
+  // Toujours en unité de base de l'article (même convention que Stock/MouvementStock, voir
+  // versUniteBase) — seule échelle utilisée pour mettre à jour le stock à la réception.
+  quantiteCommandeeBase Float
+  // Renseignée uniquement à la réception (voir POST /commandes/:id/receptionner) ; peut différer
+  // de quantiteCommandeeBase (réception partielle) — jamais réécrite après une première réception.
+  quantiteRecueBase     Float?
+
+  prixUnitaireBase Float
+
+  mouvementStockId Int?            @unique
+  mouvementStock   MouvementStock? @relation(fields: [mouvementStockId], references: [id])
+
+  @@index([commandeId])
+  @@index([articleId])
 }
 
 model Recette {
