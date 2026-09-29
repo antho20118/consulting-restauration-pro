@@ -58,7 +58,11 @@ function detecterSignature(octets: Buffer): { mime: string; extension: string } 
   return trouvee ? { mime: trouvee.mime, extension: trouvee.extension } : null;
 }
 
-function racineStockage(): string {
+// Exportée : réutilisée par prisma/sauvegarder.ts et server/routes/sauvegardes.ts pour écrire les
+// sauvegardes manuelles de la base sur ce même volume Railway persistant (voir cadrage "sécurité
+// des données"), sous un sous-dossier "sauvegardes" distinct de "fournisseurs" — jamais une
+// deuxième implémentation de cette résolution de chemin, qui divergerait forcément un jour.
+export function racineStockage(): string {
   const configuree = process.env.DOCUMENTS_STORAGE_PATH;
   if (configuree) return path.resolve(configuree);
 

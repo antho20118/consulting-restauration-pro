@@ -6,6 +6,7 @@ import SousCategoriesRecetteManager from "../components/SousCategoriesRecetteMan
 import UnitesManager from "../components/UnitesManager";
 import TvaManager from "../components/TvaManager";
 import IdentifiantsSection from "../components/IdentifiantsSection";
+import SauvegardesSection from "../components/SauvegardesSection";
 
 function Section({ titre, children }: { titre: string; children: ReactNode }) {
   return (
@@ -55,6 +56,10 @@ export default function ParametresPage() {
 
       <Section titre="Identifiants de connexion">
         <IdentifiantsSection />
+      </Section>
+
+      <Section titre="Sauvegardes">
+        <SauvegardesSection />
       </Section>
     </div>
   );

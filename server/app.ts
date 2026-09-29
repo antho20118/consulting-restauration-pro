@@ -26,6 +26,7 @@ import haccpRouter from "./routes/haccp.js";
 import consultingRouter from "./routes/consulting.js";
 import documentsFournisseursRouter from "./routes/documentsFournisseurs.js";
 import listingsFournisseurRouter from "./routes/listingsFournisseur.js";
+import sauvegardesRouter from "./routes/sauvegardes.js";
 
 const app = express();
 
@@ -72,6 +73,7 @@ app.use("/api/haccp", haccpRouter);
 app.use("/api/consulting", consultingRouter);
 app.use("/api/documents-fournisseurs", documentsFournisseursRouter);
 app.use("/api/listings-fournisseur", listingsFournisseurRouter);
+app.use("/api/sauvegardes", sauvegardesRouter);
 
 app.get("/health", (_req, res) => {
   res.json({
