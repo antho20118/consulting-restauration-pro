@@ -121,6 +121,8 @@ button:not(.MuiButtonBase-root):disabled {
     z-index: 100;
     transform: translateX(-100%);
     transition: transform 0.2s ease;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .app-sidebar.ouverte {

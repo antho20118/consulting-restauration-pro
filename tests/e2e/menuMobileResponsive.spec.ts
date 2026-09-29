@@ -54,3 +54,33 @@ test("mobile (390px) : pas de débordement horizontal, la barre latérale s'ouvr
   );
   expect(debordementApresNavigation).toBeLessThanOrEqual(1);
 });
+
+// Signalement utilisateur direct : sur son téléphone (barre d'adresse du navigateur réduisant la
+// hauteur visible réelle sous les 844px nominaux de l'appareil simulé ci-dessus), le tiroir
+// n'avait pas de défilement propre (overflow-y absent en CSS) — ses derniers éléments
+// ("🔄 Actualiser", "Déconnexion") s'affichaient sous le bas de l'écran, inatteignables. Pire :
+// tenter d'y faire défiler la page faisait défiler l'arrière-plan (la page principale derrière le
+// tiroir) plutôt que le tiroir lui-même, qui n'offrait aucune prise au geste de défilement.
+test("mobile, hauteur réduite (390×700, barre d'adresse déployée) : le tiroir défile pour atteindre Actualiser et Déconnexion", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 700 });
+  await page.goto("/");
+  await page.getByLabel("Identifiant").fill("admin");
+  await page.getByLabel("Code").fill("1234");
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await expect(page.getByLabel("Identifiant")).toBeHidden({ timeout: 15_000 });
+
+  await page.getByRole("button", { name: "Ouvrir le menu" }).click();
+  const barreLaterale = page.locator(".app-sidebar");
+  await expect(barreLaterale).toHaveClass(/ouverte/);
+
+  const boutonDeconnexion = page.getByRole("button", { name: "Déconnexion" });
+  await boutonDeconnexion.scrollIntoViewIfNeeded();
+  await expect(boutonDeconnexion).toBeVisible();
+
+  const boite = await boutonDeconnexion.boundingBox();
+  expect(boite).not.toBeNull();
+  expect(boite!.y).toBeGreaterThanOrEqual(0);
+  expect(boite!.y + boite!.height).toBeLessThanOrEqual(700 + 1);
+});
