@@ -15,7 +15,8 @@ import {
   type ContexteRapprochement,
   type CandidatRapprochement,
 } from "../utils/rapprochementFournisseur.js";
-import { extraireQuantiteDesignation, parsePrix } from "../utils/importListing.js";
+import { extraireQuantiteDesignation, parsePrix, normaliserCodeProduitFournisseur } from "../utils/importListing.js";
+import { resoudreOuCreerProduitFournisseur } from "../utils/produitFournisseur.js";
 
 const router = Router();
 
@@ -80,11 +81,14 @@ type LigneEntree = {
   conditionnement?: string | null;
 };
 
-// Construit le contexte de rapprochement (candidats + alias) une seule fois par import — partagé
-// entre l'import de listing et l'import de facture, jamais dupliqué (voir rapprochementFournisseur.ts,
-// Phase 3, réutilisé tel quel, jamais modifié).
-async function construireContexteRapprochement(societeId?: number) {
-  const [uniteKg, uniteL, articlesExistants, aliasExistants] = await Promise.all([
+// Construit le contexte de rapprochement (candidats + alias + codes produit fournisseur connus)
+// une seule fois par import — partagé entre l'import de listing et l'import de facture, jamais
+// dupliqué (voir rapprochementFournisseur.ts, Phase 3). Les codes produit fournisseur sont
+// TOUJOURS scopés à fournisseurId (jamais toutes sociétés/fournisseurs confondus, voir
+// ProduitFournisseur : un même code peut légitimement désigner deux produits différents chez deux
+// fournisseurs distincts).
+async function construireContexteRapprochement(fournisseurId: number, societeId?: number) {
+  const [uniteKg, uniteL, articlesExistants, aliasExistants, produitsFournisseurExistants] = await Promise.all([
     prisma.unite.findFirst({ where: { symbole: { equals: "kg", mode: "insensitive" } } }),
     prisma.unite.findFirst({ where: { symbole: { equals: "l", mode: "insensitive" } } }),
     prisma.article.findMany({
@@ -92,6 +96,10 @@ async function construireContexteRapprochement(societeId?: number) {
       select: { id: true, nom: true, reference: true },
     }),
     prisma.aliasIngredientImport.findMany({ select: { texteNormalise: true, articleId: true } }),
+    prisma.produitFournisseur.findMany({
+      where: { fournisseurId },
+      select: { codeProduitFournisseur: true, articleId: true, designationConnue: true },
+    }),
   ]);
 
   const tarifsActifs = await prisma.tarifArticle.findMany({
@@ -114,6 +122,12 @@ async function construireContexteRapprochement(societeId?: number) {
   const contexte: ContexteRapprochement = {
     candidats,
     aliasParTexteNormalise: new Map(aliasExistants.map((a) => [a.texteNormalise, a.articleId])),
+    produitsFournisseurConnus: new Map(
+      produitsFournisseurExistants.map((p) => [
+        normaliserCodeProduitFournisseur(p.codeProduitFournisseur),
+        { articleId: p.articleId, designationConnue: p.designationConnue },
+      ])
+    ),
   };
 
   return { contexte, uniteKg, uniteL };
@@ -255,7 +269,7 @@ router.post("/:fournisseurId", async (req: Request, res: Response) => {
       throw erreur;
     }
 
-    const { contexte, uniteKg, uniteL } = await construireContexteRapprochement(societeId);
+    const { contexte, uniteKg, uniteL } = await construireContexteRapprochement(fournisseurId, societeId);
 
     const document = await prisma.documentFournisseur.create({
       data: {
@@ -423,7 +437,7 @@ router.post("/factures/:fournisseurId", async (req: Request, res: Response) => {
       throw erreur;
     }
 
-    const { contexte, uniteKg, uniteL } = await construireContexteRapprochement(societeId);
+    const { contexte, uniteKg, uniteL } = await construireContexteRapprochement(fournisseurId, societeId);
 
     const document = await prisma.documentFournisseur.create({
       data: {
@@ -592,7 +606,26 @@ router.post("/documents/:documentId/valider", async (req: Request, res: Response
         where: { articleId: articleRetenuId, fournisseurId: document.fournisseurId, actif: true },
       });
 
+      // Une décision humaine explicite sur cette ligne vaut confirmation du couple (code, article)
+      // pour tous les imports futurs de CE fournisseur (listing ou facture) — voir
+      // server/utils/produitFournisseur.ts. Rien si aucun code n'a été lu sur ce document (jamais de
+      // code inventé) ; ne remplace jamais un lien déjà existant pour ce code (résolution en lecture
+      // seule si déjà connu).
+      const codeProduitLigne = ligne.referenceLue ? normaliserCodeProduitFournisseur(ligne.referenceLue) : null;
+
       await prisma.$transaction(async (tx) => {
+        let produitFournisseurId: number | null = null;
+        if (codeProduitLigne) {
+          const produitFournisseur = await resoudreOuCreerProduitFournisseur(
+            tx,
+            document.fournisseurId,
+            codeProduitLigne,
+            articleRetenuId,
+            ligne.designationLue
+          );
+          produitFournisseurId = produitFournisseur.id;
+        }
+
         if (tarifActif) {
           await tx.tarifArticle.update({
             where: { id: tarifActif.id },
@@ -607,6 +640,7 @@ router.post("/documents/:documentId/valider", async (req: Request, res: Response
             conditionnementId: conditionnement.id,
             quantiteConditionnement: 1,
             prixHT,
+            produitFournisseurId,
           },
         });
         await tx.ligneDocumentFournisseur.update({

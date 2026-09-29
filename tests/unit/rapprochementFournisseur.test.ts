@@ -17,9 +17,70 @@ function candidat(partiel: Partial<CandidatRapprochement> & { articleId: number;
   return { reference: null, uniteActiveType: null, ...partiel };
 }
 
-function contexte(candidats: CandidatRapprochement[], alias: [string, number][] = []): ContexteRapprochement {
-  return { candidats, aliasParTexteNormalise: new Map(alias) };
+function contexte(
+  candidats: CandidatRapprochement[],
+  alias: [string, number][] = [],
+  produitsFournisseur: [string, { articleId: number; designationConnue: string }][] = []
+): ContexteRapprochement {
+  return {
+    candidats,
+    aliasParTexteNormalise: new Map(alias),
+    produitsFournisseurConnus: new Map(produitsFournisseur),
+  };
 }
+
+// --- Priorité 0 : code produit fournisseur déjà connu (ProduitFournisseur, scopé au fournisseur) ---
+
+test("certaine : code produit fournisseur déjà connu, désignation cohérente avec celle mémorisée", () => {
+  const ctx = contexte(
+    [candidat({ articleId: 1, nom: "Filet de poulet" })],
+    [],
+    [["ABC123", { articleId: 1, designationConnue: "Filet de poulet fermier" }]]
+  );
+  const resultat = rapprocherLigne("FILET POULET FERMIER", "ABC123", null, ctx);
+  assert.deepEqual(resultat, { cas: "certaine", articleId: 1, motif: "CODE_ARTICLE" });
+});
+
+test("priorité 0 : le code produit fournisseur connu gagne même sur une référence catalogue (Article.reference) différente", () => {
+  const ctx = contexte(
+    [candidat({ articleId: 1, nom: "Filet de poulet" }), candidat({ articleId: 2, nom: "Filet de dinde", reference: "ABC123" })],
+    [],
+    [["ABC123", { articleId: 1, designationConnue: "Filet de poulet fermier" }]]
+  );
+  const resultat = rapprocherLigne("Filet de poulet fermier", "ABC123", null, ctx);
+  assert.deepEqual(resultat, { cas: "certaine", articleId: 1, motif: "CODE_ARTICLE" });
+});
+
+test("code produit fournisseur normalisé avant comparaison (espace insécable/casse conservée, voir normaliserCodeProduitFournisseur)", () => {
+  const ctx = contexte(
+    [candidat({ articleId: 1, nom: "Filet de poulet" })],
+    [],
+    [["ABC123", { articleId: 1, designationConnue: "Filet de poulet fermier" }]]
+  );
+  const resultat = rapprocherLigne("Filet de poulet fermier", "ABC123 ", null, ctx);
+  assert.deepEqual(resultat, { cas: "certaine", articleId: 1, motif: "CODE_ARTICLE" });
+});
+
+test("approximative_unique : code connu mais désignation très différente de celle mémorisée — jamais un rattachement automatique silencieux", () => {
+  const ctx = contexte(
+    [candidat({ articleId: 1, nom: "Filet de poulet" })],
+    [],
+    [["ABC123", { articleId: 1, designationConnue: "Filet de poulet fermier" }]]
+  );
+  const resultat = rapprocherLigne("Semoule fine grand sac", "ABC123", null, ctx);
+  assert.equal(resultat.cas, "approximative_unique");
+  assert.equal((resultat as { articleId: number }).articleId, 1);
+});
+
+test("un code absent du contexte retombe sur le rapprochement catalogue existant (Article.reference)", () => {
+  const ctx = contexte(
+    [candidat({ articleId: 1, nom: "Filet de poulet", reference: "REF-123" })],
+    [],
+    [["AUTRE-CODE", { articleId: 2, designationConnue: "Autre article" }]]
+  );
+  const resultat = rapprocherLigne("POULET FILET", "REF-123", null, ctx);
+  assert.deepEqual(resultat, { cas: "certaine", articleId: 1, motif: "REFERENCE_FOURNISSEUR" });
+});
 
 // --- Correspondances certaines ---
 
@@ -54,6 +115,7 @@ test("le moteur ne modifie jamais la Map d'alias reçue (lecture seule, pas un s
   const ctx: ContexteRapprochement = {
     candidats: [candidat({ articleId: 8, nom: "Persil plat botte" })],
     aliasParTexteNormalise: aliasMap,
+    produitsFournisseurConnus: new Map(),
   };
   rapprocherLigne("PERSIL FRISE", null, null, ctx);
   assert.equal(aliasMap.size, 1);

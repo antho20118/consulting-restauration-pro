@@ -84,6 +84,10 @@ after(async () => {
   await prisma.ligneDocumentFournisseur.deleteMany({ where: { document: { fournisseurId } } });
   await prisma.documentFournisseur.deleteMany({ where: { fournisseurId } });
   await prisma.tarifArticle.deleteMany({ where: { articleId: { in: articleIds } } });
+  // Après les TarifArticle (qui peuvent y référer via produitFournisseurId), avant le fournisseur
+  // (dont ProduitFournisseur dépend via sa propre FK) — voir la Phase de correctif « apprendre le
+  // code produit fournisseur d'un import à l'autre ».
+  await prisma.produitFournisseur.deleteMany({ where: { fournisseurId } });
   await prisma.aliasIngredientImport.deleteMany({ where: { articleId: { in: articleIds } } });
   await prisma.article.deleteMany({ where: { id: { in: articleIds } } });
   await prisma.fournisseur.delete({ where: { id: fournisseurId } });
@@ -478,4 +482,92 @@ test("rejeter une ligne (REJETEE) ne crée jamais de tarif", async () => {
   const ligneRelue = await prisma.ligneDocumentFournisseur.findUniqueOrThrow({ where: { id: ligne.id } });
   assert.equal(ligneRelue.decision, "REJETEE");
   assert.equal(ligneRelue.tarifCreeId, null);
+});
+
+// --- Correctif « apprendre le code produit fournisseur d'un import à l'autre » : la validation
+// d'une ligne dont le document portait un code (referenceLue) établit ProduitFournisseur pour ce
+// couple (fournisseur, code), afin qu'un import ULTÉRIEUR du même fournisseur — listing ou facture,
+// même code — propose automatiquement le bon article (motif CODE_ARTICLE, confiance 1), sans
+// dépendre d'Article.reference (un seul champ partagé par tout le catalogue, jamais fiable comme
+// identité par fournisseur). Voir server/utils/produitFournisseur.ts et rapprochementFournisseur.ts.
+
+test("valider une ligne dont le document portait un code produit établit ProduitFournisseur pour ce fournisseur", async () => {
+  const article = await creerArticleAvecTarif("LISTING PHOTO TEST Apprentissage Code", null, 5);
+
+  const reponseCreation = await fetch(`${baseUrl}/api/listings-fournisseur/${fournisseurId}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      societeId,
+      photoDataUrl: PNG_1X1,
+      lignes: [{ designation: "LISTING PHOTO TEST Apprentissage Code", reference: "CODE-APPRIS-1", prix: "5,00" }],
+    }),
+  });
+  const { document, lignes } = await reponseCreation.json();
+  documentIds.push(document.id);
+  const ligne = lignes[0];
+  // Aucun ProduitFournisseur n'existe encore pour ce code : le rapprochement retombe sur la
+  // désignation exacte, jamais sur CODE_ARTICLE à ce stade.
+  assert.equal(ligne.motifCorrespondance, "DESIGNATION_EXACTE");
+
+  await fetch(`${baseUrl}/api/listings-fournisseur/documents/${document.id}/valider`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ decisions: [{ ligneId: ligne.id, decision: "VALIDEE", articleRetenuId: article.id }] }),
+  });
+
+  const produitFournisseurCree = await prisma.produitFournisseur.findUniqueOrThrow({
+    where: { fournisseurId_codeProduitFournisseur: { fournisseurId, codeProduitFournisseur: "CODE-APPRIS-1" } },
+  });
+  assert.equal(produitFournisseurCree.articleId, article.id);
+
+  const tarifCree = await prisma.tarifArticle.findFirstOrThrow({ where: { articleId: article.id, actif: true } });
+  assert.equal(tarifCree.produitFournisseurId, produitFournisseurCree.id);
+});
+
+test("un import FACTURE ultérieur du même fournisseur, même code, propose automatiquement le bon article — même désignation très différente de celle lue sur le listing d'origine", async () => {
+  const article = await creerArticleAvecTarif("LISTING PHOTO TEST Cross Listing Facture", null, 6);
+
+  const reponseListing = await fetch(`${baseUrl}/api/listings-fournisseur/${fournisseurId}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      societeId,
+      photoDataUrl: PNG_1X1,
+      lignes: [{ designation: "LISTING PHOTO TEST Cross Listing Facture", reference: "CODE-CROSS-1", prix: "6,00" }],
+    }),
+  });
+  const { document: documentListing, lignes: lignesListing } = await reponseListing.json();
+  documentIds.push(documentListing.id);
+  await fetch(`${baseUrl}/api/listings-fournisseur/documents/${documentListing.id}/valider`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      decisions: [{ ligneId: lignesListing[0].id, decision: "VALIDEE", articleRetenuId: article.id }],
+    }),
+  });
+
+  // Une facture ultérieure, même fournisseur, même code, mais une désignation reformulée
+  // différemment de celle lue sur le listing d'origine (ordre des mots différent, typique d'une
+  // facture par rapport à un listing du même fournisseur) : le code déjà connu doit primer sur
+  // Article.reference/désignation, tant que la désignation reste raisonnablement cohérente avec
+  // celle mémorisée (voir le test dédié « désignation très différente » dans
+  // rapprochementFournisseur.test.ts pour le cas où elle ne l'est pas).
+  const reponseFacture = await fetch(`${baseUrl}/api/listings-fournisseur/factures/${fournisseurId}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      societeId,
+      numero: "FACT-CROSS-1",
+      photoDataUrl: PNG_1X1,
+      lignes: [{ designation: "PHOTO LISTING CROSS FACTURE", reference: "CODE-CROSS-1", prix: "6,50" }],
+    }),
+  });
+  const { document: documentFacture, lignes: lignesFacture } = await reponseFacture.json();
+  documentIds.push(documentFacture.id);
+  const ligneFacture = lignesFacture[0];
+
+  assert.equal(ligneFacture.motifCorrespondance, "CODE_ARTICLE");
+  assert.equal(ligneFacture.articleProposeId, article.id);
+  assert.equal(ligneFacture.confiance, 1);
 });

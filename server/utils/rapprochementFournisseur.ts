@@ -10,7 +10,11 @@
 // base de données, n'importe prisma, ni ne décide d'une application de tarif (niveau C).
 
 import { normaliserTexte } from "./normaliserTexte.js";
-import { similariteJaccard, SEUIL_CORRESPONDANCE_DESIGNATION } from "./importListing.js";
+import {
+  similariteJaccard,
+  SEUIL_CORRESPONDANCE_DESIGNATION,
+  normaliserCodeProduitFournisseur,
+} from "./importListing.js";
 
 export type NatureLigneDetectee = "ARTICLE" | "FRAIS_LIVRAISON" | "AVOIR" | "NON_ALIMENTAIRE" | "REMISE";
 
@@ -54,12 +58,16 @@ export type CandidatScore = {
   score: number;
 };
 
-// Motif réellement produit par ce moteur : "CODE_ARTICLE" existe dans l'enum Prisma
-// (MotifCorrespondance) mais n'est jamais renvoyé ici — voir le point exposé en Phase 3 : le
-// modèle de données actuel ne distingue pas "référence fournisseur" de "code article interne"
-// (un seul champ Article.reference), donc ce niveau de priorité est confondu avec le niveau 1
-// jusqu'à décision explicite sur ce point.
-export type MotifRapprochement = "REFERENCE_FOURNISSEUR" | "DESIGNATION_EXACTE" | "ALIAS" | "DESIGNATION_APPROXIMATIVE";
+// "CODE_ARTICLE" (correspondance par ProduitFournisseur, code scopé à CE fournisseur) est
+// distinct de "REFERENCE_FOURNISSEUR" (correspondance par Article.reference, un seul champ
+// partagé par tout le catalogue, cf. le point exposé en Phase 3) : le premier prime toujours sur
+// le second, voir la priorité 0 de rapprocherLigne.
+export type MotifRapprochement =
+  | "CODE_ARTICLE"
+  | "REFERENCE_FOURNISSEUR"
+  | "DESIGNATION_EXACTE"
+  | "ALIAS"
+  | "DESIGNATION_APPROXIMATIVE";
 
 export type ResultatRapprochement =
   | { cas: "certaine"; articleId: number; motif: Exclude<MotifRapprochement, "DESIGNATION_APPROXIMATIVE"> }
@@ -81,6 +89,13 @@ export type ContexteRapprochement = {
   // texteNormalise (server/utils/normaliserTexte.ts) -> articleId, reflet direct et en lecture
   // seule de AliasIngredientImport — jamais un second système d'alias, jamais une donnée dupliquée.
   aliasParTexteNormalise: Map<string, number>;
+  // codeProduitFournisseur normalisé -> ProduitFournisseur connu, scopé au SEUL fournisseur de CET
+  // import (jamais construit toutes sociétés/fournisseurs confondus) — reflet direct et en lecture
+  // seule de ProduitFournisseur (voir server/utils/produitFournisseur.ts, qui établit le lien lors
+  // de la validation d'une ligne). Priorité la plus haute de tout le moteur : une fois ce code connu
+  // chez ce fournisseur, il identifie l'article de façon plus fiable qu'Article.reference (partagé
+  // par tout le catalogue) ou que la désignation.
+  produitsFournisseurConnus: Map<string, { articleId: number; designationConnue: string }>;
 };
 
 // Une ligne dont la référence diffère explicitement de celle d'un candidat n'est jamais ce
@@ -100,6 +115,24 @@ export function rapprocherLigne(
   contexte: ContexteRapprochement
 ): ResultatRapprochement {
   const designationNormalisee = normaliserTexte(designation);
+
+  // --- Priorité 0, avant tout le reste : code produit DÉJÀ CONNU chez CE fournisseur
+  // (ProduitFournisseur), identité la plus fiable puisque établie lors d'une décision humaine
+  // antérieure sur ce couple fournisseur+code exact — jamais réévaluée par référence/désignation
+  // catalogue tant que ce code reste présent. Une désignation très différente de celle déjà connue
+  // pour ce code (OCR douteux, code réutilisé par erreur) n'est jamais acceptée en silence : retombe
+  // en correspondance approximative à confirmer explicitement, jamais un rattachement automatique.
+  if (reference && reference.trim()) {
+    const codeNormalise = normaliserCodeProduitFournisseur(reference);
+    const produitConnu = contexte.produitsFournisseurConnus.get(codeNormalise);
+    if (produitConnu) {
+      const similarite = similariteJaccard(designation, produitConnu.designationConnue);
+      if (similarite >= SEUIL_CORRESPONDANCE_DESIGNATION) {
+        return { cas: "certaine", articleId: produitConnu.articleId, motif: "CODE_ARTICLE" };
+      }
+      return { cas: "approximative_unique", articleId: produitConnu.articleId, score: similarite };
+    }
+  }
 
   // --- Niveau "certaine", priorités 1+2 (voir le point exposé sur la fusion référence/code) ---
   if (reference && reference.trim()) {
