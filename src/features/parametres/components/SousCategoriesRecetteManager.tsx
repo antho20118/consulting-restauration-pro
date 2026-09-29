@@ -78,13 +78,13 @@ export default function SousCategoriesRecetteManager() {
       {sousCategories.map((sousCategorie) => (
         <div
           key={sousCategorie.id}
-          style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}
+          style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}
         >
           <input
             type="text"
             value={noms[sousCategorie.id] ?? ""}
             onChange={(e) => setNoms((prec) => ({ ...prec, [sousCategorie.id]: e.target.value }))}
-            style={{ flex: 1, padding: 8 }}
+            style={{ flex: 1, minWidth: 0, padding: 8 }}
           />
           <select
             value={parents[sousCategorie.id] ?? AUCUN_PARENT}
@@ -107,13 +107,13 @@ export default function SousCategoriesRecetteManager() {
         </div>
       ))}
 
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
         <input
           type="text"
           placeholder="Nouvelle sous-catégorie (ex. Bœuf, Veau…)"
           value={nouveauNom}
           onChange={(e) => setNouveauNom(e.target.value)}
-          style={{ flex: 1, padding: 8 }}
+          style={{ flex: 1, minWidth: 0, padding: 8 }}
         />
         <select
           value={nouveauParent}

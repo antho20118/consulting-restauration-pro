@@ -236,7 +236,7 @@ export default function RecettesPage() {
           marginBottom: 20,
         }}
       >
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button className="btn-primary" onClick={ouvrirCreation}>+ Nouvelle recette</button>
           <button onClick={() => setImportOuvert(true)}>Importer une recette</button>
           <button onClick={() => setImportFichierCoutsOuvert(true)}>Importer un fichier de coûts</button>
@@ -245,7 +245,7 @@ export default function RecettesPage() {
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <select
             value={filtreSousCategorieId}
             onChange={(e) => setFiltreSousCategorieId(Number(e.target.value))}
@@ -264,7 +264,7 @@ export default function RecettesPage() {
             placeholder="Rechercher..."
             value={recherche}
             onChange={(e) => setRecherche(e.target.value)}
-            style={{ width: 300, padding: 8 }}
+            style={{ width: 300, maxWidth: "calc(100vw - 64px)", padding: 8 }}
           />
         </div>
       </div>

@@ -61,26 +61,26 @@ export default function CategoriesManager() {
       {categories.map((categorie) => (
         <div
           key={categorie.id}
-          style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}
+          style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}
         >
           <input
             type="text"
             value={noms[categorie.id] ?? ""}
             onChange={(e) => setNoms((prec) => ({ ...prec, [categorie.id]: e.target.value }))}
-            style={{ flex: 1, padding: 8 }}
+            style={{ flex: 1, minWidth: 0, padding: 8 }}
           />
           <button onClick={() => renommer(categorie)}>Renommer</button>
           <button className="btn-danger" onClick={() => supprimer(categorie)}>Supprimer</button>
         </div>
       ))}
 
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
         <input
           type="text"
           placeholder="Nouvelle catégorie"
           value={nouveauNom}
           onChange={(e) => setNouveauNom(e.target.value)}
-          style={{ flex: 1, padding: 8 }}
+          style={{ flex: 1, minWidth: 0, padding: 8 }}
         />
         <button className="btn-primary" onClick={ajouter}>Ajouter</button>
       </div>

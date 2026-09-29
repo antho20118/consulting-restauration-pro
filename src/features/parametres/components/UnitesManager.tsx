@@ -78,13 +78,13 @@ export default function UnitesManager() {
         return (
           <div
             key={unite.id}
-            style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}
+            style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}
           >
             <input
               type="text"
               value={input.nom}
               onChange={(e) => modifierChamp(unite.id, { nom: e.target.value })}
-              style={{ flex: 2, padding: 8 }}
+              style={{ flex: 2, minWidth: 0, padding: 8 }}
             />
             <input
               type="text"
@@ -115,13 +115,13 @@ export default function UnitesManager() {
         );
       })}
 
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
         <input
           type="text"
           placeholder="Nom"
           value={nouvelle.nom}
           onChange={(e) => setNouvelle((prec) => ({ ...prec, nom: e.target.value }))}
-          style={{ flex: 2, padding: 8 }}
+          style={{ flex: 2, minWidth: 0, padding: 8 }}
         />
         <input
           type="text"

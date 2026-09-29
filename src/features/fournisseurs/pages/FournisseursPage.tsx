@@ -115,7 +115,7 @@ export default function FournisseursPage() {
       >
         <button className="btn-primary" onClick={ouvrirCreation}>+ Nouveau fournisseur</button>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--couleur-texte-attenue)" }}>
             <input
               type="checkbox"
@@ -130,7 +130,7 @@ export default function FournisseursPage() {
             placeholder="Rechercher..."
             value={recherche}
             onChange={(e) => setRecherche(e.target.value)}
-            style={{ width: 300, padding: 8 }}
+            style={{ width: 300, maxWidth: "calc(100vw - 64px)", padding: 8 }}
           />
         </div>
       </div>

@@ -64,13 +64,13 @@ export default function TvaManager() {
         return (
           <div
             key={tva.id}
-            style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}
+            style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}
           >
             <input
               type="text"
               value={input.nom}
               onChange={(e) => modifierChamp(tva.id, { nom: e.target.value })}
-              style={{ flex: 1, padding: 8 }}
+              style={{ flex: 1, minWidth: 0, padding: 8 }}
             />
             <input
               type="number"
@@ -86,13 +86,13 @@ export default function TvaManager() {
         );
       })}
 
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
         <input
           type="text"
           placeholder="Nom (ex. TVA 10 %)"
           value={nouvelle.nom}
           onChange={(e) => setNouvelle((prec) => ({ ...prec, nom: e.target.value }))}
-          style={{ flex: 1, padding: 8 }}
+          style={{ flex: 1, minWidth: 0, padding: 8 }}
         />
         <input
           type="number"
