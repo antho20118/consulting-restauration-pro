@@ -117,10 +117,17 @@ test("traçabilité HACCP datée : Production -> production enregistrée -> cont
   await expect(cadreCuisson.getByText("218°C à cœur")).toBeVisible();
   await expect(cadreCuisson.getByText("✓ Conforme")).toBeVisible();
 
+  // "Découper les légumes" déclenche aussi la règle LEGUMES_CRUS par mot-clé ("légumes") : une
+  // suggestion rapide pré-remplit le champ et coche/décoche "Conforme" en un clic, plutôt que de
+  // tout taper (voir suggestionsControleHACCP.ts).
   const cadreLegumes = page.locator("div", { has: page.getByRole("heading", { name: "⚠ Découper les légumes" }) }).last();
-  await cadreLegumes.getByPlaceholder("Valeur constatée (ex. 72°C)").fill("Légumes désinfectés selon protocole");
+  await cadreLegumes.getByRole("button", { name: /Légumes triés, lavés et désinfectés selon le protocole/ }).click();
+  await expect(cadreLegumes.getByPlaceholder("Valeur constatée (ex. 72°C)")).toHaveValue(
+    "Légumes triés, lavés et désinfectés selon le protocole"
+  );
   await cadreLegumes.getByRole("button", { name: "Enregistrer le contrôle" }).click();
-  await expect(cadreLegumes.getByText("Légumes désinfectés selon protocole")).toBeVisible();
+  await expect(cadreLegumes.getByText("Légumes triés, lavés et désinfectés selon le protocole")).toBeVisible();
+  await expect(cadreLegumes.getByText("✓ Conforme")).toBeVisible();
 
   await page.goto("/productions");
   await expect(page.getByRole("heading", { name: "📋 Traçabilité HACCP" })).toBeVisible();

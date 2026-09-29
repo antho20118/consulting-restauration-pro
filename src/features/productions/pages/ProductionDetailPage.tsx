@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { ajouterControle, getProduction } from "../services/productionService";
 import type { ProductionDetail } from "../types/production";
+import { suggestionsPourEtape } from "../utils/suggestionsControleHACCP";
 
 type BrouillonControle = { valeur: string; conforme: boolean; commentaire: string };
 
@@ -92,6 +93,7 @@ export default function ProductionDetailPage() {
           .filter((c) => c.recetteEtapeId === etape.id)
           .sort((a, b) => new Date(b.dateHeure).getTime() - new Date(a.dateHeure).getTime());
         const saisie = brouillon(etape.id);
+        const suggestions = suggestionsPourEtape(etape.reglesDetectees.map((r) => r.code));
 
         return (
           <div
@@ -133,6 +135,25 @@ export default function ProductionDetailPage() {
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+
+            {suggestions.length > 0 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                {suggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.texte}
+                    type="button"
+                    className="btn-table"
+                    onClick={() => majBrouillon(etape.id, { valeur: suggestion.texte, conforme: suggestion.conforme })}
+                    style={{
+                      color: suggestion.conforme ? "#1a7a3c" : "#b3261e",
+                      borderColor: suggestion.conforme ? "#1a7a3c" : "#b3261e",
+                    }}
+                  >
+                    {suggestion.conforme ? "✓" : "✗"} {suggestion.texte}
+                  </button>
+                ))}
               </div>
             )}
 
