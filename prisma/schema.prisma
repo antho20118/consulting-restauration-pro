@@ -50,6 +50,7 @@ model Societe {
   articles     Article[]
   recettes     Recette[]
   menus        Menu[]
+  productions  Production[]
 }
 
 model Depot {
@@ -65,9 +66,10 @@ model Depot {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  stocks     Stock[]
-  mouvements MouvementStock[]
-  commandes  CommandeFournisseur[]
+  stocks      Stock[]
+  mouvements  MouvementStock[]
+  commandes   CommandeFournisseur[]
+  productions Production[]
 }
 
 model Categorie {
@@ -613,6 +615,65 @@ model LigneCommandeFournisseur {
   @@index([articleId])
 }
 
+// Enregistrement d'une production réellement réalisée (un lot) — jamais une simple simulation :
+// POST /productions crée cette ligne au moment où la recette est effectivement mise en œuvre, avec
+// la quantité réellement visée. La planification (POST /production/planifier, voir
+// planifierProduction.ts) reste, elle, un calcul à la volée jamais persisté — ce n'est qu'au moment
+// d'enregistrer la production que ce lot existe. Sert d'ancrage daté aux contrôles HACCP réels
+// (ControleHACCPProduction) : "quel lot, quel jour" est la question qu'un contrôle sanitaire pose
+// réellement, jamais couverte par la seule procédure décrite sur la recette.
+model Production {
+  id Int @id @default(autoincrement())
+
+  recetteId Int
+  recette   Recette @relation(fields: [recetteId], references: [id])
+
+  societeId Int
+  societe   Societe @relation(fields: [societeId], references: [id])
+
+  depotId Int?
+  depot   Depot? @relation(fields: [depotId], references: [id])
+
+  dateProduction DateTime @default(now())
+
+  // Toujours renseignés ensemble (jamais un seul des deux) : dérivés l'un de l'autre via
+  // planifierProduction.ts au moment de l'enregistrement, quel que soit le mode choisi par
+  // l'utilisateur (portions ou poids fini) — évite toute ambiguïté à l'affichage.
+  portionsProduites Float
+  poidsFiniProduitG Float
+
+  createdAt DateTime @default(now())
+
+  controles ControleHACCPProduction[]
+
+  @@index([recetteId])
+  @@index([dateProduction])
+}
+
+// Contrôle HACCP réellement effectué, daté, pour un point critique d'une production précise —
+// jamais modifiable après coup (aucune route PATCH/DELETE) : une correction se fait en ajoutant un
+// nouveau contrôle, jamais en réécrivant l'historique, comme la réception d'une commande
+// fournisseur n'est jamais réécrite après coup (voir LigneCommandeFournisseur.quantiteRecueBase).
+model ControleHACCPProduction {
+  id Int @id @default(autoincrement())
+
+  productionId Int
+  production   Production @relation(fields: [productionId], references: [id], onDelete: Cascade)
+
+  recetteEtapeId Int
+  recetteEtape   RecetteEtape @relation(fields: [recetteEtapeId], references: [id])
+
+  dateHeure   DateTime
+  valeur      String
+  conforme    Boolean
+  commentaire String?
+
+  createdAt DateTime @default(now())
+
+  @@index([productionId])
+  @@index([recetteEtapeId])
+}
+
 model Recette {
   id Int @id @default(autoincrement())
 
@@ -649,6 +710,7 @@ model Recette {
   lignes       RecetteLigne[]
   etapes       RecetteEtape[]
   utilisations MenuLigne[]
+  productions  Production[]
 
   @@index([nom])
 }
@@ -668,6 +730,11 @@ model RecetteEtape {
 
   pointCritiqueHACCP Boolean @default(false)
   controleHACCP      String?
+
+  // Historique daté des contrôles réellement effectués sur ce point, production par production —
+  // controleHACCP ci-dessus reste la description de la procédure à suivre (design de la recette),
+  // jamais réécrite par un contrôle réel. Voir ControleHACCPProduction.
+  controlesEffectues ControleHACCPProduction[]
 
   @@index([recetteId])
 }

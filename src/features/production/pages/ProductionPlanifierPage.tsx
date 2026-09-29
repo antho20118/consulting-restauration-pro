@@ -9,6 +9,8 @@ import type { BesoinAchat, CibleProduction, LigneAchat, PlanificationProduction,
 import type { Depot } from "../../depots/types/depot";
 import { creerCommandes } from "../../commandes/services/commandeService";
 import type { Commande } from "../../commandes/types/commande";
+import { enregistrerProduction } from "../../productions/services/productionService";
+import type { ProductionDetail } from "../../productions/types/production";
 
 // Écran « PRODUIRE » pour une recette précise : planifie les quantités réellement nécessaires
 // (stock déduit), puis génère une proposition d'achat au conditionnement fournisseur — consomme
@@ -38,6 +40,9 @@ export default function ProductionPlanifierPage() {
   const [chargementCommande, setChargementCommande] = useState(false);
   const [commandesEnregistrees, setCommandesEnregistrees] = useState<Commande[] | null>(null);
 
+  const [chargementProduction, setChargementProduction] = useState(false);
+  const [productionEnregistree, setProductionEnregistree] = useState<ProductionDetail | null>(null);
+
   useEffect(() => {
     getRecetteDetail(id).then((recette) => {
       setRecetteNom(recette.nom);
@@ -59,6 +64,7 @@ export default function ProductionPlanifierPage() {
     setErreurPlan(null);
     setProposition(null);
     setErreurAchat(null);
+    setProductionEnregistree(null);
     try {
       // Le champ "Poids fini" se saisit en kg (plus pratique qu'en grammes pour une quantité de
       // production réaliste) mais l'API attend toujours des grammes (voir CibleProduction,
@@ -118,6 +124,25 @@ export default function ProductionPlanifierPage() {
       toast.error(e instanceof Error ? e.message : "Impossible d'enregistrer la commande");
     } finally {
       setChargementCommande(false);
+    }
+  }
+
+  // Enregistre la production réellement réalisée — quantités toujours recalculées côté serveur
+  // (voir planifierProduction dans server/routes/productions.ts, même principe que
+  // enregistrerCommande ci-dessus), jamais celles affichées ici transmises telles quelles. C'est
+  // ce lot qui sert ensuite d'ancrage daté aux contrôles HACCP (voir ProductionDetailPage).
+  async function enregistrerLaProduction() {
+    if (!planification) return;
+    setChargementProduction(true);
+    try {
+      const valeur = mode === "poidsFiniG" ? cible * 1000 : cible;
+      const production = await enregistrerProduction(id, { mode, valeur }, depotId);
+      setProductionEnregistree(production);
+      toast.success("Production enregistrée.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impossible d'enregistrer la production");
+    } finally {
+      setChargementProduction(false);
     }
   }
 
@@ -221,10 +246,23 @@ export default function ProductionPlanifierPage() {
             </table>
           </div>
 
-          <div className="feuille-production-sans-impression" style={{ marginBottom: 20 }}>
+          <div className="feuille-production-sans-impression" style={{ marginBottom: 20, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <button className="btn-primary" onClick={genererPropositionAchat} disabled={chargementAchat}>
               {chargementAchat ? "Calcul…" : "Générer la proposition d'achat"}
             </button>
+            <button onClick={enregistrerLaProduction} disabled={chargementProduction}>
+              {chargementProduction ? "Enregistrement…" : "Enregistrer la production"}
+            </button>
+            {productionEnregistree && (
+              <span style={{ fontSize: 14 }}>
+                ✅ Production #{productionEnregistree.id} enregistrée —{" "}
+                <Link to={`/productions/${productionEnregistree.id}`}>
+                  {productionEnregistree.etapesCritiques.length > 0
+                    ? "enregistrer les contrôles HACCP"
+                    : "voir la production"}
+                </Link>
+              </span>
+            )}
           </div>
 
           {erreurAchat && <p style={{ color: "#b3261e" }}>{erreurAchat}</p>}
