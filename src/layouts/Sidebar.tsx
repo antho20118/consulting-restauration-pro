@@ -9,7 +9,7 @@ const menu = [
   { label: "🥕 Base ingrédients", path: "/ingredients" },
   { label: "🚚 Fournisseurs", path: "/fournisseurs" },
   { label: "🏭 Production", path: "/production" },
-  { label: "📦 Commandes", path: "/commandes" },
+  { label: "📦 Commandes fournisseurs", path: "/commandes", indentSuspendu: true },
   { label: "🛡️ HACCP", path: "/haccp" },
   { label: "📦 Mouvements de stock", path: "/mouvements" },
   { label: "🏭 Dépôts", path: "/depots" },
@@ -54,6 +54,13 @@ export default function Sidebar({ ouverte, onFermer }: Props) {
             borderRadius: 8,
             background:
               location.pathname === item.path ? "#16a085" : "#3b4447",
+            // "Commandes fournisseurs" est le seul libellé assez long pour passer sur deux lignes
+            // dans le tiroir mobile (260px) : retrait en drapeau (paddingLeft + textIndent
+            // négatif de même valeur) pour que "fournisseurs", sur la deuxième ligne, commence
+            // sous le "C" de "Commandes" plutôt que sous l'émoji.
+            ...(item.indentSuspendu
+              ? { paddingLeft: "1.6em", textIndent: "-1.6em" }
+              : null),
           }}
         >
           {item.label}
