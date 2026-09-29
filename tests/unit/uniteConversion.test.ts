@@ -92,13 +92,13 @@ test("[9] scénario recette réel : calculerCoutRecette() utilise bien versUnite
         quantite: 200,
         unite: { facteurBase: 1 }, // grammes
         gainCuissonPct: 0,
-        article: { rendement: 100, tarifs: [], allergenes: [] },
+        article: { rendement: 100, tarifs: [], allergenes: [], nutrition: null },
       },
       {
         quantite: 0.5,
         unite: { facteurBase: 1000 }, // kilogrammes
         gainCuissonPct: 0,
-        article: { rendement: 100, tarifs: [], allergenes: [] },
+        article: { rendement: 100, tarifs: [], allergenes: [], nutrition: null },
       },
     ],
   };

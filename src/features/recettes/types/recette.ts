@@ -49,6 +49,19 @@ export interface LigneRecette {
   poidsFiniLigneG: number;
 }
 
+// Valeurs agrégées pour l'ensemble de la recette, ramenées à une portion — voir
+// server/utils/coutRecette.ts (CHAMPS_NUTRITION) pour la convention "pour 100g" et le calcul.
+export interface ValeursNutritionnelles {
+  energie: number;
+  proteines: number;
+  glucides: number;
+  sucres: number;
+  lipides: number;
+  acidesGrasSatures: number;
+  fibres: number;
+  sel: number;
+}
+
 export interface EtapeRecette {
   id: number;
   description: string;
@@ -77,6 +90,11 @@ export interface Recette {
   foodCostPct: number | null;
   margeHT: number | null;
   poidsFiniTotalG: number;
+  valeursNutritionnelles: ValeursNutritionnelles;
+  // true dès qu'au moins un ingrédient de la recette n'a aucune valeur nutritionnelle saisie (ou
+  // un champ resté vide) — les valeurs affichées restent alors une approximation par défaut,
+  // jamais silencieusement traitées comme complètes (voir calculerCoutRecette).
+  nutritionIncomplete: boolean;
 }
 
 export type LigneRecetteInput = {

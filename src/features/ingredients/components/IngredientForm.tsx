@@ -11,7 +11,21 @@ import {
   trouverArticlesCorrespondants,
   type ArticleExistantPourCorrespondance,
 } from "../utils/correspondanceArticle";
-import type { Allergene, Ingredient } from "../types/ingredient";
+import type { Allergene, Ingredient, ValeursNutritionnelles } from "../types/ingredient";
+
+// Libellés affichés dans l'ordre d'une étiquette nutritionnelle réelle, valeurs saisies "pour
+// 100g" de l'unité de base de l'article (voir server/utils/coutRecette.ts, CHAMPS_NUTRITION).
+const CHAMPS_NUTRITION = [
+  { cle: "energie", label: "Énergie (kcal)" },
+  { cle: "proteines", label: "Protéines (g)" },
+  { cle: "glucides", label: "Glucides (g)" },
+  { cle: "sucres", label: "dont sucres (g)" },
+  { cle: "lipides", label: "Lipides (g)" },
+  { cle: "acidesGrasSatures", label: "dont acides gras saturés (g)" },
+  { cle: "fibres", label: "Fibres (g)" },
+  { cle: "sel", label: "Sel (g)" },
+] as const;
+type ChampNutritionCle = (typeof CHAMPS_NUTRITION)[number]["cle"];
 
 type Categorie = {
   id: number;
@@ -47,6 +61,17 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
   const [allergenes, setAllergenes] = useState<Allergene[]>([]);
   const [allergeneIds, setAllergeneIds] = useState<number[]>(
     ingredient?.allergenes.map((a) => a.allergene.id) ?? []
+  );
+
+  // Champs texte (jamais number) pour laisser un champ vide sans qu'il retombe silencieusement à
+  // "0" — vide veut dire "non saisi", voir la conversion en payload dans enregistrer().
+  const [nutrition, setNutrition] = useState<Record<ChampNutritionCle, string>>(() =>
+    Object.fromEntries(
+      CHAMPS_NUTRITION.map(({ cle }) => {
+        const valeur = ingredient?.nutrition?.[cle];
+        return [cle, valeur == null ? "" : String(valeur)];
+      })
+    ) as Record<ChampNutritionCle, string>
   );
 
   // Articles actifs déjà en base (l'article en cours de modification, s'il y en a un, en est
@@ -138,6 +163,22 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
       return;
     }
 
+    // Convertit les champs texte en nombres (vide -> null, jamais 0) puis n'envoie l'objet nutrition
+    // que si au moins une valeur saisie est strictement positive — même convention que prixVenteHT
+    // ailleurs dans l'app (0 ≡ non saisi). Absent du payload, le serveur laisse toute fiche
+    // nutritionnelle déjà enregistrée intacte (voir ingredientService.ts).
+    const nutritionValeurs = Object.fromEntries(
+      CHAMPS_NUTRITION.map(({ cle }) => [
+        cle,
+        nutrition[cle].trim() === "" ? null : Number(nutrition[cle]),
+      ])
+    ) as ValeursNutritionnelles;
+    const nutritionAEnvoyer = Object.values(nutritionValeurs).some(
+      (v) => typeof v === "number" && v > 0
+    )
+      ? nutritionValeurs
+      : undefined;
+
     const payload = {
       nom,
       reference,
@@ -148,6 +189,7 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
       prixHT,
       stockInitial,
       allergeneIds,
+      nutrition: nutritionAEnvoyer,
     };
 
     try {
@@ -349,6 +391,35 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
             />
             {allergene.nom}
           </label>
+        ))}
+      </div>
+
+      <label>Valeurs nutritionnelles (pour 100 g)</label>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gap: "10px 16px",
+          marginBottom: 20,
+        }}
+      >
+        {CHAMPS_NUTRITION.map(({ cle, label }) => (
+          <div key={cle}>
+            <label htmlFor={`nutrition-${cle}`} style={{ fontWeight: "normal", fontSize: 13 }}>
+              {label}
+            </label>
+            <input
+              id={`nutrition-${cle}`}
+              type="number"
+              step="0.01"
+              min={0}
+              value={nutrition[cle]}
+              onChange={(e) =>
+                setNutrition((precedent) => ({ ...precedent, [cle]: e.target.value }))
+              }
+              style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
+            />
+          </div>
         ))}
       </div>
 

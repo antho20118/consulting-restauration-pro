@@ -1,4 +1,5 @@
 import { calculerCoutRecette, inclusionsRecette } from "./coutRecette.js";
+import type { ChampNutrition } from "./coutRecette.js";
 
 export const inclusionsMenu = {
   categorie: true,
@@ -25,6 +26,7 @@ type RecetteAvecLignes = {
       rendement: number;
       tarifs: { prixHT: number; quantiteConditionnement: number; unite: { facteurBase: number } }[];
       allergenes: { allergene: { id: number; nom: string } }[];
+      nutrition: Partial<Record<ChampNutrition, number | null>> | null;
     };
   }[];
 };

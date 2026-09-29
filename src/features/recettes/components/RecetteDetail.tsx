@@ -135,6 +135,35 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
         </div>
       )}
 
+      <h3>Valeurs nutritionnelles (par portion)</h3>
+      {recette.nutritionIncomplete && (
+        <p style={{ color: "#b3261e", fontSize: 13, marginTop: -8 }}>
+          ⚠ Approximation — au moins un ingrédient n'a pas (ou pas entièrement) de valeurs
+          nutritionnelles saisies.
+        </p>
+      )}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+          gap: "6px 16px",
+          marginBottom: 20,
+          fontSize: 14,
+        }}
+      >
+        <span>Énergie : <strong>{recette.valeursNutritionnelles.energie.toFixed(0)} kcal</strong></span>
+        <span>Protéines : <strong>{recette.valeursNutritionnelles.proteines.toFixed(1)} g</strong></span>
+        <span>Glucides : <strong>{recette.valeursNutritionnelles.glucides.toFixed(1)} g</strong></span>
+        <span>dont sucres : <strong>{recette.valeursNutritionnelles.sucres.toFixed(1)} g</strong></span>
+        <span>Lipides : <strong>{recette.valeursNutritionnelles.lipides.toFixed(1)} g</strong></span>
+        <span>
+          dont acides gras saturés :{" "}
+          <strong>{recette.valeursNutritionnelles.acidesGrasSatures.toFixed(1)} g</strong>
+        </span>
+        <span>Fibres : <strong>{recette.valeursNutritionnelles.fibres.toFixed(1)} g</strong></span>
+        <span>Sel : <strong>{recette.valeursNutritionnelles.sel.toFixed(2)} g</strong></span>
+      </div>
+
       <h3>Ingrédients</h3>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 20 }}>

@@ -21,6 +21,7 @@ function recette(overrides: Partial<Parameters<typeof calculerCoutRecette>[0]> =
             },
           ],
           allergenes: [],
+          nutrition: null,
         },
       },
     ],
@@ -58,6 +59,7 @@ test("normalise correctement le prix d'un conditionnement fournisseur", () => {
             rendement: 100,
             tarifs: [tarif],
             allergenes: [],
+            nutrition: null,
           },
         },
       ],
@@ -93,6 +95,7 @@ test("intègre correctement le rendement matière dans le coût", () => {
               },
             ],
             allergenes: [],
+            nutrition: null,
           },
         },
       ],
@@ -123,6 +126,7 @@ test("combine conditionnement et rendement avant de calculer le coût par portio
               },
             ],
             allergenes: [],
+            nutrition: null,
           },
         },
       ],
@@ -153,6 +157,7 @@ test("calcule le poids fini avec le gain de cuisson", () => {
               },
             ],
             allergenes: [],
+            nutrition: null,
           },
         },
       ],
@@ -183,6 +188,7 @@ test("déduit les allergènes de l'ensemble des ingrédients sans doublons", () 
               { allergene: { id: 2, nom: "Lait" } },
               { allergene: { id: 1, nom: "Gluten" } },
             ],
+            nutrition: null,
           },
         },
         {
@@ -199,6 +205,7 @@ test("déduit les allergènes de l'ensemble des ingrédients sans doublons", () 
               },
             ],
             allergenes: [{ allergene: { id: 2, nom: "Lait" } }],
+            nutrition: null,
           },
         },
       ],
@@ -243,6 +250,7 @@ test("refuse un rendement nul ou négatif", () => {
                   },
                 ],
                 allergenes: [],
+                nutrition: null,
               },
             },
           ],
@@ -258,4 +266,137 @@ test("refuse une recette à 0 portion (et n'utilise jamais le coût total comme 
 
 test("refuse une recette à un nombre de portions négatif", () => {
   assert.throws(() => calculerCoutRecette(recette({ portions: -1 })), /Nombre de portions invalide/);
+});
+
+test("agrège les valeurs nutritionnelles par portion sans jamais les diviser par le rendement", () => {
+  const result = calculerCoutRecette(
+    recette({
+      portions: 10,
+      lignes: [
+        {
+          quantite: 1,
+          unite: { facteurBase: 1000 },
+          gainCuissonPct: 0,
+          article: {
+            // Rendement volontairement très inférieur à 100 : si le calcul divisait la nutrition
+            // par le rendement (comme le coût), le résultat serait 400 kcal/portion au lieu de 200.
+            rendement: 50,
+            tarifs: [],
+            allergenes: [],
+            nutrition: {
+              energie: 200,
+              proteines: 10,
+              glucides: 20,
+              sucres: 5,
+              lipides: 8,
+              acidesGrasSatures: 2,
+              fibres: 3,
+              sel: 1,
+            },
+          },
+        },
+      ],
+    })
+  );
+
+  // 1 kg (1000g base) × 200 kcal / 100g = 2000 kcal au total ; / 10 portions = 200 kcal/portion.
+  assert.equal(result.valeursNutritionnelles.energie, 200);
+  assert.equal(result.valeursNutritionnelles.proteines, 10);
+  assert.equal(result.valeursNutritionnelles.sel, 1);
+  assert.equal(result.nutritionIncomplete, false);
+});
+
+test("signale une nutrition incomplète quand un ingrédient n'a aucune valeur saisie", () => {
+  const result = calculerCoutRecette(recette());
+
+  assert.equal(result.nutritionIncomplete, true);
+  assert.equal(result.valeursNutritionnelles.energie, 0);
+});
+
+test("signale une nutrition incomplète quand un seul champ manque sur un ingrédient", () => {
+  const result = calculerCoutRecette(
+    recette({
+      portions: 10,
+      lignes: [
+        {
+          quantite: 1,
+          unite: { facteurBase: 1000 },
+          gainCuissonPct: 0,
+          article: {
+            rendement: 100,
+            tarifs: [],
+            allergenes: [],
+            nutrition: {
+              energie: 200,
+              proteines: 10,
+              glucides: 20,
+              sucres: 5,
+              lipides: 8,
+              acidesGrasSatures: 2,
+              fibres: 3,
+              sel: null,
+            },
+          },
+        },
+      ],
+    })
+  );
+
+  assert.equal(result.nutritionIncomplete, true);
+  assert.equal(result.valeursNutritionnelles.energie, 200);
+  assert.equal(result.valeursNutritionnelles.sel, 0);
+});
+
+test("additionne les valeurs nutritionnelles de plusieurs ingrédients", () => {
+  const result = calculerCoutRecette(
+    recette({
+      portions: 2,
+      lignes: [
+        {
+          quantite: 1,
+          unite: { facteurBase: 1000 },
+          gainCuissonPct: 0,
+          article: {
+            rendement: 100,
+            tarifs: [],
+            allergenes: [],
+            nutrition: {
+              energie: 100,
+              proteines: 0,
+              glucides: 0,
+              sucres: 0,
+              lipides: 0,
+              acidesGrasSatures: 0,
+              fibres: 0,
+              sel: 0,
+            },
+          },
+        },
+        {
+          quantite: 500,
+          unite: { facteurBase: 1 },
+          gainCuissonPct: 0,
+          article: {
+            rendement: 100,
+            tarifs: [],
+            allergenes: [],
+            nutrition: {
+              energie: 50,
+              proteines: 0,
+              glucides: 0,
+              sucres: 0,
+              lipides: 0,
+              acidesGrasSatures: 0,
+              fibres: 0,
+              sel: 0,
+            },
+          },
+        },
+      ],
+    })
+  );
+
+  // (1000g × 100/100) + (500g × 50/100) = 1000 + 250 = 1250 kcal au total ; / 2 portions = 625.
+  assert.equal(result.valeursNutritionnelles.energie, 625);
+  assert.equal(result.nutritionIncomplete, false);
 });

@@ -76,7 +76,31 @@ const champsArticle = {
     .min(0, "Le stock initial ne peut pas être négatif")
     .nullable()
     .optional(),
+  // Valeurs nutritionnelles "pour 100g" de l'unité de base de l'article (voir
+  // ValeurNutritionnelle, coutRecette.ts::CHAMPS_NUTRITION) — toutes optionnelles, aucune
+  // n'implique les autres (une fiche peut ne renseigner que l'énergie, par exemple).
+  nutrition: z
+    .object({
+      energie: z.number().finite().min(0).nullable().optional(),
+      proteines: z.number().finite().min(0).nullable().optional(),
+      glucides: z.number().finite().min(0).nullable().optional(),
+      sucres: z.number().finite().min(0).nullable().optional(),
+      lipides: z.number().finite().min(0).nullable().optional(),
+      acidesGrasSatures: z.number().finite().min(0).nullable().optional(),
+      fibres: z.number().finite().min(0).nullable().optional(),
+      sel: z.number().finite().min(0).nullable().optional(),
+    })
+    .optional(),
 };
+
+// Un objet nutrition transmis mais entièrement vide (tous les champs undefined/null — ex. un
+// formulaire où l'utilisateur n'a rien saisi) ne doit jamais créer une ligne ValeurNutritionnelle
+// vide en base : seule une saisie réelle (au moins un champ renseigné) justifie un enregistrement.
+type NutritionInput = z.infer<typeof champsArticle.nutrition>;
+function aDesValeursNutrition(nutrition: NutritionInput): boolean {
+  if (!nutrition) return false;
+  return Object.values(nutrition).some((v) => v !== undefined && v !== null);
+}
 
 // Création : type obligatoire, comme aujourd'hui (toujours fourni par les appelants existants).
 const schemaCreationArticle = z.object(champsArticle);
@@ -139,7 +163,7 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Article invalide", details: analyse.error.flatten() });
       return;
     }
-    const { nom, type, rendement, prixHT, stockInitial } = analyse.data;
+    const { nom, type, rendement, prixHT, stockInitial, nutrition } = analyse.data;
     const { reference, categorieId, tvaId, societeId, uniteId, fournisseurNom, allergeneIds } =
       req.body;
     const confirmationArticleId = req.body.confirmationArticleId;
@@ -193,6 +217,10 @@ router.post("/", async (req: Request, res: Response) => {
             allergeneId,
           })),
         });
+      }
+
+      if (aDesValeursNutrition(nutrition)) {
+        await tx.valeurNutritionnelle.create({ data: { articleId: created.id, ...nutrition } });
       }
 
       // Tarif (prix + unité + fournisseur) : uniquement si une unité et un prix ont été fournis
@@ -249,7 +277,7 @@ router.put("/:id", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Article invalide", details: analyse.error.flatten() });
       return;
     }
-    const { nom, rendement, prixHT, stockInitial } = analyse.data;
+    const { nom, rendement, prixHT, stockInitial, nutrition } = analyse.data;
     const { reference, categorieId, uniteId, fournisseurNom, allergeneIds } = req.body;
     const confirmationArticleId = req.body.confirmationArticleId;
 
@@ -304,6 +332,16 @@ router.put("/:id", async (req: Request, res: Response) => {
             data: allergeneIds.map((allergeneId: number) => ({ articleId: id, allergeneId })),
           });
         }
+      }
+
+      // Absence de la clé "nutrition" (ou aucun champ renseigné) : on laisse une éventuelle
+      // fiche nutritionnelle déjà enregistrée intacte — pas de suppression en v1 (voir cadrage).
+      if (aDesValeursNutrition(nutrition)) {
+        await tx.valeurNutritionnelle.upsert({
+          where: { articleId: id },
+          update: nutrition!,
+          create: { articleId: id, ...nutrition },
+        });
       }
 
       if (uniteId && prixHT !== undefined && prixHT !== null) {

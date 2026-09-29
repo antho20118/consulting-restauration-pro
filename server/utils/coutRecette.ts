@@ -21,11 +21,29 @@ export const inclusionsRecette = {
           allergenes: {
             include: { allergene: true },
           },
+          nutrition: true,
         },
       },
     },
   },
 };
+
+// Les 8 valeurs nutritionnelles stockées (voir ValeurNutritionnelle, prisma/schema.prisma),
+// saisies "pour 100g" de l'unité de base de l'article — même convention qu'une étiquette
+// nutritionnelle réelle. Regroupées ici pour n'énumérer cette liste qu'une seule fois.
+export const CHAMPS_NUTRITION = [
+  "energie",
+  "proteines",
+  "glucides",
+  "sucres",
+  "lipides",
+  "acidesGrasSatures",
+  "fibres",
+  "sel",
+] as const;
+export type ChampNutrition = (typeof CHAMPS_NUTRITION)[number];
+export type ValeursNutritionnelles = Record<ChampNutrition, number>;
+type NutritionArticle = Partial<Record<ChampNutrition, number | null>> | null;
 
 type TarifCout = {
   prixHT: number;
@@ -84,12 +102,25 @@ export function calculerCoutRecette<
         rendement: number;
         tarifs: TarifCout[];
         allergenes: { allergene: { id: number; nom: string } }[];
+        nutrition: NutritionArticle;
       };
     }[];
   },
 >(recette: T) {
   let coutTotal = 0;
   let poidsFiniTotalG = 0;
+  // Toujours calculées à partir de quantiteBase (la quantité réellement incorporée dans la
+  // recette), jamais divisées par le rendement contrairement au coût : les pertes de préparation
+  // (épluchures, parures) déduites par le rendement ne sont jamais consommées, donc jamais
+  // comptées dans les valeurs nutritionnelles du plat fini — voir la discussion de cadrage.
+  const nutritionTotal: ValeursNutritionnelles = Object.fromEntries(
+    CHAMPS_NUTRITION.map((c) => [c, 0])
+  ) as ValeursNutritionnelles;
+  // true dès qu'au moins un ingrédient utilisé n'a aucune valeur nutritionnelle saisie (ligne
+  // entière absente) ou qu'un des 8 champs est resté vide sur un ingrédient qui en a d'autres —
+  // jamais silencieusement traité comme 0 sans le signaler : les valeurs affichées restent une
+  // approximation par défaut tant que la fiche ingrédient n'est pas complétée.
+  let nutritionIncomplete = false;
 
   if (!Number.isFinite(recette.portions) || recette.portions <= 0) {
     throw new Error("Nombre de portions invalide");
@@ -112,6 +143,19 @@ export function calculerCoutRecette<
     coutTotal += coutLigne;
     poidsFiniTotalG += poidsFiniLigneG;
 
+    if (!ligne.article.nutrition) {
+      nutritionIncomplete = true;
+    } else {
+      for (const champ of CHAMPS_NUTRITION) {
+        const valeur = ligne.article.nutrition[champ];
+        if (valeur == null) {
+          nutritionIncomplete = true;
+          continue;
+        }
+        nutritionTotal[champ] += quantiteBase * (valeur / 100);
+      }
+    }
+
     return { ...ligne, coutLigne, poidsFiniLigneG };
   });
 
@@ -133,6 +177,11 @@ export function calculerCoutRecette<
     a.nom.localeCompare(b.nom)
   );
 
+  // recette.portions est garanti > 0 par la validation ci-dessus.
+  const valeursNutritionnelles: ValeursNutritionnelles = Object.fromEntries(
+    CHAMPS_NUTRITION.map((c) => [c, nutritionTotal[c] / recette.portions])
+  ) as ValeursNutritionnelles;
+
   return {
     ...recette,
     lignes,
@@ -142,6 +191,8 @@ export function calculerCoutRecette<
     margeHT,
     allergenes,
     poidsFiniTotalG,
+    valeursNutritionnelles,
+    nutritionIncomplete,
   };
 }
 

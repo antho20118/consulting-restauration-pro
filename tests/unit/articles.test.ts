@@ -63,9 +63,19 @@ before(async () => {
 });
 
 after(async () => {
-  await prisma.tarifArticle.deleteMany({ where: { articleId: { in: articleIds } } });
-  await prisma.article.deleteMany({ where: { id: { in: articleIds } } });
-  await prisma.article.deleteMany({ where: { nom: { startsWith: "ARTICLES VALIDATION TEST" } } });
+  // Un test qui échoue avant d'atteindre articleIds.push(...) (voir le bug de double lecture du
+  // corps de réponse déjà rencontré dans tests/unit/productions.test.ts) laisse un article orphelin
+  // hors de articleIds : la recherche par préfixe de nom couvre aussi ceux-là, jamais seulement les
+  // ids explicitement suivis — et ValeurNutritionnelle doit toujours être effacée avant Article
+  // (FK), quelle que soit la source de la liste d'ids.
+  const articlesASupprimer = await prisma.article.findMany({
+    where: { OR: [{ id: { in: articleIds } }, { nom: { startsWith: "ARTICLES VALIDATION TEST" } }] },
+    select: { id: true },
+  });
+  const idsASupprimer = articlesASupprimer.map((a) => a.id);
+  await prisma.tarifArticle.deleteMany({ where: { articleId: { in: idsASupprimer } } });
+  await prisma.valeurNutritionnelle.deleteMany({ where: { articleId: { in: idsASupprimer } } });
+  await prisma.article.deleteMany({ where: { id: { in: idsASupprimer } } });
   await prisma.fournisseur.deleteMany({ where: { nom: "Fournisseur Test Validation" } });
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
@@ -324,4 +334,127 @@ test("PUT /articles/:id — le type reste inchangé même si transmis dans le pa
   assert.equal(reponse.status, 200);
   const corps = await reponse.json();
   assert.equal(corps.type, "MATIERE_PREMIERE", "PUT ne doit jamais pouvoir changer le type d'un article");
+});
+
+// Chantier « information nutritionnelle » (second volet de la Phase 2, voir server/utils/coutRecette.ts) :
+// écriture du modèle ValeurNutritionnelle, jusqu'ici complètement câblé en lecture (GET /articles)
+// mais jamais en écriture.
+
+test("POST /articles — valeurs nutritionnelles saisies créent une ValeurNutritionnelle", async () => {
+  const reponse = await fetch(`${baseUrl}/api/articles`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      ...payloadBase("ARTICLES VALIDATION TEST Nutrition Creation"),
+      nutrition: { energie: 250, proteines: 12, sel: 1.2 },
+    }),
+  });
+  const texte = await reponse.text();
+  assert.equal(reponse.status, 201, texte);
+  const corps = JSON.parse(texte);
+  articleIds.push(corps.id);
+  assert.equal(corps.nutrition.energie, 250);
+  assert.equal(corps.nutrition.proteines, 12);
+  assert.equal(corps.nutrition.sel, 1.2);
+  assert.equal(corps.nutrition.glucides, null, "un champ non saisi doit rester null, jamais 0");
+});
+
+test("POST /articles — aucune valeur nutritionnelle saisie ne crée aucune ligne", async () => {
+  const reponse = await fetch(`${baseUrl}/api/articles`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payloadBase("ARTICLES VALIDATION TEST Nutrition Absente")),
+  });
+  const texte = await reponse.text();
+  assert.equal(reponse.status, 201, texte);
+  const corps = JSON.parse(texte);
+  articleIds.push(corps.id);
+  assert.equal(corps.nutrition, null);
+
+  const enBase = await prisma.valeurNutritionnelle.findUnique({ where: { articleId: corps.id } });
+  assert.equal(enBase, null);
+});
+
+test("PUT /articles/:id — ajoute une ValeurNutritionnelle inexistante à la modification", async () => {
+  const creation = await fetch(`${baseUrl}/api/articles`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payloadBase("ARTICLES VALIDATION TEST Nutrition Ajoutee En Modif")),
+  });
+  const article = await creation.json();
+  articleIds.push(article.id);
+  assert.equal(article.nutrition, null);
+
+  const reponse = await fetch(`${baseUrl}/api/articles/${article.id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      nom: article.nom,
+      reference: "",
+      categorieId,
+      rendement: 100,
+      nutrition: { energie: 80, fibres: 3 },
+    }),
+  });
+  const texte = await reponse.text();
+  assert.equal(reponse.status, 200, texte);
+  const corps = JSON.parse(texte);
+  assert.equal(corps.nutrition.energie, 80);
+  assert.equal(corps.nutrition.fibres, 3);
+});
+
+test("PUT /articles/:id — met à jour une ValeurNutritionnelle déjà existante (upsert)", async () => {
+  const creation = await fetch(`${baseUrl}/api/articles`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      ...payloadBase("ARTICLES VALIDATION TEST Nutrition Mise A Jour"),
+      nutrition: { energie: 100, proteines: 5 },
+    }),
+  });
+  const article = await creation.json();
+  articleIds.push(article.id);
+
+  const reponse = await fetch(`${baseUrl}/api/articles/${article.id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      nom: article.nom,
+      reference: "",
+      categorieId,
+      rendement: 100,
+      nutrition: { energie: 150, proteines: 5, sel: 0.8 },
+    }),
+  });
+  const texte = await reponse.text();
+  assert.equal(reponse.status, 200, texte);
+  const corps = JSON.parse(texte);
+  assert.equal(corps.nutrition.energie, 150, "la ligne existante doit être mise à jour, pas dupliquée");
+  assert.equal(corps.nutrition.sel, 0.8);
+
+  const nombreLignes = await prisma.valeurNutritionnelle.count({ where: { articleId: article.id } });
+  assert.equal(nombreLignes, 1, "une seule ligne par article (clé primaire articleId)");
+});
+
+test("PUT /articles/:id — absence de la clé nutrition laisse une fiche existante intacte", async () => {
+  const creation = await fetch(`${baseUrl}/api/articles`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      ...payloadBase("ARTICLES VALIDATION TEST Nutrition Preservee"),
+      nutrition: { energie: 300 },
+    }),
+  });
+  const article = await creation.json();
+  articleIds.push(article.id);
+
+  const reponse = await fetch(`${baseUrl}/api/articles/${article.id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ nom: article.nom, reference: "", categorieId, rendement: 100 }),
+  });
+  const texte = await reponse.text();
+  assert.equal(reponse.status, 200, texte);
+  const corps = JSON.parse(texte);
+  assert.equal(corps.nutrition.energie, 300, "la fiche nutritionnelle ne doit jamais être effacée silencieusement");
 });

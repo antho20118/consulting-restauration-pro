@@ -1,5 +1,5 @@
 import { API_URL, apiFetch } from "../../../config/api";
-import type { Allergene, Ingredient } from "../types/ingredient";
+import type { Allergene, Ingredient, ValeursNutritionnelles } from "../types/ingredient";
 
 export type IngredientInput = {
   nom: string;
@@ -11,6 +11,10 @@ export type IngredientInput = {
   prixHT: number;
   stockInitial: number;
   allergeneIds: number[];
+  // Absente (ou tous champs vides) : la fiche nutritionnelle existante n'est jamais effacée côté
+  // serveur (voir server/routes/articles.ts, aDesValeursNutrition) — envoyée uniquement si au
+  // moins une valeur a été saisie.
+  nutrition?: ValeursNutritionnelles;
   // Confirmation explicite qu'un doublon de référence détecté (voir correspondanceArticle.ts)
   // doit bien créer un second article malgré tout — doit correspondre exactement à l'articleId de
   // l'article-doublon réévalué par le serveur au moment de l'écriture (POST /articles), jamais un
