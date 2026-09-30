@@ -400,4 +400,93 @@ router.get("/reconciliation", async (req: Request, res: Response) => {
   }
 });
 
+export type QuadrantMenuEngineering = "VEDETTE" | "CHEVAL_DE_TRAIT" | "ENIGME" | "POIDS_MORT";
+
+// Méthode Kasavana & Smith (référence historique du menu engineering, pas une invention maison) :
+// - Popularité : indice de popularité d'une recette = sa part du volume total vendu. Seuil = 70 %
+//   de l'indice « équitable » (1/n si toutes les recettes vendaient pareil) — une recette est
+//   populaire si elle atteint au moins ce seuil.
+// - Rentabilité : marge unitaire (prix de vente actuel - coût matière actuel, jamais un prix ou
+//   coût historique reconstitué) comparée à la marge moyenne PONDÉRÉE par les quantités vendues —
+//   une recette jamais vendue pèse donc pour rien dans cette moyenne, sans fausser le classement
+//   des recettes réellement vendues.
+router.get("/menu-engineering", async (req: Request, res: Response) => {
+  try {
+    const societeId = req.utilisateur!.societeId;
+    const { depuis, jusqua } = req.query as { depuis?: string; jusqua?: string };
+
+    const [recettes, lignesValidees] = await Promise.all([
+      prisma.recette.findMany({ where: { societeId, actif: true }, include: inclusionsRecette }),
+      prisma.ligneVente.findMany({
+        where: {
+          decision: "VALIDEE",
+          recetteRetenueId: { not: null },
+          documentVentes: {
+            societeId,
+            ...(depuis ? { importeLe: { gte: new Date(depuis) } } : {}),
+            ...(jusqua ? { importeLe: { lte: new Date(jusqua) } } : {}),
+          },
+        },
+        select: { recetteRetenueId: true, quantiteVendue: true },
+      }),
+    ]);
+
+    const quantiteParRecette = new Map<number, number>();
+    for (const ligne of lignesValidees) {
+      const id = ligne.recetteRetenueId!;
+      quantiteParRecette.set(id, (quantiteParRecette.get(id) ?? 0) + ligne.quantiteVendue);
+    }
+
+    const recettesAvecCout = calculerCoutsRecettesSansErreur(recettes);
+
+    // Seules les recettes avec un prix de vente configuré peuvent être évaluées ici — jamais une
+    // marge inventée pour celles qui n'en ont pas (même principe que server/routes/consulting.ts).
+    const items = recettesAvecCout
+      .filter((r) => r.prixVenteHT != null && r.prixVenteHT > 0)
+      .map((r) => ({
+        recetteId: r.id,
+        recetteNom: r.nom,
+        quantiteVendue: quantiteParRecette.get(r.id) ?? 0,
+        margeUnitaire: r.margeHT!,
+        prixVenteHT: r.prixVenteHT!,
+        coutParPortion: r.coutParPortion,
+      }));
+
+    if (items.length === 0) {
+      res.json({ items: [], seuilPopulariteQuantite: null, margeMoyennePonderee: null });
+      return;
+    }
+
+    const totalQuantite = items.reduce((total, item) => total + item.quantiteVendue, 0);
+    const seuilPopulariteQuantite = totalQuantite > 0 ? 0.7 * (totalQuantite / items.length) : null;
+
+    // Repli sur une moyenne non pondérée si aucune vente sur la période : la moyenne pondérée
+    // (ci-dessous) vaudrait sinon 0/0, jamais un classement silencieusement faussé.
+    const margeMoyennePonderee =
+      totalQuantite > 0
+        ? items.reduce((total, item) => total + item.margeUnitaire * item.quantiteVendue, 0) / totalQuantite
+        : items.reduce((total, item) => total + item.margeUnitaire, 0) / items.length;
+
+    const resultat = items.map((item) => {
+      const populaire = seuilPopulariteQuantite !== null && item.quantiteVendue >= seuilPopulariteQuantite;
+      const rentable = item.margeUnitaire >= margeMoyennePonderee;
+      const quadrant: QuadrantMenuEngineering =
+        populaire && rentable
+          ? "VEDETTE"
+          : populaire && !rentable
+            ? "CHEVAL_DE_TRAIT"
+            : !populaire && rentable
+              ? "ENIGME"
+              : "POIDS_MORT";
+      return { ...item, populaire, rentable, quadrant };
+    });
+
+    res.json({ items: resultat, seuilPopulariteQuantite, margeMoyennePonderee, totalQuantiteVendue: totalQuantite });
+  } catch (error) {
+    console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
+    res.status(500).json({ error: "Impossible de calculer le menu engineering" });
+  }
+});
+
 export default router;

@@ -144,3 +144,37 @@ export async function getReconciliationVentes(depuis?: string, jusqua?: string):
   const { recettes } = await response.json();
   return recettes;
 }
+
+// Miroir de QuadrantMenuEngineering, server/routes/ventes.ts (méthode Kasavana & Smith) : VEDETTE
+// (populaire + rentable), CHEVAL_DE_TRAIT (populaire, peu rentable), ENIGME (peu populaire,
+// rentable), POIDS_MORT (ni l'un ni l'autre).
+export type QuadrantMenuEngineering = "VEDETTE" | "CHEVAL_DE_TRAIT" | "ENIGME" | "POIDS_MORT";
+
+export type ItemMenuEngineering = {
+  recetteId: number;
+  recetteNom: string;
+  quantiteVendue: number;
+  margeUnitaire: number;
+  prixVenteHT: number;
+  coutParPortion: number;
+  populaire: boolean;
+  rentable: boolean;
+  quadrant: QuadrantMenuEngineering;
+};
+
+export type ResultatMenuEngineering = {
+  items: ItemMenuEngineering[];
+  seuilPopulariteQuantite: number | null;
+  margeMoyennePonderee: number | null;
+  totalQuantiteVendue?: number;
+};
+
+export async function getMenuEngineering(depuis?: string, jusqua?: string): Promise<ResultatMenuEngineering> {
+  const params = new URLSearchParams();
+  if (depuis) params.set("depuis", depuis);
+  if (jusqua) params.set("jusqua", jusqua);
+  const suffixe = params.toString() ? `?${params.toString()}` : "";
+  const response = await apiFetch(`${API_URL}/ventes/menu-engineering${suffixe}`);
+  if (!response.ok) throw new Error("Impossible de calculer le menu engineering");
+  return response.json();
+}

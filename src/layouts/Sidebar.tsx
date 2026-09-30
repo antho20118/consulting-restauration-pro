@@ -13,6 +13,7 @@ const menu = [
   { label: "🛡️ HACCP", path: "/haccp" },
   { label: "📋 Traçabilité HACCP", path: "/productions", indentSuspendu: true },
   { label: "💰 Ventes", path: "/ventes" },
+  { label: "📊 Menu engineering", path: "/menu-engineering" },
   { label: "📦 Mouvements de stock", path: "/mouvements" },
   { label: "🏭 Dépôts", path: "/depots" },
   { label: "⚙ Paramètres", path: "/parametres" },
