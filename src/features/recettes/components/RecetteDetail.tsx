@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import toast from "react-hot-toast";
 import AlertesConsulting from "./AlertesConsulting";
 import SuggestionsEconomie from "./SuggestionsEconomie";
-import { getEvaluationHACCP } from "../services/recetteService";
+import { getEvaluationHACCP, telechargerFichePdf } from "../services/recetteService";
 import type { EtapeEvalueeHACCP, Recette, RegleHACCP } from "../types/recette";
 
 type Props = {
@@ -46,12 +47,32 @@ function DetailReglesHACCP({ regles }: { regles: RegleHACCP[] }) {
 
 export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Props) {
   const [evaluationHACCP, setEvaluationHACCP] = useState<EtapeEvalueeHACCP[] | null>(null);
+  const [telechargementEnCours, setTelechargementEnCours] = useState(false);
 
   useEffect(() => {
     getEvaluationHACCP(recette.id)
       .then((res) => setEvaluationHACCP(res.etapes))
       .catch(() => setEvaluationHACCP(null));
   }, [recette.id]);
+
+  // Déclenche un téléchargement de fichier classique (lien temporaire cliqué par programme) —
+  // aucune bibliothèque dédiée nécessaire pour un blob déjà reçu du serveur.
+  async function telechargerPdf() {
+    setTelechargementEnCours(true);
+    try {
+      const blob = await telechargerFichePdf(recette.id);
+      const url = URL.createObjectURL(blob);
+      const lien = document.createElement("a");
+      lien.href = url;
+      lien.download = `fiche-${recette.nom.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.pdf`;
+      lien.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erreur inconnue");
+    } finally {
+      setTelechargementEnCours(false);
+    }
+  }
 
   // Le reste de la page (barre latérale, autres recettes de la liste) reste dans le DOM derrière
   // ce pop-up : sans ce marqueur, il apparaissait aussi à l'impression puisque le CSS @media print
@@ -295,6 +316,9 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onClose}>Fermer</button>
           <button onClick={() => window.print()}>Imprimer</button>
+          <button onClick={telechargerPdf} disabled={telechargementEnCours}>
+            {telechargementEnCours ? "Génération…" : "📄 Télécharger en PDF"}
+          </button>
           <Link
             to={`/production/${recette.id}`}
             className="btn-primary"

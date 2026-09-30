@@ -90,6 +90,13 @@ function rendementValide(rendement: number): number {
 // quantité recette en unité de base × prix du conditionnement / quantité du conditionnement /
 // facteur de l'unité tarifaire / rendement.
 // Exemple : 1 kg utilisé, carton 10 kg à 65 €, rendement 100 % => 6,50 €.
+//
+// Type de retour annoté explicitement (plutôt que laissé à l'inférence) : sans cette annotation,
+// TypeScript n'arrive pas à faire remonter coutLigne/poidsFiniLigneG (ajoutés dans le corps de la
+// fonction, voir `const lignes = recette.lignes.map(...)` ci-dessous) jusqu'au type public de
+// chaque ligne pour un appelant qui référence ce type depuis un autre fichier (voir
+// server/utils/pdf/ficheRecettePdf.tsx) — un simple accès `.coutLigne` y était vu comme une
+// propriété inexistante malgré la donnée bien présente à l'exécution.
 export function calculerCoutRecette<
   T extends {
     portions: number;
@@ -106,7 +113,19 @@ export function calculerCoutRecette<
       };
     }[];
   },
->(recette: T) {
+>(
+  recette: T
+): Omit<T, "lignes"> & {
+  lignes: (T["lignes"][number] & { coutLigne: number; poidsFiniLigneG: number })[];
+  coutTotal: number;
+  coutParPortion: number;
+  foodCostPct: number | null;
+  margeHT: number | null;
+  allergenes: { id: number; nom: string }[];
+  poidsFiniTotalG: number;
+  valeursNutritionnelles: ValeursNutritionnelles;
+  nutritionIncomplete: boolean;
+} {
   let coutTotal = 0;
   let poidsFiniTotalG = 0;
   // Toujours calculées à partir de quantiteBase (la quantité réellement incorporée dans la

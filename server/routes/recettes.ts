@@ -6,6 +6,7 @@ import prisma from "../prisma.js";
 import { calculerCoutRecette, calculerCoutsRecettesSansErreur, inclusionsRecette } from "../utils/coutRecette.js";
 import { suggestionsEconomieRecette } from "../utils/suggestionsEconomie.js";
 import { extraireRecette, ImportIANonConfigureError, PhotoInvalideError } from "../utils/importRecetteIA.js";
+import { genererFicheRecettePdf } from "../utils/pdf/ficheRecettePdf.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
@@ -106,6 +107,62 @@ router.get("/:id", async (req: Request, res: Response) => {
     console.error(error);
     await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer la recette" });
+  }
+});
+
+// Fiche technique en PDF téléchargeable — même donnée que GET /:id (calculerCoutRecette), mise en
+// forme par server/utils/pdf/ficheRecettePdf.tsx plutôt que recalculée ici.
+router.get("/:id/export-pdf", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+
+    const recette = await prisma.recette.findFirst({
+      where: { id, societeId: req.utilisateur!.societeId },
+      include: inclusionsRecette,
+    });
+
+    if (!recette) {
+      res.status(404).json({ error: "Recette introuvable" });
+      return;
+    }
+
+    const calculee = calculerCoutRecette(recette);
+    // Reconstruit explicitement la forme attendue par genererFicheRecettePdf (RecetteFichePdf) —
+    // calculerCoutRecette étant générique, son type de retour exact dépend de l'instanciation de
+    // son paramètre générique T et ne se laisse pas nommer proprement depuis un autre fichier ;
+    // plus simple et plus sûr de retyper ici, au point d'appel, où le type concret est connu.
+    const pdf = await genererFicheRecettePdf({
+      nom: calculee.nom,
+      categorie: calculee.categorie,
+      sousCategorie: calculee.sousCategorie,
+      portions: calculee.portions,
+      instructions: calculee.instructions,
+      allergenes: calculee.allergenes,
+      nutritionIncomplete: calculee.nutritionIncomplete,
+      valeursNutritionnelles: calculee.valeursNutritionnelles,
+      lignes: calculee.lignes.map((ligne) => ({
+        id: ligne.id,
+        quantite: ligne.quantite,
+        unite: { symbole: ligne.unite.symbole },
+        article: { nom: ligne.article.nom },
+        coutLigne: ligne.coutLigne,
+      })),
+      etapes: calculee.etapes,
+      coutParPortion: calculee.coutParPortion,
+      prixVenteHT: calculee.prixVenteHT,
+      foodCostPct: calculee.foodCostPct,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="fiche-${recette.nom.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.pdf"`
+    );
+    res.send(pdf);
+  } catch (error) {
+    console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
+    res.status(500).json({ error: "Impossible de générer la fiche PDF" });
   }
 });
 

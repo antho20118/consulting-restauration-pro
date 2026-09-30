@@ -11,6 +11,9 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
+    // Uniquement pour server/utils/pdf/*.tsx (génération de PDF via @react-pdf/renderer,
+    // React.createElement en JSX) — aucun autre fichier serveur n'utilise de JSX.
+    "jsx": "react",
 
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -19,6 +22,7 @@
   "include": [
     "vite.config.ts",
     "playwright.config.ts",
-    "server/**/*.ts"
+    "server/**/*.ts",
+    "server/**/*.tsx"
   ]
 }

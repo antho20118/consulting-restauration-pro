@@ -29,6 +29,7 @@
     "@mui/material": "^9.2.0",
     "@mui/x-data-grid": "^9.10.1",
     "@prisma/client": "^6.19.3",
+    "@react-pdf/renderer": "^4.9.0",
     "@tesseract.js-data/fra": "^1.0.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",

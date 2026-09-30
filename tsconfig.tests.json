@@ -28,6 +28,10 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
+    // Projet indépendant de tsconfig.node.json (voir plus haut) : revérifie donc aussi depuis zéro
+    // server/utils/pdf/ficheRecettePdf.tsx (JSX, @react-pdf/renderer), importé transitivement par
+    // app.js depuis les tests d'intégration de POST /recettes/*.
+    "jsx": "react",
 
     "noUnusedLocals": true,
     "noUnusedParameters": true,

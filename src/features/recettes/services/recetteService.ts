@@ -147,6 +147,19 @@ export async function getEvaluationHACCP(recetteId: number): Promise<EvaluationH
   return response.json();
 }
 
+// Fiche technique en PDF — même contenu que l'aperçu imprimable (voir RecetteDetail.tsx,
+// window.print()), généré côté serveur (server/utils/pdf/ficheRecettePdf.tsx). Renvoie le blob
+// brut : c'est l'appelant qui décide de son traitement (ici, déclencher un téléchargement).
+export async function telechargerFichePdf(recetteId: number): Promise<Blob> {
+  const response = await apiFetch(`${API_URL}/recettes/${recetteId}/export-pdf`);
+
+  if (!response.ok) {
+    throw new Error("Impossible de générer la fiche PDF");
+  }
+
+  return response.blob();
+}
+
 // Analyse déterministe de l'agent Consulting (voir server/routes/consulting.ts) — a minima
 // branchée ici pour ses alertes (food cost, tarif manquant, HACCP à valider), qui n'existaient
 // nulle part ailleurs dans l'interface avant ce correctif.
