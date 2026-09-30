@@ -39,9 +39,12 @@ export default function MenuForm({ menu, onClose, onSave }: Props) {
       .then((data) => {
         setCategories(data);
         if (!menu && data.length > 0) setCategorieId(data[0].id);
-      });
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
 
-    getRecettes().then(setRecettes);
+    getRecettes()
+      .then(setRecettes)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

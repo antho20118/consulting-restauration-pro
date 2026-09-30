@@ -137,26 +137,34 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
     // modification (recette?.categorieId déjà utilisé dans l'état initial).
     apiFetch(`${API_URL}/categories-recette`)
       .then((r) => r.json())
-      .then(setCategories);
+      .then(setCategories)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
 
     apiFetch(`${API_URL}/sous-categories-recette`)
       .then((r) => r.json())
-      .then(setSousCategories);
+      .then(setSousCategories)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
 
-    getArticlesDisponibles().then(setArticles);
+    getArticlesDisponibles()
+      .then(setArticles)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
 
-    getUnitesDisponibles().then((data) => {
-      setUnites(data);
-    });
+    getUnitesDisponibles()
+      .then((data) => {
+        setUnites(data);
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
 
     // Uniquement en création : une modification ne crée jamais de doublon par elle-même (voir le
     // commentaire de recettesExistantes ci-dessus).
     if (!recette) {
       // getRecettes() ne renvoie que les recettes actives (voir GET /recettes) : une recette
       // inactive du même nom ne bloque donc jamais une nouvelle création, par construction.
-      getRecettes().then((data) =>
-        setRecettesExistantes(data.map((r) => ({ id: r.id, nom: r.nom, actif: true })))
-      );
+      getRecettes()
+        .then((data) =>
+          setRecettesExistantes(data.map((r) => ({ id: r.id, nom: r.nom, actif: true })))
+        )
+        .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

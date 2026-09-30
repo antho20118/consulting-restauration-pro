@@ -44,11 +44,15 @@ export default function ProductionPlanifierPage() {
   const [productionEnregistree, setProductionEnregistree] = useState<ProductionDetail | null>(null);
 
   useEffect(() => {
-    getRecetteDetail(id).then((recette) => {
-      setRecetteNom(recette.nom);
-      setCible(recette.portions);
-    });
-    getDepots().then(setDepots);
+    getRecetteDetail(id)
+      .then((recette) => {
+        setRecetteNom(recette.nom);
+        setCible(recette.portions);
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
+    getDepots()
+      .then(setDepots)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
   }, [id]);
 
   // Masque la barre latérale à l'impression (voir le <style> ci-dessous) : cette page est un

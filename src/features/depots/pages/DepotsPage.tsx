@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import DepotsTable from "../components/DepotsTable";
 import DepotForm from "../components/DepotForm";
 import { getDepots, supprimerDepot } from "../services/depotService";
@@ -10,7 +11,9 @@ export default function DepotsPage() {
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
 
   function chargerDepots() {
-    getDepots().then(setDepots);
+    getDepots()
+      .then(setDepots)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
   }
 
   useEffect(() => {

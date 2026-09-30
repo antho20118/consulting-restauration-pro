@@ -59,7 +59,9 @@ export default function ImporterTechniquesFichierModal({ onClose, onImporte }: P
   const [recettesToutes, setRecettesToutes] = useState<Recette[]>([]);
 
   useEffect(() => {
-    getRecettes().then(setRecettesToutes);
+    getRecettes()
+      .then(setRecettesToutes)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
   }, []);
 
   // --- Mode fichier (inchangé) ---

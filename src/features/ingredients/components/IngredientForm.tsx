@@ -93,29 +93,35 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
       .then((data) => {
         setCategories(data);
         if (!ingredient && data.length > 0) setCategorieId(data[0].id);
-      });
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
 
     apiFetch(`${API_URL}/unites`)
       .then((response) => response.json())
       .then((data) => {
         setUnites(data);
         if (!ingredient && data.length > 0) setUniteId(data[0].id);
-      });
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
 
-    getAllergenes().then(setAllergenes);
+    getAllergenes()
+      .then(setAllergenes)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
 
     // getIngredients() ne renvoie que les articles actifs (voir GET /articles) : un article
     // inactif du même nom/référence ne bloque donc jamais un enregistrement, par construction — en
     // plus du filtre actif déjà appliqué dans trouverArticlesCorrespondants lui-même. L'article en
     // cours de modification, s'il y en a un, est systématiquement exclu : il ne doit jamais être
     // détecté comme un doublon de lui-même.
-    getIngredients().then((data) =>
-      setArticlesExistants(
-        data
-          .filter((a) => !ingredient || a.id !== ingredient.id)
-          .map((a) => ({ id: a.id, nom: a.nom, reference: a.reference ?? null, actif: true }))
+    getIngredients()
+      .then((data) =>
+        setArticlesExistants(
+          data
+            .filter((a) => !ingredient || a.id !== ingredient.id)
+            .map((a) => ({ id: a.id, nom: a.nom, reference: a.reference ?? null, actif: true }))
+        )
       )
-    );
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

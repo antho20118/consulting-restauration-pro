@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import MenusTable from "../components/MenusTable";
 import MenuForm from "../components/MenuForm";
 import { getMenus, supprimerMenu } from "../services/menuService";
@@ -17,7 +18,9 @@ export default function MenusPage() {
   }
 
   useEffect(() => {
-    getMenus().then(setMenus);
+    getMenus()
+      .then(setMenus)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
   }, []);
 
   const menusFiltres = useMemo(() => {

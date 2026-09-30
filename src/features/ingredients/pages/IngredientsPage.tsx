@@ -22,7 +22,9 @@ export default function IngredientsPage() {
   }
 
   useEffect(() => {
-    getIngredients().then(setIngredients);
+    getIngredients()
+      .then(setIngredients)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
   }, []);
 
   const ingredientsFiltres = useMemo(() => {

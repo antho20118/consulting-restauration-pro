@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import MouvementsTable from "../components/MouvementsTable";
 import MouvementForm from "../components/MouvementForm";
 import { getMouvements } from "../services/mouvementService";
@@ -10,7 +11,9 @@ export default function MouvementsPage() {
   const [recherche, setRecherche] = useState("");
 
   function chargerMouvements() {
-    getMouvements().then(setMouvements);
+    getMouvements()
+      .then(setMouvements)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
   }
 
   useEffect(() => {

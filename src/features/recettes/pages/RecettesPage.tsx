@@ -66,10 +66,13 @@ export default function RecettesPage() {
   }
 
   useEffect(() => {
-    getRecettes().then(setRecettes);
+    getRecettes()
+      .then(setRecettes)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
     apiFetch(`${API_URL}/sous-categories-recette`)
       .then((r) => r.json())
-      .then(setSousCategories);
+      .then(setSousCategories)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
   }, []);
 
   const comptesParOnglet = useMemo(() => {

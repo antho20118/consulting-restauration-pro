@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import KpiCard from "../components/KpiCard";
 import RepartitionCategories from "../components/RepartitionCategories";
 import RecettesAlerteTable from "../components/RecettesAlerteTable";
@@ -10,7 +11,14 @@ export default function DashboardPage() {
   const [donnees, setDonnees] = useState<DashboardData | null>(null);
 
   useEffect(() => {
-    getDashboard().then(setDonnees);
+    // Un échec jamais rattrapé ici (jeton expiré, réseau...) devenait une promesse rejetée non
+    // gérée : le tableau de bord étant la première page chargée après connexion, elle affichait
+    // alors l'écran de diagnostic plein écran d'index.html par-dessus toute l'application, la
+    // rendant inaccessible en apparence — jamais acceptable pour une simple erreur réseau/jeton
+    // expiré, que apiFetch gère déjà par ailleurs (déconnexion automatique, voir config/api.ts).
+    getDashboard()
+      .then(setDonnees)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
   }, []);
 
   if (!donnees) {

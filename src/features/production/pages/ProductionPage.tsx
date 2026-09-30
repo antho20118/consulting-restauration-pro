@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import RecettesGrille from "../../recettes/components/RecettesGrille";
 import { getRecettes } from "../../recettes/services/recetteService";
 import { normaliserTexte } from "../../recettes/utils/normaliserTexte";
@@ -14,7 +15,9 @@ export default function ProductionPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    getRecettes().then(setRecettes);
+    getRecettes()
+      .then(setRecettes)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Erreur inconnue"));
   }, []);
 
   const recettesFiltrees = useMemo(() => {
