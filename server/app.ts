@@ -31,6 +31,7 @@ import haccpRouter from "./routes/haccp.js";
 import consultingRouter from "./routes/consulting.js";
 import documentsFournisseursRouter from "./routes/documentsFournisseurs.js";
 import listingsFournisseurRouter from "./routes/listingsFournisseur.js";
+import ventesRouter from "./routes/ventes.js";
 import sauvegardesRouter from "./routes/sauvegardes.js";
 
 const app = express();
@@ -93,6 +94,7 @@ app.use("/api/haccp", haccpRouter);
 app.use("/api/consulting", consultingRouter);
 app.use("/api/documents-fournisseurs", ECRITURE_GESTION, documentsFournisseursRouter);
 app.use("/api/listings-fournisseur", ECRITURE_GESTION, listingsFournisseurRouter);
+app.use("/api/ventes", ECRITURE_GESTION, ventesRouter);
 app.use("/api/sauvegardes", requireRole(["PROPRIETAIRE"]), sauvegardesRouter);
 
 app.get("/health", (_req, res) => {
