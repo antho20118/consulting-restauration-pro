@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { RefreshCw, LogOut } from "lucide-react";
 import { seDeconnecter } from "../config/api";
+import IndicateurHorsLigne from "../offline/IndicateurHorsLigne";
 
 const menu = [
   { label: "🏠 Tableau de bord", path: "/" },
@@ -41,6 +42,8 @@ export default function Sidebar({ ouverte, onFermer }: Props) {
       }}
     >
       <h2>🍽 Consulting</h2>
+
+      <IndicateurHorsLigne />
 
       {menu.map((item) => (
         <Link

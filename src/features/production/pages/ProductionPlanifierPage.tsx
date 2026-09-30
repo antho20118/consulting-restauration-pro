@@ -9,8 +9,8 @@ import type { BesoinAchat, CibleProduction, LigneAchat, PlanificationProduction,
 import type { Depot } from "../../depots/types/depot";
 import { creerCommandes } from "../../commandes/services/commandeService";
 import type { Commande } from "../../commandes/types/commande";
-import { enregistrerProduction } from "../../productions/services/productionService";
 import type { ProductionDetail } from "../../productions/types/production";
+import { enregistrerProductionResiliente } from "../../../offline/actionsProduction";
 
 // Écran « PRODUIRE » pour une recette précise : planifie les quantités réellement nécessaires
 // (stock déduit), puis génère une proposition d'achat au conditionnement fournisseur — consomme
@@ -42,6 +42,10 @@ export default function ProductionPlanifierPage() {
 
   const [chargementProduction, setChargementProduction] = useState(false);
   const [productionEnregistree, setProductionEnregistree] = useState<ProductionDetail | null>(null);
+  // Non nul quand la production a été mise en file d'attente hors ligne (voir
+  // enregistrerProductionResiliente) plutôt que réellement créée : aucun id réel n'existe encore,
+  // donc aucun lien vers /productions/:id n'est possible tant qu'elle n'est pas synchronisée.
+  const [productionEnAttente, setProductionEnAttente] = useState(false);
 
   useEffect(() => {
     getRecetteDetail(id)
@@ -140,9 +144,14 @@ export default function ProductionPlanifierPage() {
     setChargementProduction(true);
     try {
       const valeur = mode === "poidsFiniG" ? cible * 1000 : cible;
-      const production = await enregistrerProduction(id, { mode, valeur }, depotId);
-      setProductionEnregistree(production);
-      toast.success("Production enregistrée.");
+      const resultat = await enregistrerProductionResiliente(id, { mode, valeur }, depotId);
+      if (resultat.sorte === "synchronise") {
+        setProductionEnregistree(resultat.production);
+        toast.success("Production enregistrée.");
+      } else {
+        setProductionEnAttente(true);
+        toast("Hors ligne : production mise en attente de synchronisation.", { icon: "📡" });
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Impossible d'enregistrer la production");
     } finally {
@@ -265,6 +274,12 @@ export default function ProductionPlanifierPage() {
                     ? "enregistrer les contrôles HACCP"
                     : "voir la production"}
                 </Link>
+              </span>
+            )}
+            {productionEnAttente && (
+              <span style={{ fontSize: 14, color: "#946200" }}>
+                📡 Production en attente de synchronisation — elle apparaîtra dans la traçabilité
+                HACCP dès que la connexion revient.
               </span>
             )}
           </div>

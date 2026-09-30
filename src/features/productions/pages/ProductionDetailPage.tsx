@@ -1,13 +1,26 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { ajouterControle, getProduction } from "../services/productionService";
+import { getProduction } from "../services/productionService";
 import type { ProductionDetail } from "../types/production";
 import { suggestionsPourEtape } from "../utils/suggestionsControleHACCP";
+import { ajouterControleResilient } from "../../../offline/actionsProduction";
+import { busFileAttente, listerElements } from "../../../offline/fileAttenteDb";
 
 type BrouillonControle = { valeur: string; conforme: boolean; commentaire: string };
 
 const BROUILLON_VIDE: BrouillonControle = { valeur: "", conforme: true, commentaire: "" };
+
+// Un contrôle mis en file hors ligne (voir actionsProduction.ts) n'a pas encore d'id ni de
+// dateHeure serveur — affiché séparément des contrôles réels (production.controles) avec un
+// badge dédié, jamais mélangé à l'historique confirmé tant qu'il n'est pas synchronisé.
+type ControleEnAttente = {
+  idLocal: string;
+  etapeId: number;
+  valeur: string;
+  conforme: boolean;
+  commentaire: string | null;
+};
 
 // Détail d'une production : pour chaque point critique HACCP de la recette (recalculé à chaque
 // consultation, voir server/routes/productions.ts::etapesCritiquesDeLaRecette), l'historique des
@@ -23,6 +36,7 @@ export default function ProductionDetailPage() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [brouillons, setBrouillons] = useState<Record<number, BrouillonControle>>({});
   const [enCours, setEnCours] = useState<number | null>(null);
+  const [controlesEnAttente, setControlesEnAttente] = useState<ControleEnAttente[]>([]);
 
   function charger() {
     getProduction(productionId)
@@ -32,6 +46,23 @@ export default function ProductionDetailPage() {
 
   useEffect(() => {
     charger();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productionId]);
+
+  // Synchronisation en arrière-plan (voir src/offline/synchronisation.ts) : à chaque changement de
+  // la file, un contrôle mis en attente ici a pu être envoyé pendant que cette page était ouverte —
+  // on recharge la production (pour voir apparaître le contrôle désormais réel, avec son id et sa
+  // date serveur) et on retire de l'affichage local celui qui n'est plus dans la file.
+  useEffect(() => {
+    function surChangementFile() {
+      listerElements().then((elements) => {
+        const idsEncoreEnFile = new Set(elements.map((e) => e.idLocal));
+        setControlesEnAttente((precedent) => precedent.filter((c) => idsEncoreEnFile.has(c.idLocal)));
+      });
+      charger();
+    }
+    busFileAttente.addEventListener("changement", surChangementFile);
+    return () => busFileAttente.removeEventListener("changement", surChangementFile);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productionId]);
 
@@ -51,15 +82,29 @@ export default function ProductionDetailPage() {
     }
     setEnCours(etapeId);
     try {
-      const misAJour = await ajouterControle(productionId, {
+      const resultat = await ajouterControleResilient(productionId, {
         recetteEtapeId: etapeId,
         valeur: saisie.valeur.trim(),
         conforme: saisie.conforme,
         commentaire: saisie.commentaire.trim() || undefined,
       });
-      setProduction(misAJour);
+      if (resultat.sorte === "synchronise") {
+        setProduction(resultat.production);
+        toast.success("Contrôle enregistré.");
+      } else {
+        setControlesEnAttente((prec) => [
+          ...prec,
+          {
+            idLocal: resultat.idLocal,
+            etapeId,
+            valeur: saisie.valeur.trim(),
+            conforme: saisie.conforme,
+            commentaire: saisie.commentaire.trim() || null,
+          },
+        ]);
+        toast("Hors ligne : contrôle mis en attente de synchronisation.", { icon: "📡" });
+      }
       setBrouillons((prec) => ({ ...prec, [etapeId]: BROUILLON_VIDE }));
-      toast.success("Contrôle enregistré.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Impossible d'enregistrer ce contrôle");
     } finally {
@@ -92,6 +137,7 @@ export default function ProductionDetailPage() {
         const controlesEtape = production.controles
           .filter((c) => c.recetteEtapeId === etape.id)
           .sort((a, b) => new Date(b.dateHeure).getTime() - new Date(a.dateHeure).getTime());
+        const controlesEnAttenteEtape = controlesEnAttente.filter((c) => c.etapeId === etape.id);
         const saisie = brouillon(etape.id);
         const suggestions = suggestionsPourEtape(etape.reglesDetectees.map((r) => r.code));
 
@@ -132,6 +178,24 @@ export default function ProductionDetailPage() {
                       <span style={{ color: "var(--couleur-texte-attenue)", marginLeft: "auto" }}>
                         {new Date(controle.dateHeure).toLocaleString("fr-FR")}
                       </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {controlesEnAttenteEtape.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>En attente de synchronisation</div>
+                <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {controlesEnAttenteEtape.map((controle) => (
+                    <li key={controle.idLocal} style={{ fontSize: 13, display: "flex", gap: 8, alignItems: "baseline" }}>
+                      <span style={{ color: controle.conforme ? "#1a7a3c" : "#b3261e", fontWeight: 600 }}>
+                        {controle.conforme ? "✓ Conforme" : "✗ Non conforme"}
+                      </span>
+                      <span>{controle.valeur}</span>
+                      {controle.commentaire && <span style={{ color: "var(--couleur-texte-attenue)" }}>— {controle.commentaire}</span>}
+                      <span style={{ color: "#946200", marginLeft: "auto" }}>📡 en attente</span>
                     </li>
                   ))}
                 </ul>
