@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 
 import prisma from "../prisma.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -14,6 +15,7 @@ router.get("/", async (req: Request, res: Response) => {
     res.json(societe);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer les informations de la société" });
   }
 });
@@ -60,6 +62,7 @@ router.put("/:id", async (req: Request, res: Response) => {
     res.json(societe);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de modifier la société" });
   }
 });

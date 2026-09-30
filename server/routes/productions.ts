@@ -5,6 +5,7 @@ import { z } from "zod";
 import prisma from "../prisma.js";
 import { planifierProduction, type CibleProduction } from "../utils/planifierProduction.js";
 import { evaluerEtapesHACCP } from "../utils/haccp.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -78,6 +79,7 @@ router.get("/", async (req: Request, res: Response) => {
     res.json(resultats);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer les productions" });
   }
 });
@@ -102,6 +104,7 @@ router.get("/:id", async (req: Request, res: Response) => {
     res.json({ ...production, etapesCritiques });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer cette production" });
   }
 });
@@ -151,7 +154,12 @@ router.post("/", async (req: Request, res: Response) => {
     res.status(201).json({ ...production, etapesCritiques });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Impossible d'enregistrer la production";
-    res.status(message === "Recette introuvable" ? 404 : 500).json({ error: message });
+    const statutHttp = message === "Recette introuvable" ? 404 : 500;
+    if (statutHttp === 500) {
+      console.error(error);
+      await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
+    }
+    res.status(statutHttp).json({ error: message });
   }
 });
 
@@ -209,6 +217,7 @@ router.post("/:id/controles", async (req: Request, res: Response) => {
     res.status(201).json({ ...misAJour, etapesCritiques });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'enregistrer ce contrôle" });
   }
 });

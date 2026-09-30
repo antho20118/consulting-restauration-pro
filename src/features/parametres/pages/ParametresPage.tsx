@@ -9,6 +9,7 @@ import TvaManager from "../components/TvaManager";
 import ComptesManager from "../components/ComptesManager";
 import IdentifiantsSection from "../components/IdentifiantsSection";
 import SauvegardesSection from "../components/SauvegardesSection";
+import JournalErreursSection from "../components/JournalErreursSection";
 
 function Section({ titre, children }: { titre: string; children: ReactNode }) {
   return (
@@ -73,6 +74,12 @@ export default function ParametresPage() {
       <Section titre="Sauvegardes">
         <SauvegardesSection />
       </Section>
+
+      {estProprietaire && (
+        <Section titre="Journal des erreurs">
+          <JournalErreursSection />
+        </Section>
+      )}
     </div>
   );
 }

@@ -15,11 +15,35 @@
         d.style.display = "block";
         d.textContent += msg + "\n\n";
       }
+      // Best-effort, jamais bloquant (voir server/routes/journalErreursClient.ts, monté sans
+      // jeton requis — la cause la plus probable ici est justement un jeton invalide/expiré).
+      // "consulting_token" duplique CLE_TOKEN de config/api.ts : ce script s'exécute avant tout
+      // module JS de l'appli, donc sans accès à ses constantes.
+      function signalerErreurServeur(message, pile) {
+        try {
+          var jeton = localStorage.getItem("consulting_token");
+          var entetes = { "Content-Type": "application/json" };
+          if (jeton) entetes["Authorization"] = "Bearer " + jeton;
+          fetch("/api/journal-erreurs/client", {
+            method: "POST",
+            headers: entetes,
+            body: JSON.stringify({
+              message: String(message || "Erreur inconnue").slice(0, 2000),
+              pile: pile ? String(pile).slice(0, 8000) : undefined,
+              route: window.location.pathname,
+            }),
+          }).catch(function () {});
+        } catch (e) {
+          // Jamais faire échouer l'affichage de l'erreur d'origine pour un souci de signalement.
+        }
+      }
       window.addEventListener("error", function (e) {
         afficherErreur("ERREUR: " + e.message + "\n  fichier: " + e.filename + ":" + e.lineno + ":" + e.colno + "\n  stack: " + (e.error && e.error.stack));
+        signalerErreurServeur(e.message, e.error && e.error.stack);
       });
       window.addEventListener("unhandledrejection", function (e) {
         afficherErreur("PROMESSE REJETÉE: " + (e.reason && (e.reason.stack || e.reason.message || e.reason)));
+        signalerErreurServeur(e.reason && (e.reason.message || e.reason), e.reason && e.reason.stack);
       });
     </script>
     <script type="module" src="/src/main.tsx"></script>

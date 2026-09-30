@@ -6,6 +6,7 @@ import prisma from "../prisma.js";
 import { calculerPropositionAchat, type LigneAchat } from "../utils/propositionAchat.js";
 import { appliquerMouvementStock, StockInsuffisantError } from "../utils/mouvementStock.js";
 import { libelleUniteBase } from "../utils/uniteConversion.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -93,6 +94,7 @@ router.get("/", async (req: Request, res: Response) => {
     res.json(commandes.map(commandeAvecUniteBase));
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer les commandes" });
   }
 });
@@ -116,6 +118,7 @@ router.get("/:id", async (req: Request, res: Response) => {
     res.json(commandeAvecUniteBase(commande));
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer cette commande" });
   }
 });
@@ -187,6 +190,7 @@ router.post("/", async (req: Request, res: Response) => {
     res.status(201).json({ commandes: commandes.map(commandeAvecUniteBase) });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'enregistrer la commande" });
   }
 });
@@ -279,6 +283,7 @@ router.post("/:id/receptionner", async (req: Request, res: Response) => {
       return;
     }
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'enregistrer la réception" });
   }
 });
@@ -314,6 +319,7 @@ router.post("/:id/annuler", async (req: Request, res: Response) => {
     res.json(commandeAvecUniteBase(misAJour));
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'annuler cette commande" });
   }
 });

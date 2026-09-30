@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 
 import prisma from "../prisma.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -45,6 +46,7 @@ router.get("/", async (req, res) => {
     res.json(fournisseurs);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer les fournisseurs" });
   }
 });
@@ -71,6 +73,7 @@ router.get("/:id", async (req, res) => {
     res.json(fournisseur);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer ce fournisseur" });
   }
 });
@@ -115,6 +118,7 @@ router.get("/:id/tarifs", async (req, res) => {
     res.json(tarifs);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer les tarifs de ce fournisseur" });
   }
 });
@@ -148,6 +152,7 @@ router.get("/:id/documents", async (req, res) => {
     res.json(documents);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer les documents de ce fournisseur" });
   }
 });
@@ -178,7 +183,7 @@ router.post("/", async (req, res) => {
 
     res.status(201).json(fournisseur);
   } catch (error) {
-    repondreErreurEcriture(error, res, "Impossible de créer le fournisseur");
+    await repondreErreurEcriture(error, res, "Impossible de créer le fournisseur", req);
   }
 });
 
@@ -210,6 +215,7 @@ router.put("/:id", async (req, res) => {
     res.json(fournisseur);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de modifier le fournisseur" });
   }
 });
@@ -231,6 +237,7 @@ router.delete("/:id", async (req, res) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de supprimer le fournisseur" });
   }
 });
@@ -261,6 +268,7 @@ router.post("/:id/reactiver", async (req, res) => {
     res.json(fournisseur);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de réactiver le fournisseur" });
   }
 });

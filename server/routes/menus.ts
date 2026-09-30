@@ -4,6 +4,7 @@ import type { Request, Response } from "express";
 import prisma from "../prisma.js";
 import { calculerCoutMenu, calculerCoutsMenusSansErreur, inclusionsMenu } from "../utils/coutMenu.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -19,6 +20,7 @@ router.get("/", async (req: Request, res: Response) => {
     res.json(calculerCoutsMenusSansErreur(menus));
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer les menus" });
   }
 });
@@ -43,6 +45,7 @@ router.get("/:id", async (req: Request, res: Response) => {
     res.json(calculerCoutMenu(menu));
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer le menu" });
   }
 });
@@ -81,7 +84,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     res.status(201).json(calculerCoutMenu(menu));
   } catch (error) {
-    repondreErreurEcriture(error, res, "Impossible de créer le menu");
+    await repondreErreurEcriture(error, res, "Impossible de créer le menu", req);
   }
 });
 
@@ -126,7 +129,7 @@ router.put("/:id", async (req: Request, res: Response) => {
 
     res.json(calculerCoutMenu(menu));
   } catch (error) {
-    repondreErreurEcriture(error, res, "Impossible de mettre à jour le menu");
+    await repondreErreurEcriture(error, res, "Impossible de mettre à jour le menu", req);
   }
 });
 
@@ -147,6 +150,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de supprimer le menu" });
   }
 });

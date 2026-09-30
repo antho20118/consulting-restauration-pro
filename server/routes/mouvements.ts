@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../prisma.js";
 import { libelleUniteBase } from "../utils/uniteConversion.js";
 import { appliquerMouvementStock, StockInsuffisantError } from "../utils/mouvementStock.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -57,6 +58,7 @@ router.get("/", async (req: Request, res: Response) => {
     res.json(mouvements.map(mouvementAvecUniteBase));
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer les mouvements de stock" });
   }
 });
@@ -105,6 +107,7 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'enregistrer le mouvement de stock" });
   }
 });

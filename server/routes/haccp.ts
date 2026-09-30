@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import prisma from "../prisma.js";
 import { evaluerEtapesHACCP, reglesHACCP } from "../utils/haccp.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 const idSchema = z.coerce.number().int().positive();
@@ -25,6 +26,7 @@ router.get("/evaluer/:id", async (req: Request, res: Response) => {
     res.json({ recetteId: recette.id, recetteNom: recette.nom, etapes: evaluerEtapesHACCP(recette.etapes) });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'évaluer le HACCP" });
   }
 });

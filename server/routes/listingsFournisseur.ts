@@ -17,6 +17,7 @@ import {
 } from "../utils/rapprochementFournisseur.js";
 import { extraireQuantiteDesignation, parsePrix, normaliserCodeProduitFournisseur } from "../utils/importListing.js";
 import { resoudreOuCreerProduitFournisseur } from "../utils/produitFournisseur.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -44,6 +45,7 @@ router.post("/import-ia", async (req: Request, res: Response) => {
       return;
     }
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'analyser cette photo de listing" });
   }
 });
@@ -70,6 +72,7 @@ router.post("/factures/import-ia", async (req: Request, res: Response) => {
       return;
     }
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'analyser cette photo de facture" });
   }
 });
@@ -292,6 +295,7 @@ router.post("/:fournisseurId", async (req: Request, res: Response) => {
     res.status(201).json({ document, lignes: lignesCreees });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'importer ce listing" });
   }
 });
@@ -467,6 +471,7 @@ router.post("/factures/:fournisseurId", async (req: Request, res: Response) => {
     res.status(201).json({ document, lignes: lignesCreees });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'importer cette facture" });
   }
 });
@@ -505,6 +510,7 @@ router.get("/documents/:documentId", async (req: Request, res: Response) => {
     res.json(document);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer ce document" });
   }
 });
@@ -671,6 +677,7 @@ router.post("/documents/:documentId/valider", async (req: Request, res: Response
     res.json({ valides, rejetees, refusees });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'appliquer les décisions" });
   }
 });

@@ -4,6 +4,7 @@ import prisma from "../prisma.js";
 import { calculerCoutRecette, inclusionsRecette } from "../utils/coutRecette.js";
 import { evaluerEtapesHACCP } from "../utils/haccp.js";
 import { SEUIL_BON, SEUIL_ATTENTION, niveauFoodCost } from "../utils/seuilsFoodCost.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 const schema = z.object({ recetteId: z.number().int().positive() });
@@ -101,6 +102,7 @@ router.post("/analyser-recette", async (req, res) => {
     });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'analyser la recette" });
   }
 });

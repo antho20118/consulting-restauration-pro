@@ -7,6 +7,7 @@ import { calculerCoutRecette, calculerCoutsRecettesSansErreur, inclusionsRecette
 import { suggestionsEconomieRecette } from "../utils/suggestionsEconomie.js";
 import { extraireRecette, ImportIANonConfigureError, PhotoInvalideError } from "../utils/importRecetteIA.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -56,6 +57,7 @@ router.get("/", async (req: Request, res: Response) => {
     res.json(calculerCoutsRecettesSansErreur(recettes));
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer les recettes" });
   }
 });
@@ -77,6 +79,7 @@ router.get("/toutes-pour-correspondance", async (req: Request, res: Response) =>
     res.json(recettes);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer les recettes" });
   }
 });
@@ -101,6 +104,7 @@ router.get("/:id", async (req: Request, res: Response) => {
     res.json(calculerCoutRecette(recette));
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer la recette" });
   }
 });
@@ -117,6 +121,7 @@ router.get("/:id/suggestions-economie", async (req: Request, res: Response) => {
     res.json(suggestions);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de calculer les suggestions d'économies" });
   }
 });
@@ -216,6 +221,7 @@ router.post("/import-ia", async (req: Request, res: Response) => {
       return;
     }
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'analyser cette recette" });
   }
 });
@@ -369,6 +375,7 @@ router.post("/import-excel", async (req: Request, res: Response) => {
       return;
     }
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de finaliser l'import (aucune modification conservée)" });
   }
 });
@@ -467,7 +474,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     res.status(201).json(recette);
   } catch (error) {
-    repondreErreurEcriture(error, res, "Impossible de créer la recette");
+    await repondreErreurEcriture(error, res, "Impossible de créer la recette", req);
   }
 });
 
@@ -567,7 +574,7 @@ router.put("/:id", async (req: Request, res: Response) => {
 
     res.json(recette);
   } catch (error) {
-    repondreErreurEcriture(error, res, "Impossible de mettre à jour la recette");
+    await repondreErreurEcriture(error, res, "Impossible de mettre à jour la recette", req);
   }
 });
 
@@ -584,6 +591,7 @@ router.delete("/", async (req: Request, res: Response) => {
     res.json({ supprimees: count });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de supprimer les recettes" });
   }
 });
@@ -605,6 +613,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de supprimer la recette" });
   }
 });

@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import prisma from "../prisma.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -15,6 +16,7 @@ router.get("/", async (req, res) => {
     res.json(depots);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer les dépôts" });
   }
 });
@@ -32,7 +34,7 @@ router.post("/", async (req, res) => {
 
     res.status(201).json(depot);
   } catch (error) {
-    repondreErreurEcriture(error, res, "Impossible de créer le dépôt");
+    await repondreErreurEcriture(error, res, "Impossible de créer le dépôt", req);
   }
 });
 
@@ -59,6 +61,7 @@ router.put("/:id", async (req, res) => {
     res.json(depot);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de modifier le dépôt" });
   }
 });
@@ -80,6 +83,7 @@ router.delete("/:id", async (req, res) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de supprimer le dépôt" });
   }
 });

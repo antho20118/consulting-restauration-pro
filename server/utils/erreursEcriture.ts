@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
-import type { Response } from "express";
+import type { Request, Response } from "express";
+import { journaliserErreur, contexteDepuisRequete } from "./journalErreurs.js";
 
 // Levée quand un nom de fournisseur (saisi librement — création manuelle d'article ou import de
 // listing) correspond, après normalisation, à PLUSIEURS fournisseurs déjà existants : jamais un
@@ -51,7 +52,12 @@ export class FournisseurCodeInconnuError extends Error {
 // portions <= 0 dans coutRecette.ts, déjà classé comme comportement correct et volontairement
 // laissé en 500 par les chantiers précédents) continue de renvoyer le message générique existant,
 // strictement inchangé.
-export function repondreErreurEcriture(error: unknown, res: Response, messageParDefaut: string): void {
+export async function repondreErreurEcriture(
+  error: unknown,
+  res: Response,
+  messageParDefaut: string,
+  req?: Request
+): Promise<void> {
   if (error instanceof FournisseurAmbiguError) {
     res.status(409).json({
       error:
@@ -87,5 +93,8 @@ export function repondreErreurEcriture(error: unknown, res: Response, messagePar
   }
 
   console.error(error);
+  // Seul ce dernier recours (une erreur imprévue, jamais un des cas métier ci-dessus déjà attendus
+  // et délibérément non journalisés) est écrit dans le journal — voir server/utils/journalErreurs.ts.
+  if (req) await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
   res.status(500).json({ error: messageParDefaut });
 }

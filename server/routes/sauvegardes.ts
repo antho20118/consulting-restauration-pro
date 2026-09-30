@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { racineStockage } from "../utils/storageDocumentsFournisseur.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -19,7 +20,7 @@ function dossierSauvegardes(): string {
 
 // Montée sous /api (voir server/app.ts) : hérite de requireAuth comme le reste de l'API — jamais
 // d'accès aux sauvegardes de la base sans jeton valide.
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
   try {
     const dossier = dossierSauvegardes();
     let entrees: string[];
@@ -46,6 +47,7 @@ router.get("/", async (_req, res) => {
     res.json(fichiers);
   } catch (erreur) {
     console.error(erreur);
+    await journaliserErreur(erreur, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de lister les sauvegardes" });
   }
 });
@@ -71,6 +73,7 @@ router.get("/:nomFichier", async (req, res) => {
       return;
     }
     console.error(erreur);
+    await journaliserErreur(erreur, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer la sauvegarde" });
   }
 });

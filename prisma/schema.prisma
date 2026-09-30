@@ -943,3 +943,32 @@ model LigneVente {
   @@index([documentVentesId])
   @@index([recetteRetenueId])
 }
+
+enum OrigineErreur {
+  SERVEUR
+  CLIENT
+}
+
+// Journal d'erreurs auto-purgé (voir server/utils/journalErreurs.ts, plafond de 500 lignes) — pour
+// qu'un PROPRIETAIRE puisse diagnostiquer un incident directement dans l'appli (écran Paramètres),
+// sans devoir naviguer dans les logs Railway. Volontairement sans relation Prisma vers
+// Societe/Utilisateur (simples Int nullable) : une ligne du journal doit survivre à la suppression
+// du compte ou, en théorie, de la société concernée, jamais disparaître avec eux.
+model JournalErreur {
+  id Int @id @default(autoincrement())
+
+  origine    OrigineErreur
+  moment     DateTime      @default(now())
+  methode    String?
+  route      String?
+  statutHttp Int?
+  message    String
+  pile       String?
+  userAgent  String?
+
+  societeId     Int?
+  utilisateurId Int?
+
+  @@index([moment])
+  @@index([societeId])
+}

@@ -17,6 +17,7 @@ import {
   type PropositionLigneImport,
 } from "../utils/importListing.js";
 import { resoudreOuCreerProduitFournisseur } from "../utils/produitFournisseur.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 import {
   repondreErreurEcriture,
   FournisseurAmbiguError,
@@ -149,6 +150,7 @@ router.get("/", async (req: Request, res: Response) => {
     res.json(articles);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
 
     res.status(500).json({
       error: "Impossible de récupérer les articles",
@@ -263,7 +265,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     res.status(201).json(article);
   } catch (error) {
-    repondreErreurEcriture(error, res, "Impossible de créer l'article");
+    await repondreErreurEcriture(error, res, "Impossible de créer l'article", req);
   }
 });
 
@@ -409,7 +411,7 @@ router.put("/:id", async (req: Request, res: Response) => {
 
     res.json(article);
   } catch (error) {
-    repondreErreurEcriture(error, res, "Impossible de modifier l'article");
+    await repondreErreurEcriture(error, res, "Impossible de modifier l'article", req);
   }
 });
 
@@ -450,6 +452,7 @@ router.delete("/", async (req: Request, res: Response) => {
     res.json({ supprimes: idsASupprimer.length, proteges: idsProteges.size });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de supprimer les articles" });
   }
 });
@@ -471,6 +474,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de supprimer l'article" });
   }
 });
@@ -1054,6 +1058,7 @@ router.post("/import", async (req: Request, res: Response) => {
     res.json({ crees, misesAJour, inchanges, enAttente, erreurs });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'importer le listing" });
   }
 });
@@ -1266,6 +1271,7 @@ router.post("/import/apercu", async (req: Request, res: Response) => {
     res.json({ propositions });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'analyser le listing" });
   }
 });
@@ -1311,6 +1317,7 @@ router.post("/rechercher-par-reference", async (req: Request, res: Response) => 
     res.json({ trouves });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de rapprocher les codes articles" });
   }
 });

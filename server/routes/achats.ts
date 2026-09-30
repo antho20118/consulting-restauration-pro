@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { calculerPropositionAchat } from "../utils/propositionAchat.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -32,6 +33,7 @@ router.post("/proposition", async (req: Request, res: Response) => {
     res.json(proposition);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de générer la proposition d'achat" });
   }
 });

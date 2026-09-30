@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import prisma from "../prisma.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -30,7 +31,7 @@ router.post("/", async (req, res) => {
 
     res.status(201).json(sousCategorie);
   } catch (error) {
-    repondreErreurEcriture(error, res, "Impossible de créer la sous-catégorie de recette");
+    await repondreErreurEcriture(error, res, "Impossible de créer la sous-catégorie de recette", req);
   }
 });
 
@@ -47,7 +48,7 @@ router.put("/:id", async (req, res) => {
 
     res.json(sousCategorie);
   } catch (error) {
-    repondreErreurEcriture(error, res, "Impossible de modifier la sous-catégorie de recette");
+    await repondreErreurEcriture(error, res, "Impossible de modifier la sous-catégorie de recette", req);
   }
 });
 
@@ -70,6 +71,7 @@ router.delete("/:id", async (req, res) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de supprimer la sous-catégorie de recette" });
   }
 });

@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import prisma from "../prisma.js";
 import { DocumentInvalideError, lireDocument } from "../utils/storageDocumentsFournisseur.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -51,6 +52,7 @@ router.get("/:fournisseurId/:cle", async (req, res) => {
       return;
     }
     console.error(erreur);
+    await journaliserErreur(erreur, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer le document" });
   }
 });

@@ -5,6 +5,7 @@ import { z } from "zod";
 import prisma from "../prisma.js";
 import { creerToken, hacherCode, verifierCode } from "../utils/auth.js";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -80,6 +81,7 @@ router.post("/login", async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de se connecter" });
   }
 });
@@ -127,6 +129,7 @@ router.put("/moi", requireAuth, async (req: Request, res: Response) => {
     res.json({ token });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de modifier le compte" });
   }
 });

@@ -11,6 +11,7 @@ import {
   type ResultatRapprochementVente,
 } from "../utils/rapprochementVentes.js";
 import { calculerCoutsRecettesSansErreur, inclusionsRecette } from "../utils/coutRecette.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -125,6 +126,7 @@ router.post("/import/apercu", async (req: Request, res: Response) => {
     res.json({ lignes: propositions });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'analyser ce fichier de ventes" });
   }
 });
@@ -266,6 +268,7 @@ router.post("/import", async (req: Request, res: Response) => {
     res.status(201).json({ document, validees, rejetees, enAttente, erreurs });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'importer ce fichier de ventes" });
   }
 });
@@ -306,6 +309,7 @@ router.get("/documents", async (req: Request, res: Response) => {
     res.json(resultat);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer l'historique des imports de ventes" });
   }
 });
@@ -391,6 +395,7 @@ router.get("/reconciliation", async (req: Request, res: Response) => {
     res.json({ recettes: resultat });
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de calculer la réconciliation des ventes" });
   }
 });

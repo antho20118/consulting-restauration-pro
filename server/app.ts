@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
+import type { ErrorRequestHandler } from "express";
 import cors from "cors";
 
 import authRouter from "./routes/auth.js";
@@ -33,6 +34,9 @@ import documentsFournisseursRouter from "./routes/documentsFournisseurs.js";
 import listingsFournisseurRouter from "./routes/listingsFournisseur.js";
 import ventesRouter from "./routes/ventes.js";
 import sauvegardesRouter from "./routes/sauvegardes.js";
+import journalErreursRouter from "./routes/journalErreurs.js";
+import journalErreursClientRouter from "./routes/journalErreursClient.js";
+import { journaliserErreur, contexteDepuisRequete } from "./utils/journalErreurs.js";
 
 const app = express();
 
@@ -56,6 +60,9 @@ app.use(express.json({ limit: "10mb" }));
 // sans jeton. Tout le reste de l'API l'exige (vérifié côté serveur, pas seulement caché côté
 // client, sans quoi l'écran de connexion serait contournable en appelant l'API directement).
 app.use("/api/auth", authRouter);
+// Monté avant requireAuth comme /api/auth : un rapport d'erreur client doit pouvoir signaler un
+// jeton justement invalide/expiré (voir journalErreursClient.ts), jamais en exiger un valide.
+app.use("/api/journal-erreurs/client", journalErreursClientRouter);
 app.use("/api", requireAuth);
 
 // Matrice de permissions par rôle (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma) : posée
@@ -96,6 +103,7 @@ app.use("/api/documents-fournisseurs", ECRITURE_GESTION, documentsFournisseursRo
 app.use("/api/listings-fournisseur", ECRITURE_GESTION, listingsFournisseurRouter);
 app.use("/api/ventes", ECRITURE_GESTION, ventesRouter);
 app.use("/api/sauvegardes", requireRole(["PROPRIETAIRE"]), sauvegardesRouter);
+app.use("/api/journal-erreurs", requireRole(["PROPRIETAIRE"]), journalErreursRouter);
 
 app.get("/health", (_req, res) => {
   res.json({
@@ -135,5 +143,40 @@ if (process.env.NODE_ENV === "production") {
     res.sendFile(path.join(distPath, "index.html"));
   });
 }
+
+// Filet de sécurité (signature à 4 paramètres, seule reconnue par Express comme gestionnaire
+// d'erreur) : capture tout ce qui n'a pas déjà été intercepté par le try/catch propre à chaque
+// routeur — une erreur survenue dans un middleware exécuté AVANT d'atteindre une route (ex.
+// requireAuth) n'a par construction aucun try/catch qui l'attende. Sans ce filet, une telle erreur
+// serait passée telle quelle au gestionnaire d'erreur par défaut d'Express au lieu d'un 500 JSON
+// propre et journalisé (voir l'incident qui a motivé ce chantier : un jeton antérieur à la refonte
+// des comptes faisait planter requireAuth.ts).
+// Des middlewares tiers (ex. body-parser derrière express.json(), qui rejette un corps trop
+// volumineux) posent déjà un statut HTTP précis (4xx) sur leur erreur — jamais à écraser par un 500
+// générique, sous peine de transformer une 413/400 légitime en fausse panne serveur.
+function extraireStatutHttp(err: unknown): number | null {
+  if (typeof err !== "object" || err === null) return null;
+  const candidat = (err as { status?: unknown; statusCode?: unknown }).status ??
+    (err as { statusCode?: unknown }).statusCode;
+  return typeof candidat === "number" && candidat >= 400 && candidat < 600 ? candidat : null;
+}
+
+const gestionnaireErreurGlobal: ErrorRequestHandler = async (err, req, res, next) => {
+  console.error(err);
+  const statutHttp = extraireStatutHttp(err) ?? 500;
+  // Attendu (pas fire-and-forget) : ce chemin est déjà le cas exceptionnel (une erreur non gérée
+  // par un routeur), le coût d'une écriture de plus avant de répondre est négligeable face à la
+  // garantie que l'entrée existe bien une fois la réponse envoyée.
+  await journaliserErreur(err, "SERVEUR", contexteDepuisRequete(req, statutHttp));
+
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  const message =
+    statutHttp < 500 && err instanceof Error ? err.message : "Une erreur interne est survenue";
+  res.status(statutHttp).json({ error: message });
+};
+app.use(gestionnaireErreurGlobal);
 
 export default app;

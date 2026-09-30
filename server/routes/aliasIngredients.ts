@@ -4,6 +4,7 @@ import type { Request, Response } from "express";
 import prisma from "../prisma.js";
 import { normaliserTexte } from "../utils/normaliserTexte.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.get("/", async (req: Request, res: Response) => {
     res.json(alias);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de récupérer les correspondances d'ingrédients" });
   }
 });
@@ -71,7 +73,7 @@ router.post("/", async (req: Request, res: Response) => {
 
     res.status(204).send();
   } catch (error) {
-    repondreErreurEcriture(error, res, "Impossible d'enregistrer les correspondances d'ingrédients");
+    await repondreErreurEcriture(error, res, "Impossible d'enregistrer les correspondances d'ingrédients", req);
   }
 });
 

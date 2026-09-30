@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import prisma from "../prisma.js";
+import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
 
@@ -29,6 +30,7 @@ router.post("/", async (req, res) => {
     res.status(201).json(categorie);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de créer la catégorie" });
   }
 });
@@ -44,6 +46,7 @@ router.put("/:id", async (req, res) => {
     res.json(categorie);
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de modifier la catégorie" });
   }
 });
@@ -67,6 +70,7 @@ router.delete("/:id", async (req, res) => {
     res.status(204).send();
   } catch (error) {
     console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de supprimer la catégorie" });
   }
 });
