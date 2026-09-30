@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
+import { getUtilisateur } from "../../../config/api";
 import SocieteSection from "../components/SocieteSection";
 import CategoriesManager from "../components/CategoriesManager";
 import CategoriesRecetteManager from "../components/CategoriesRecetteManager";
 import SousCategoriesRecetteManager from "../components/SousCategoriesRecetteManager";
 import UnitesManager from "../components/UnitesManager";
 import TvaManager from "../components/TvaManager";
+import ComptesManager from "../components/ComptesManager";
 import IdentifiantsSection from "../components/IdentifiantsSection";
 import SauvegardesSection from "../components/SauvegardesSection";
 
@@ -26,6 +28,10 @@ function Section({ titre, children }: { titre: string; children: ReactNode }) {
 }
 
 export default function ParametresPage() {
+  // Masqué côté client à qui n'est pas PROPRIETAIRE (server/routes/utilisateurs.ts refuse
+  // de toute façon la moindre requête avec un autre rôle — jamais une sécurité côté client seule).
+  const estProprietaire = getUtilisateur()?.role === "PROPRIETAIRE";
+
   return (
     <div style={{ padding: 20 }}>
       <h1>⚙ Paramètres</h1>
@@ -33,6 +39,12 @@ export default function ParametresPage() {
       <Section titre="Société">
         <SocieteSection />
       </Section>
+
+      {estProprietaire && (
+        <Section titre="Comptes utilisateurs">
+          <ComptesManager />
+        </Section>
+      )}
 
       <Section titre="Catégories d'ingrédients">
         <CategoriesManager />
@@ -54,7 +66,7 @@ export default function ParametresPage() {
         <TvaManager />
       </Section>
 
-      <Section titre="Identifiants de connexion">
+      <Section titre="Mon compte">
         <IdentifiantsSection />
       </Section>
 

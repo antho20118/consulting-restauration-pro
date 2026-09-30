@@ -5,6 +5,9 @@ import cors from "cors";
 
 import authRouter from "./routes/auth.js";
 import { requireAuth } from "./middleware/requireAuth.js";
+import { autoriserEcriture } from "./middleware/autoriserEcriture.js";
+import { requireRole } from "./middleware/requireRole.js";
+import utilisateursRouter from "./routes/utilisateurs.js";
 import articlesRouter from "./routes/articles.js";
 import categoriesRouter from "./routes/categories.js";
 import categoriesRecetteRouter from "./routes/categoriesRecette.js";
@@ -54,30 +57,43 @@ app.use(express.json({ limit: "10mb" }));
 app.use("/api/auth", authRouter);
 app.use("/api", requireAuth);
 
-app.use("/api/articles", articlesRouter);
-app.use("/api/categories", categoriesRouter);
-app.use("/api/categories-recette", categoriesRecetteRouter);
-app.use("/api/sous-categories-recette", sousCategoriesRecetteRouter);
-app.use("/api/unites", unitesRouter);
-app.use("/api/recettes", recettesRouter);
-app.use("/api/menus", menusRouter);
+// Matrice de permissions par rôle (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma) : posée
+// ici, groupe de routeurs par groupe de routeurs, plutôt qu'éparpillée dans chacun des 24 fichiers
+// de routes, pour que la matrice entière reste auditable en un seul endroit. La lecture (GET) reste
+// toujours ouverte à tout rôle authentifié de la société (voir autoriserEcriture.ts) — seule
+// l'écriture est bornée ; un routeur qui ne mute jamais réellement la base (dashboard, haccp en
+// lecture seule, consulting/production qui ne font qu'un calcul à la volée jamais persisté) n'a
+// donc besoin d'aucune restriction supplémentaire.
+const ECRITURE_GESTION = autoriserEcriture(["PROPRIETAIRE", "CHEF"]);
+const ECRITURE_OPERATIONNEL = autoriserEcriture(["PROPRIETAIRE", "CHEF", "CUISINIER"]);
+
+app.use("/api/utilisateurs", utilisateursRouter);
+app.use("/api/articles", ECRITURE_GESTION, articlesRouter);
+app.use("/api/categories", ECRITURE_GESTION, categoriesRouter);
+app.use("/api/categories-recette", ECRITURE_GESTION, categoriesRecetteRouter);
+app.use("/api/sous-categories-recette", ECRITURE_GESTION, sousCategoriesRecetteRouter);
+app.use("/api/unites", ECRITURE_GESTION, unitesRouter);
+app.use("/api/recettes", ECRITURE_GESTION, recettesRouter);
+app.use("/api/menus", ECRITURE_GESTION, menusRouter);
 app.use("/api/dashboard", dashboardRouter);
-app.use("/api/societe", societeRouter);
-app.use("/api/fournisseurs", fournisseursRouter);
-app.use("/api/tva", tvaRouter);
-app.use("/api/allergenes", allergenesRouter);
-app.use("/api/mouvements", mouvementsRouter);
-app.use("/api/depots", depotsRouter);
-app.use("/api/alias-ingredients", aliasIngredientsRouter);
-app.use("/api/achats", achatsRouter);
-app.use("/api/commandes", commandesRouter);
+// Paramètres société (SIRET, coefficient multiplicateur) : plus sensible que la gestion courante,
+// modification réservée au PROPRIETAIRE — jamais au CHEF, contrairement au reste du groupe gestion.
+app.use("/api/societe", autoriserEcriture(["PROPRIETAIRE"]), societeRouter);
+app.use("/api/fournisseurs", ECRITURE_GESTION, fournisseursRouter);
+app.use("/api/tva", ECRITURE_GESTION, tvaRouter);
+app.use("/api/allergenes", ECRITURE_GESTION, allergenesRouter);
+app.use("/api/mouvements", ECRITURE_OPERATIONNEL, mouvementsRouter);
+app.use("/api/depots", ECRITURE_GESTION, depotsRouter);
+app.use("/api/alias-ingredients", ECRITURE_GESTION, aliasIngredientsRouter);
+app.use("/api/achats", ECRITURE_GESTION, achatsRouter);
+app.use("/api/commandes", ECRITURE_GESTION, commandesRouter);
 app.use("/api/production", productionRouter);
-app.use("/api/productions", productionsRouter);
+app.use("/api/productions", ECRITURE_OPERATIONNEL, productionsRouter);
 app.use("/api/haccp", haccpRouter);
 app.use("/api/consulting", consultingRouter);
-app.use("/api/documents-fournisseurs", documentsFournisseursRouter);
-app.use("/api/listings-fournisseur", listingsFournisseurRouter);
-app.use("/api/sauvegardes", sauvegardesRouter);
+app.use("/api/documents-fournisseurs", ECRITURE_GESTION, documentsFournisseursRouter);
+app.use("/api/listings-fournisseur", ECRITURE_GESTION, listingsFournisseurRouter);
+app.use("/api/sauvegardes", requireRole(["PROPRIETAIRE"]), sauvegardesRouter);
 
 app.get("/health", (_req, res) => {
   res.json({

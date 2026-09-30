@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { creerUtilisateurAdminDeTest } from "../helpers/auth.js";
 
 // Chantier listings/factures fournisseurs, Phase 5 : parcours navigateur réel de la fiche
 // fournisseur — liste → ouverture → 4 onglets → retour liste. Backend + frontend Vite réellement
@@ -13,11 +13,8 @@ let fournisseurId: number;
 let articleId: number;
 
 test.beforeAll(async () => {
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
   const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  await creerUtilisateurAdminDeTest(societe.id);
   societeId = societe.id;
   const categorie = (await prisma.categorie.findFirst()) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test" } }));
   categorieId = categorie.id;

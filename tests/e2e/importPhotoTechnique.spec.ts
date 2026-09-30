@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { creerUtilisateurAdminDeTest } from "../helpers/auth.js";
 
 // Chantier « import photo → technique » (PHASE 17) : test navigateur réel, contre l'application
 // réellement démarrée (backend + frontend Vite), parcourant le vrai chemin utilisateur avec une
@@ -38,12 +38,9 @@ let articleId: number;
 let fournisseurId: number;
 
 test.beforeAll(async () => {
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
 
   const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  await creerUtilisateurAdminDeTest(societe.id);
   societeId = societe.id;
   const categorie = (await prisma.categorie.findFirst()) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test" } }));
   categorieId = categorie.id;

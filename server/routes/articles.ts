@@ -136,10 +136,10 @@ const inclusionsArticle = {
   },
 };
 
-router.get("/", async (_req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
     const articles = await prisma.article.findMany({
-      where: { actif: true },
+      where: { actif: true, societeId: req.utilisateur!.societeId },
       include: inclusionsArticle,
       orderBy: {
         nom: "asc",
@@ -164,24 +164,26 @@ router.post("/", async (req: Request, res: Response) => {
       return;
     }
     const { nom, type, rendement, prixHT, stockInitial, nutrition } = analyse.data;
-    const { reference, categorieId, tvaId, societeId, uniteId, fournisseurNom, allergeneIds } =
-      req.body;
+    const { reference, categorieId, tvaId, uniteId, fournisseurNom, allergeneIds } = req.body;
+    // Jamais depuis req.body : la société d'écriture est celle du compte connecté, jamais une
+    // valeur transmise par le client (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma).
+    const societeId = req.utilisateur!.societeId;
     const confirmationArticleId = req.body.confirmationArticleId;
 
-    // Une référence déjà utilisée par un autre article actif ne doit jamais créer un doublon
-    // silencieusement (voir caractérisation dédiée) : recherche recalculée à CET instant précis
-    // (jamais une liste transmise par le client), comparée comme côté client
+    // Une référence déjà utilisée par un autre article actif de LA MÊME société ne doit jamais
+    // créer un doublon silencieusement (voir caractérisation dédiée) : recherche recalculée à CET
+    // instant précis (jamais une liste transmise par le client), comparée comme côté client
     // (correspondanceArticle.ts::trouverArticlesCorrespondants : trim + insensible à la casse), pour
     // que la confirmation envoyée par l'utilisateur porte bien sur ce que le serveur détecte
-    // réellement. Sans confirmation explicitement liée à l'UN de ces articles précis (jamais un
-    // simple booléen), la création est refusée — un ID confirmé qui ne correspond plus à aucun
-    // doublon recalculé (article désactivé entretemps, ou référence reprise par un autre article
-    // entre la prévisualisation et cet appel) est refusé de la même façon, sans logique dédiée
-    // supplémentaire.
+    // réellement. Scopée par société : une référence peut légitimement se répéter d'une société à
+    // l'autre, et la réponse (nom, référence) d'un doublon détecté ne doit jamais exposer une donnée
+    // d'une autre société. Un ID confirmé qui ne correspond plus à aucun doublon recalculé (article
+    // désactivé entretemps, ou référence reprise par un autre article entre la prévisualisation et
+    // cet appel) est refusé de la même façon, sans logique dédiée supplémentaire.
     const referenceTrim = typeof reference === "string" ? reference.trim() : "";
     if (referenceTrim) {
       const candidatsMemeReference = await prisma.article.findMany({
-        where: { actif: true, reference: { not: null } },
+        where: { actif: true, reference: { not: null }, societeId },
         select: { id: true, nom: true, reference: true },
       });
       const doublons = candidatsMemeReference.filter(
@@ -288,8 +290,8 @@ router.put("/:id", async (req: Request, res: Response) => {
     // est explicitement exclu de la recherche de doublons (id: { not: id }).
     const referenceTrim = typeof reference === "string" ? reference.trim() : "";
     if (referenceTrim) {
-      const articleActuel = await prisma.article.findUnique({
-        where: { id },
+      const articleActuel = await prisma.article.findFirst({
+        where: { id, societeId: req.utilisateur!.societeId },
         select: { reference: true },
       });
       const referenceActuelle = articleActuel?.reference ?? null;
@@ -299,7 +301,12 @@ router.put("/:id", async (req: Request, res: Response) => {
 
       if (!referenceInchangee) {
         const candidatsMemeReference = await prisma.article.findMany({
-          where: { actif: true, reference: { not: null }, id: { not: id } },
+          where: {
+            actif: true,
+            reference: { not: null },
+            id: { not: id },
+            societeId: req.utilisateur!.societeId,
+          },
           select: { id: true, nom: true, reference: true },
         });
         const doublons = candidatsMemeReference.filter(
@@ -317,7 +324,12 @@ router.put("/:id", async (req: Request, res: Response) => {
     }
 
     const article = await prisma.$transaction(async (tx) => {
-      const existant = await tx.article.findUniqueOrThrow({ where: { id } });
+      // Scopé par société : jamais permettre à un compte de modifier un article d'une autre
+      // société en devinant/énumérant simplement un id (voir la matrice de permissions,
+      // server/app.ts — le rôle seul ne suffit pas, l'appartenance à la société non plus).
+      const existant = await tx.article.findFirstOrThrow({
+        where: { id, societeId: req.utilisateur!.societeId },
+      });
 
       await tx.article.update({
         where: { id },
@@ -406,15 +418,20 @@ router.put("/:id", async (req: Request, res: Response) => {
 // remise à zéro du catalogue d'ingrédients. Les tables qui référencent un article sans faire
 // obstacle à sa suppression (tarifs, allergènes, nutrition, documents, mouvements de stock,
 // stocks, alias d'import) sont vidées avec lui.
-router.delete("/", async (_req: Request, res: Response) => {
+router.delete("/", async (req: Request, res: Response) => {
   try {
+    const societeId = req.utilisateur!.societeId;
+
+    // Scopé par société des deux côtés (les articles à supprimer ET les lignes de recette qui les
+    // protègent) : jamais une remise à zéro qui engloberait une AUTRE société au passage.
     const utilises = await prisma.recetteLigne.findMany({
+      where: { article: { societeId } },
       select: { articleId: true },
       distinct: ["articleId"],
     });
     const idsProteges = new Set(utilises.map((l) => l.articleId));
 
-    const tous = await prisma.article.findMany({ select: { id: true } });
+    const tous = await prisma.article.findMany({ where: { societeId }, select: { id: true } });
     const idsASupprimer = tous.map((a) => a.id).filter((id) => !idsProteges.has(id));
 
     if (idsASupprimer.length > 0) {
@@ -442,7 +459,14 @@ router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
-    await prisma.article.update({ where: { id }, data: { actif: false } });
+    const { count } = await prisma.article.updateMany({
+      where: { id, societeId: req.utilisateur!.societeId },
+      data: { actif: false },
+    });
+    if (count === 0) {
+      res.status(404).json({ error: "Article introuvable" });
+      return;
+    }
 
     res.status(204).send();
   } catch (error) {

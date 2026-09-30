@@ -33,5 +33,9 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["tests/**/*.ts"]
+  // server/types/express.d.ts inclus explicitement : les tests important des fichiers server/*.ts
+  // qui lisent req.utilisateur, ce projet indépendant (pas de "references" vers tsconfig.node.json)
+  // revérifie ces fichiers depuis zéro et doit donc voir la même augmentation globale
+  // d'Express.Request, sinon il échoue sur une propriété "inexistante" qui existe pourtant bien.
+  "include": ["tests/**/*.ts", "server/types/**/*.d.ts"]
 }

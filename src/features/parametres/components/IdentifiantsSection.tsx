@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { modifierIdentifiants } from "../../auth/services/authService";
+import { modifierMonCompte } from "../../auth/services/authService";
 
 export default function IdentifiantsSection() {
   const [codeActuel, setCodeActuel] = useState("");
@@ -18,7 +18,7 @@ export default function IdentifiantsSection() {
     }
 
     try {
-      await modifierIdentifiants(codeActuel, nouvelIdentifiant.trim(), nouveauCode);
+      await modifierMonCompte(codeActuel, nouvelIdentifiant.trim(), nouveauCode);
       setMessage("Identifiants modifiés avec succès");
       setCodeActuel("");
       setNouvelIdentifiant("");

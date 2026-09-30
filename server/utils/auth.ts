@@ -22,15 +22,27 @@ export function verifierCode(code: string, hache: string): boolean {
   return bcrypt.compareSync(code, hache);
 }
 
-export function creerToken(identifiant: string): string {
-  return jwt.sign({ identifiant }, SECRET_EFFECTIF, { expiresIn: DUREE_TOKEN });
+// Un compte par personne (voir Utilisateur, prisma/schema.prisma) : le jeton porte l'identité
+// entière (id, rôle, société) pour que le reste du serveur n'ait plus jamais à faire confiance à
+// un societeId envoyé par le client — voir requireAuth.ts, qui peuple req.utilisateur à partir de
+// ce payload.
+export type PayloadUtilisateur = {
+  id: number;
+  identifiant: string;
+  role: "PROPRIETAIRE" | "CHEF" | "CUISINIER" | "CONSULTANT";
+  societeId: number;
+};
+
+export function creerToken(payload: PayloadUtilisateur): string {
+  return jwt.sign(payload, SECRET_EFFECTIF, { expiresIn: DUREE_TOKEN });
 }
 
-export function verifierToken(token: string): boolean {
+// null si le jeton est absent/invalide/expiré — jamais un simple booléen (voir requireAuth.ts, qui
+// a besoin du payload décodé, pas seulement de savoir s'il est valide).
+export function verifierToken(token: string): PayloadUtilisateur | null {
   try {
-    jwt.verify(token, SECRET_EFFECTIF);
-    return true;
+    return jwt.verify(token, SECRET_EFFECTIF) as PayloadUtilisateur;
   } catch {
-    return false;
+    return null;
   }
 }

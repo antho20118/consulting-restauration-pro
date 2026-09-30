@@ -1,7 +1,6 @@
 import { test, expect } from "@playwright/test";
 import fs from "node:fs/promises";
-import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { creerAdminDeTestAvecSociete } from "../helpers/auth.js";
 import { racineStockage } from "../../server/utils/storageDocumentsFournisseur.js";
 import path from "node:path";
 
@@ -14,10 +13,7 @@ const NOM_FICHIER = "sauvegarde-2026-06-15T10-30-00-000Z.json";
 let cheminFichier: string;
 
 test.beforeAll(async () => {
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
+  await creerAdminDeTestAvecSociete();
 
   const dossier = path.join(racineStockage(), "sauvegardes");
   await fs.mkdir(dossier, { recursive: true });

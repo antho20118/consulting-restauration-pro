@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { creerUtilisateurAdminDeTest } from "../helpers/auth.js";
 
 // Chantier « refonte liste fournisseurs » + « regroupement des tarifs homonymes » — parcours
 // navigateur réel : deux fournisseurs physiques partageant le même nom (après trim, casse-
@@ -27,11 +27,8 @@ let articleBeurreId: number;
 const NOM_PARTAGE = "E2E HOMONYME Regroupement Test";
 
 test.beforeAll(async () => {
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
   const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  await creerUtilisateurAdminDeTest(societe.id);
   societeId = societe.id;
   const categorie = (await prisma.categorie.findFirst()) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test" } }));
   categorieId = categorie.id;

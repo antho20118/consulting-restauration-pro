@@ -1,6 +1,5 @@
 import { test, expect } from "@playwright/test";
-import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { creerAdminDeTestAvecSociete } from "../helpers/auth.js";
 
 // La barre latérale (largeur fixe 260px) restait toujours visible, y compris sur mobile : sur un
 // écran étroit, elle ne laissait presque plus de place au contenu principal et forçait toute la
@@ -12,10 +11,7 @@ import { hacherCode } from "../../server/utils/auth.js";
 test.use({ viewport: { width: 390, height: 844 } });
 
 test.beforeAll(async () => {
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
+  await creerAdminDeTestAvecSociete();
 });
 
 test("mobile (390px) : pas de débordement horizontal, la barre latérale s'ouvre et se ferme via le bouton menu", async ({

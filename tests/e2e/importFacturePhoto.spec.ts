@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs/promises";
 import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { creerUtilisateurAdminDeTest } from "../helpers/auth.js";
 
 // Chantier factures fournisseurs, Phase 6 (option C — déduplication graduée) : parcours navigateur
 // réel (backend + frontend Vite réellement démarrés, vraie photo rendue par Chromium puis relue par
@@ -37,11 +37,8 @@ test.beforeAll(async () => {
   await page.screenshot({ path: CHEMIN_PHOTO });
   await navigateur.close();
 
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
   const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  await creerUtilisateurAdminDeTest(societe.id);
   societeId = societe.id;
 
   const fournisseur = await prisma.fournisseur.create({ data: { nom: "E2E FACTURE PHOTO Fournisseur", societeId } });

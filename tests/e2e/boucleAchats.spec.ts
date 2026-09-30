@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { creerUtilisateurAdminDeTest } from "../helpers/auth.js";
 
 // Boucle achats complète (Phase 1 du plan d'action) : jusqu'ici la page Production proposait un
 // achat mais rien ne permettait de l'enregistrer, ni de le réceptionner, ni de mettre à jour le
@@ -22,11 +22,8 @@ let recetteId: number;
 let commandeId: number;
 
 test.beforeAll(async () => {
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
   const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  await creerUtilisateurAdminDeTest(societe.id);
   societeId = societe.id;
   const categorie = (await prisma.categorie.findFirst()) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test" } }));
   categorieId = categorie.id;

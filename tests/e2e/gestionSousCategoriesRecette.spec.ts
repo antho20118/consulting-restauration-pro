@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { creerAdminDeTestAvecSociete } from "../helpers/auth.js";
 
 // Audit backend→interface (priorité 2, restant) : POST/PUT/DELETE /sous-categories-recette
 // existaient déjà côté serveur (CRUD complet, y compris la protection contre la suppression d'une
@@ -10,10 +10,7 @@ import { hacherCode } from "../../server/utils/auth.js";
 // Paramètres.
 
 test.beforeAll(async () => {
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
+  await creerAdminDeTestAvecSociete();
 });
 
 test.afterAll(async () => {

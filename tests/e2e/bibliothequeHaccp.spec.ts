@@ -1,6 +1,5 @@
 import { test, expect } from "@playwright/test";
-import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { creerAdminDeTestAvecSociete } from "../helpers/auth.js";
 
 // Audit backend→interface (priorité 3) : GET /haccp/regles renvoyait déjà la bibliothèque
 // complète de règles HACCP (risque, mesure préventive, limite critique, surveillance, action
@@ -9,10 +8,7 @@ import { hacherCode } from "../../server/utils/auth.js";
 // parcours vérifie la nouvelle page de référence, indépendante de toute recette.
 
 test.beforeAll(async () => {
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
+  await creerAdminDeTestAvecSociete();
 });
 
 test("page HACCP : la bibliothèque de règles est accessible depuis la barre latérale, avec le détail complet de chaque règle", async ({

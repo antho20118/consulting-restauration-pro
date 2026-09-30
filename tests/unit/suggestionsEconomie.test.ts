@@ -7,7 +7,7 @@ import {
 } from "../../server/utils/suggestionsEconomie.js";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { connecterAdminDeTest } from "../helpers/auth.js";
 
 // Teste server/utils/suggestionsEconomie.ts après le retrait complet de la comparaison
 // inter-articles (voir l'audit produit : le module suggérait des remplacements absurdes du type
@@ -222,17 +222,7 @@ before(async () => {
   if (!adresse || typeof adresse === "string") throw new Error("Adresse du serveur de test invalide");
   baseUrl = `http://127.0.0.1:${adresse.port}`;
 
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
-  const reponseLogin = await fetch(`${baseUrl}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ identifiant: "admin", code: "1234" }),
-  });
-  assert.equal(reponseLogin.status, 200, "Connexion admin/1234 impossible");
-  token = (await reponseLogin.json()).token;
+  token = await connecterAdminDeTest(baseUrl);
 
   const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;

@@ -1,6 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { creerAdminDeTestAvecSociete } from "../helpers/auth.js";
 
 // Audit mobile complet (au-delà de la barre latérale, déjà couverte par
 // menuMobileResponsive.spec.ts) : plusieurs familles de débordement horizontal repérées sur des
@@ -33,10 +32,7 @@ import { hacherCode } from "../../server/utils/auth.js";
 test.use({ viewport: { width: 390, height: 844 } });
 
 test.beforeAll(async () => {
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
+  await creerAdminDeTestAvecSociete();
 });
 
 async function elementsDebordants(page: Page): Promise<string[]> {

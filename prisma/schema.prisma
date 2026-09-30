@@ -17,14 +17,34 @@ enum TypeArticle {
   PETIT_MATERIEL
 }
 
-// Un seul identifiant/code partagé pour toute l'équipe (pas de notion d'utilisateur nominatif
-// dans le reste de l'appli, une seule société) : une ligne unique (id=1), comme Societe. Le code
-// n'est jamais stocké en clair (codeHache).
-model AccesApplication {
-  id          Int      @id @default(autoincrement())
-  identifiant String
+// Remplace l'ancien AccesApplication (un seul identifiant/code partagé pour toute l'équipe) : un
+// compte nominatif par personne, avec un rôle qui borne ce qu'il peut écrire (voir la matrice de
+// permissions dans server/app.ts). Sert aussi de traçabilité — qui a validé un contrôle HACCP ou
+// enregistré une production (voir Production.creePar / ControleHACCPProduction.creePar) — jamais
+// possible avec un code partagé. Rattaché à UNE SEULE société : un consultant qui intervient sur
+// plusieurs sociétés a un compte par société, jamais un compte multi-société implicite.
+enum RoleUtilisateur {
+  PROPRIETAIRE // Accès total : paramètres société, gestion des comptes, tout le reste.
+  CHEF // Recettes, HACCP, production, achats/fournisseurs ; pas les paramètres société ni les comptes.
+  CUISINIER // Lecture des recettes + saisie des contrôles HACCP et de la production ; jamais les prix/achats.
+  CONSULTANT // Lecture seule partout, aucune écriture.
+}
+
+model Utilisateur {
+  id          Int             @id @default(autoincrement())
+  identifiant String          @unique
   codeHache   String
-  updatedAt   DateTime @updatedAt
+  role        RoleUtilisateur
+  actif       Boolean         @default(true)
+
+  societeId Int
+  societe   Societe @relation(fields: [societeId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productionsCreees Production[]
+  controlesCrees    ControleHACCPProduction[]
 }
 
 model Societe {
@@ -51,6 +71,7 @@ model Societe {
   recettes     Recette[]
   menus        Menu[]
   productions  Production[]
+  utilisateurs Utilisateur[]
 }
 
 model Depot {
@@ -642,6 +663,12 @@ model Production {
   portionsProduites Float
   poidsFiniProduitG Float
 
+  // Qui a enregistré cette production — nullable et jamais supprimé en cascade : un compte
+  // désactivé plus tard ne doit jamais effacer une preuve de traçabilité déjà enregistrée (même
+  // principe que ControleHACCPProduction.creePar juste après).
+  creeParId Int?
+  creePar   Utilisateur? @relation(fields: [creeParId], references: [id])
+
   createdAt DateTime @default(now())
 
   controles ControleHACCPProduction[]
@@ -667,6 +694,12 @@ model ControleHACCPProduction {
   valeur      String
   conforme    Boolean
   commentaire String?
+
+  // Qui a réellement validé ce contrôle — c'est précisément la question qu'un contrôle sanitaire
+  // pose ("qui a constaté cette valeur, pas seulement quand"), jamais couverte par un code d'accès
+  // partagé. Nullable et jamais supprimé en cascade : voir Production.creeParId ci-dessus.
+  creeParId Int?
+  creePar   Utilisateur? @relation(fields: [creeParId], references: [id])
 
   createdAt DateTime @default(now())
 

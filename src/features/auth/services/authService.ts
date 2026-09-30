@@ -1,4 +1,4 @@
-import { API_URL, apiFetch, setToken } from "../../../config/api";
+import { API_URL, apiFetch, setToken, setUtilisateur } from "../../../config/api";
 
 // Utilise fetch (pas apiFetch) : la connexion n'a pas encore de jeton, et un échec ici ne doit pas
 // déclencher l'événement "auth:logout" (on est déjà sur l'écran de connexion).
@@ -16,14 +16,17 @@ export async function seConnecter(identifiant: string, code: string): Promise<vo
   }
 
   setToken(data.token);
+  setUtilisateur(data.utilisateur);
 }
 
-export async function modifierIdentifiants(
+// Modifie SON PROPRE compte (identifiant + code) — voir server/routes/utilisateurs.ts pour la
+// gestion d'un autre compte par un PROPRIETAIRE.
+export async function modifierMonCompte(
   codeActuel: string,
   nouvelIdentifiant: string,
   nouveauCode: string
 ): Promise<void> {
-  const response = await apiFetch(`${API_URL}/auth/identifiants`, {
+  const response = await apiFetch(`${API_URL}/auth/moi`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ codeActuel, nouvelIdentifiant, nouveauCode }),
@@ -32,7 +35,7 @@ export async function modifierIdentifiants(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(data?.error ?? "Impossible de modifier les identifiants");
+    throw new Error(data?.error ?? "Impossible de modifier le compte");
   }
 
   // Le jeton précédent porte l'ancien identifiant : on le remplace pour rester connecté.

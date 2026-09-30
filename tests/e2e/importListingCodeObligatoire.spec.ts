@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { creerUtilisateurAdminDeTest } from "../helpers/auth.js";
 
 // Correction de l'anomalie UX relevée par l'audit indépendant de la correction « identification des
 // articles lors des imports de listings fournisseurs » : le champ "Code produit fournisseur" du
@@ -14,12 +14,9 @@ import { hacherCode } from "../../server/utils/auth.js";
 let fournisseurId: number;
 
 test.beforeAll(async () => {
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
 
   const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  await creerUtilisateurAdminDeTest(societe.id);
 
   const fournisseur = await prisma.fournisseur.create({ data: { nom: "E2E CODE OBLIGATOIRE Fournisseur", societeId: societe.id } });
   fournisseurId = fournisseur.id;

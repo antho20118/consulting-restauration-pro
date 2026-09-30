@@ -17,7 +17,7 @@ function importerModuleAuth(env: Record<string, string | undefined>): { code: nu
   const script = `
     import("./server/utils/auth.js")
       .then((mod) => {
-        const token = mod.creerToken("test");
+        const token = mod.creerToken({ id: 1, identifiant: "test", role: "PROPRIETAIRE", societeId: 1 });
         console.log("MODULE_CHARGE token_non_vide=" + (typeof token === "string" && token.length > 0));
         process.exit(0);
       })

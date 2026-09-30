@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { creerUtilisateurAdminDeTest } from "../helpers/auth.js";
 
 // Audit backend→interface (priorité 2) : POST /fournisseurs/:id/reactiver existait déjà côté
 // serveur (soft-delete réversible, id/codeFournisseur jamais régénérés) mais aucun chemin
@@ -12,11 +12,8 @@ let societeId: number;
 let fournisseurId: number;
 
 test.beforeAll(async () => {
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({ data: { identifiant: "admin", codeHache: hacherCode("1234") } });
-  }
   const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  await creerUtilisateurAdminDeTest(societe.id);
   societeId = societe.id;
 
   // Créé directement désactivé (equivalent d'un DELETE déjà effectué) : ce test porte sur la

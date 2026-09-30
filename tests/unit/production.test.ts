@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
-import { hacherCode } from "../../server/utils/auth.js";
+import { connecterAdminDeTest } from "../helpers/auth.js";
 
 // Test d'intégration réel : démarre l'application Express réelle sur un port éphémère, crée les
 // données nécessaires via Prisma/l'API réelle sur la base Postgres configurée par DATABASE_URL,
@@ -64,24 +64,7 @@ before(async () => {
   // server/routes/auth.ts) : réutilise celui déjà en place s'il existe (convention du projet :
   // admin/1234), ou le crée s'il n'existe pas encore (environnement de test neuf). Ne modifie
   // jamais un identifiant déjà présent.
-  const accesExistant = await prisma.accesApplication.findFirst();
-  if (!accesExistant) {
-    await prisma.accesApplication.create({
-      data: { identifiant: "admin", codeHache: hacherCode("1234") },
-    });
-  }
-
-  const reponseLogin = await fetch(`${baseUrl}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ identifiant: "admin", code: "1234" }),
-  });
-  assert.equal(
-    reponseLogin.status,
-    200,
-    "Connexion admin/1234 impossible : un identifiant différent est déjà configuré sur cette base de test."
-  );
-  token = (await reponseLogin.json()).token;
+  token = await connecterAdminDeTest(baseUrl);
 
   // Données de référence attendues déjà présentes via `npm run db:seed` ; créées ici à la volée
   // si absentes, pour que ce test reste indépendant de l'ordre d'exécution du seed.
