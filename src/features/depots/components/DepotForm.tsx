@@ -20,7 +20,7 @@ export default function DepotForm({ depot, onClose, onSave }: Props) {
       if (depot) {
         await modifierDepot(depot.id, payload);
       } else {
-        await creerDepot({ ...payload, societeId: 1 });
+        await creerDepot(payload);
       }
 
       onSave();

@@ -1,13 +1,16 @@
 import { Router } from "express";
+import type { Request, Response } from "express";
 
 import prisma from "../prisma.js";
 
 const router = Router();
 
-// L'application est mono-société : on renvoie la première (et normalement unique) société
-router.get("/", async (_req, res) => {
+// Une société par compte connecté (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma) :
+// toujours celle de l'identité authentifiée, jamais "la première" — chaque société ne voit et ne
+// modifie jamais que ses propres paramètres.
+router.get("/", async (req: Request, res: Response) => {
   try {
-    const societe = await prisma.societe.findFirst({ orderBy: { id: "asc" } });
+    const societe = await prisma.societe.findUnique({ where: { id: req.utilisateur!.societeId } });
     res.json(societe);
   } catch (error) {
     console.error(error);
@@ -15,9 +18,17 @@ router.get("/", async (_req, res) => {
   }
 });
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    // Scopé par société : jamais permettre de modifier les paramètres d'une AUTRE société en
+    // devinant/énumérant simplement un id, même pour un PROPRIETAIRE (voir la matrice de
+    // permissions, server/app.ts — le rôle seul ne suffit pas).
+    if (id !== req.utilisateur!.societeId) {
+      res.status(404).json({ error: "Société introuvable" });
+      return;
+    }
+
     const { nom, coefficientMultiplicateur } = req.body as {
       nom: string;
       coefficientMultiplicateur?: number | null;

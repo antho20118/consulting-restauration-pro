@@ -41,9 +41,12 @@ function mouvementAvecUniteBase<T extends { article: { tarifs: { unite: { type: 
   };
 }
 
-router.get("/", async (_req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
+    // MouvementStock n'a pas de societeId propre : scopé transitivement par l'article concerné
+    // (voir DELETE /articles, server/routes/articles.ts, même principe).
     const mouvements = await prisma.mouvementStock.findMany({
+      where: { article: { societeId: req.utilisateur!.societeId } },
       include: {
         article: inclusionArticleAvecUnite,
         depot: true,
@@ -68,9 +71,13 @@ router.post("/", async (req: Request, res: Response) => {
     }
     const { articleId, depotId, type, quantite, motif } = analyse.data;
 
+    const societeId = req.utilisateur!.societeId;
+
     const mouvement = await prisma.$transaction(async (tx) => {
-      await tx.article.findUniqueOrThrow({ where: { id: articleId } });
-      await tx.depot.findUniqueOrThrow({ where: { id: depotId } });
+      // Scopés par société : jamais permettre à un compte de mouvementer le stock d'un article ou
+      // d'un dépôt d'une autre société en devinant/énumérant simplement un id.
+      await tx.article.findFirstOrThrow({ where: { id: articleId, societeId } });
+      await tx.depot.findFirstOrThrow({ where: { id: depotId, societeId } });
 
       const { id } = await appliquerMouvementStock(tx, { articleId, depotId, type, quantite, motif });
 

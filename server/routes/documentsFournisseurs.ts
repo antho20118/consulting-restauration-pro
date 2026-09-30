@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import prisma from "../prisma.js";
 import { DocumentInvalideError, lireDocument } from "../utils/storageDocumentsFournisseur.js";
 
 const router = Router();
@@ -15,7 +16,23 @@ router.get("/:fournisseurId/:cle", async (req, res) => {
   const fournisseurId = Number(req.params.fournisseurId);
   const { cle } = req.params;
 
+  if (!Number.isInteger(fournisseurId) || fournisseurId <= 0) {
+    res.status(400).json({ error: "Identifiant fournisseur invalide" });
+    return;
+  }
+
   try {
+    // Scopé par société en défense en profondeur : même si cle est un UUID difficile à deviner,
+    // jamais servir le document d'un fournisseur d'une autre société en devinant/énumérant
+    // simplement un fournisseurId.
+    const fournisseur = await prisma.fournisseur.findFirst({
+      where: { id: fournisseurId, societeId: req.utilisateur!.societeId },
+    });
+    if (!fournisseur) {
+      res.status(404).json({ error: "Document introuvable" });
+      return;
+    }
+
     const document = await lireDocument(fournisseurId, cle);
     if (!document) {
       res.status(404).json({ error: "Document introuvable" });

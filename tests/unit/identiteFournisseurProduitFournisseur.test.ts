@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
 import { connecterAdminDeTest } from "../helpers/auth.js";
+import { genererCodeFournisseur } from "../../server/routes/fournisseurs.js";
 
 // Test d'intégration réel (app Express réelle, vrai Postgres) — chantier « identité fournisseur +
 // produit fournisseur + historique des tarifs ». Couvre : génération atomique de codeFournisseur
@@ -24,11 +25,11 @@ function authHeaders() {
   return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 }
 
-async function creerFournisseur(nom: string, societe = societeId) {
+async function creerFournisseur(nom: string) {
   const reponse = await fetch(`${baseUrl}/api/fournisseurs`, {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ nom, societeId: societe }),
+    body: JSON.stringify({ nom }),
   });
   const corps = await reponse.json();
   return { status: reponse.status, corps };
@@ -124,10 +125,15 @@ test("A2 — deux créations successives dans la même société reçoivent des 
   assert.ok(n2 > n1, `attendu n2 (${n2}) > n1 (${n1})`);
 });
 
+// Depuis le chantier isolation société : POST /fournisseurs ignore désormais tout societeId transmis
+// par le client (toujours dérivé du compte connecté) — impossible de créer, via l'API, un
+// fournisseur dans une société arbitraire choisie dans le corps de la requête (précisément ce que
+// ce test vérifiait auparavant sans le vouloir). Le comportement du compteur par société
+// (genererCodeFournisseur), lui, reste inchangé : vérifié ici directement au niveau utilitaire,
+// dans une vraie transaction Prisma, plutôt qu'au travers d'une route qui ne le permet plus.
 test("A3 — le compteur est indépendant par société (le même numéro peut apparaître dans deux sociétés)", async () => {
-  const rSocieteB = await creerFournisseur("PFI TEST Fournisseur A3 SocieteB", societeIdAutre);
-  assert.equal(rSocieteB.status, 201);
-  assert.match(rSocieteB.corps.codeFournisseur, /^FOU-0*1$/);
+  const code = await prisma.$transaction((tx) => genererCodeFournisseur(tx, societeIdAutre));
+  assert.match(code, /^FOU-0*1$/);
 });
 
 test("A4 — créations concurrentes réelles : tous les codes générés sont distincts (jamais de doublon)", async () => {

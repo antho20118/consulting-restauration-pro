@@ -45,10 +45,10 @@ const schemaGainCuissonPct = z
   .optional();
 
 // Liste des recettes
-router.get("/", async (_req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
     const recettes = await prisma.recette.findMany({
-      where: { actif: true },
+      where: { actif: true, societeId: req.utilisateur!.societeId },
       include: inclusionsRecette,
       orderBy: { nom: "asc" },
     });
@@ -66,9 +66,10 @@ router.get("/", async (_req: Request, res: Response) => {
 // jour par cet import sans jamais être réactivée automatiquement — juste le strict nécessaire
 // (id/nom/actif) pour la correspondance, jamais les coûts ou le détail complet.
 // Doit rester déclarée AVANT GET /:id pour ne pas être interceptée par cette route générique.
-router.get("/toutes-pour-correspondance", async (_req: Request, res: Response) => {
+router.get("/toutes-pour-correspondance", async (req: Request, res: Response) => {
   try {
     const recettes = await prisma.recette.findMany({
+      where: { societeId: req.utilisateur!.societeId },
       select: { id: true, nom: true, actif: true },
       orderBy: { nom: "asc" },
     });
@@ -85,8 +86,10 @@ router.get("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
-    const recette = await prisma.recette.findUnique({
-      where: { id },
+    // Scopé par société : jamais permettre de deviner/énumérer une recette d'une autre société en
+    // devinant simplement un id (voir la matrice de permissions, server/app.ts).
+    const recette = await prisma.recette.findFirst({
+      where: { id, societeId: req.utilisateur!.societeId },
       include: inclusionsRecette,
     });
 
@@ -109,7 +112,7 @@ router.get("/:id/suggestions-economie", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
-    const suggestions = await suggestionsEconomieRecette(id);
+    const suggestions = await suggestionsEconomieRecette(id, req.utilisateur!.societeId);
 
     res.json(suggestions);
   } catch (error) {
@@ -228,7 +231,6 @@ type DecisionImportExcel =
       nom: string;
       categorieId: number | null;
       sousCategorieId: number | null;
-      societeId: number;
       lignes: { articleId: number; quantite: number; uniteId: number; gainCuissonPct?: number }[];
     }
   | {
@@ -294,6 +296,10 @@ router.post("/import-excel", async (req: Request, res: Response) => {
       return;
     }
 
+    // Jamais depuis req.body : la société d'écriture est celle du compte connecté, jamais une
+    // valeur transmise par le client (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma).
+    const societeId = req.utilisateur!.societeId;
+
     const resultats = await prisma.$transaction(async (tx) => {
       const sortie: { action: DecisionImportExcel["action"]; recette: ReturnType<typeof calculerCoutRecette> }[] = [];
 
@@ -304,7 +310,7 @@ router.post("/import-excel", async (req: Request, res: Response) => {
               nom: decision.nom,
               categorieId: decision.categorieId ?? null,
               sousCategorieId: decision.sousCategorieId ?? null,
-              societeId: decision.societeId,
+              societeId,
               lignes: {
                 create: decision.lignes.map((ligne, index) => ({
                   articleId: ligne.articleId,
@@ -321,7 +327,9 @@ router.post("/import-excel", async (req: Request, res: Response) => {
           });
           sortie.push({ action: "creer", recette: calculerCoutRecette(creee) });
         } else {
-          const existante = await tx.recette.findUnique({ where: { id: decision.recetteId } });
+          // Scopé par société : jamais permettre à cet import de mettre à jour une recette d'une
+          // autre société en devinant simplement un id.
+          const existante = await tx.recette.findFirst({ where: { id: decision.recetteId, societeId } });
           if (!existante) {
             // Lève dans la transaction : Prisma annule automatiquement tout ce qui a déjà été fait
             // dans ce même $transaction (créations et mises à jour précédentes de ce lot incluses).
@@ -377,7 +385,6 @@ router.post("/", async (req: Request, res: Response) => {
     const {
       categorieId,
       sousCategorieId,
-      societeId,
       portions,
       instructions,
       photo,
@@ -388,7 +395,6 @@ router.post("/", async (req: Request, res: Response) => {
     } = req.body as {
       categorieId?: number | null;
       sousCategorieId?: number | null;
-      societeId: number;
       portions?: number;
       instructions?: string | null;
       photo?: string | null;
@@ -418,6 +424,10 @@ router.post("/", async (req: Request, res: Response) => {
     // portions=0) était bel et bien enregistrée en base malgré la réponse 500 renvoyée au client
     // (voir l'audit de l'agent Consulting, qui a découvert ce cas en la rendant impossible à
     // analyser par la suite).
+    // Jamais depuis req.body : la société d'écriture est celle du compte connecté, jamais une
+    // valeur transmise par le client (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma).
+    const societeId = req.utilisateur!.societeId;
+
     const recette = await prisma.$transaction(async (tx) => {
       const creee = await tx.recette.create({
         data: {
@@ -511,6 +521,11 @@ router.put("/:id", async (req: Request, res: Response) => {
     // remplacement des lignes/étapes déjà effectué si elle échoue — même correctif et même raison
     // que pour la création ci-dessus (voir son commentaire).
     const recette = await prisma.$transaction(async (tx) => {
+      // Scopé par société : jamais permettre à un compte de modifier une recette d'une autre
+      // société en devinant/énumérant simplement un id (voir la matrice de permissions,
+      // server/app.ts).
+      await tx.recette.findFirstOrThrow({ where: { id, societeId: req.utilisateur!.societeId } });
+
       await tx.recetteLigne.deleteMany({ where: { recetteId: id } });
       await tx.recetteEtape.deleteMany({ where: { recetteId: id } });
 
@@ -559,10 +574,10 @@ router.put("/:id", async (req: Request, res: Response) => {
 // Suppression (douce) de toutes les recettes actives : même principe que la suppression
 // individuelle ci-dessous (actif: false, rien n'est effacé), pour repartir d'une liste vide sans
 // perdre irréversiblement les données en cas d'erreur.
-router.delete("/", async (_req: Request, res: Response) => {
+router.delete("/", async (req: Request, res: Response) => {
   try {
     const { count } = await prisma.recette.updateMany({
-      where: { actif: true },
+      where: { actif: true, societeId: req.utilisateur!.societeId },
       data: { actif: false },
     });
 
@@ -578,7 +593,14 @@ router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
-    await prisma.recette.update({ where: { id }, data: { actif: false } });
+    const { count } = await prisma.recette.updateMany({
+      where: { id, societeId: req.utilisateur!.societeId },
+      data: { actif: false },
+    });
+    if (count === 0) {
+      res.status(404).json({ error: "Recette introuvable" });
+      return;
+    }
 
     res.status(204).send();
   } catch (error) {

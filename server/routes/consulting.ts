@@ -22,8 +22,10 @@ router.post("/analyser-recette", async (req, res) => {
   }
 
   try {
-    const recette = await prisma.recette.findUnique({
-      where: { id: parsed.data.recetteId },
+    // Scopé par société : jamais permettre d'analyser une recette d'une autre société en
+    // devinant/énumérant simplement un id (voir la matrice de permissions, server/app.ts).
+    const recette = await prisma.recette.findFirst({
+      where: { id: parsed.data.recetteId, societeId: req.utilisateur!.societeId },
       include: inclusionsRecette,
     });
     if (!recette) {

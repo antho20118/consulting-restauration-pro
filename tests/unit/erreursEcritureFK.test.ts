@@ -117,18 +117,22 @@ after(async () => {
   });
 });
 
-test("1. POST /depots avec societeId inexistant : 400, aucune écriture", async () => {
-  const { status } = await poster("/api/depots", { nom: "ERREURS FK TEST Depot", societeId: ID_INEXISTANT });
-  assert.equal(status, 400);
-  const cree = await prisma.depot.findFirst({ where: { nom: "ERREURS FK TEST Depot" } });
-  assert.equal(cree, null, "aucun dépôt ne doit avoir été créé");
+// Depuis le chantier isolation société : societeId n'est plus jamais lu depuis req.body (toujours
+// dérivé du compte connecté, voir Utilisateur/RoleUtilisateur, prisma/schema.prisma) — un
+// societeId inexistant transmis par le client est donc simplement ignoré, jamais une cause de
+// violation FK : la création réussit, avec le societeId réel du compte connecté.
+test("1. POST /depots : un societeId transmis par le client est ignoré, la création utilise la société connectée", async () => {
+  const { status, corps } = await poster("/api/depots", { nom: "ERREURS FK TEST Depot", societeId: ID_INEXISTANT });
+  assert.equal(status, 201);
+  assert.equal(corps.societeId, societeId);
+  idsDepot.push(corps.id);
 });
 
-test("2. POST /fournisseurs avec societeId inexistant : 400, aucune écriture", async () => {
-  const { status } = await poster("/api/fournisseurs", { nom: "ERREURS FK TEST Fournisseur", societeId: ID_INEXISTANT });
-  assert.equal(status, 400);
-  const cree = await prisma.fournisseur.findFirst({ where: { nom: "ERREURS FK TEST Fournisseur" } });
-  assert.equal(cree, null, "aucun fournisseur ne doit avoir été créé");
+test("2. POST /fournisseurs : un societeId transmis par le client est ignoré, la création utilise la société connectée", async () => {
+  const { status, corps } = await poster("/api/fournisseurs", { nom: "ERREURS FK TEST Fournisseur", societeId: ID_INEXISTANT });
+  assert.equal(status, 201);
+  assert.equal(corps.societeId, societeId);
+  idsFournisseur.push(corps.id);
 });
 
 test("3. POST /sous-categories-recette avec parentId inexistant : 400, aucune écriture", async () => {
@@ -150,11 +154,11 @@ test("4. PUT /sous-categories-recette/:id avec parentId inexistant : 400, valeur
   assert.equal(enBase.parentId, null);
 });
 
-test("5. POST /menus avec societeId inexistant : 400, aucune écriture", async () => {
-  const { status } = await poster("/api/menus", { nom: "ERREURS FK TEST Menu Societe", societeId: ID_INEXISTANT, lignes: [] });
-  assert.equal(status, 400);
-  const cree = await prisma.menu.findFirst({ where: { nom: "ERREURS FK TEST Menu Societe" } });
-  assert.equal(cree, null, "aucun menu ne doit avoir été créé");
+test("5. POST /menus : un societeId transmis par le client est ignoré, la création utilise la société connectée", async () => {
+  const { status, corps } = await poster("/api/menus", { nom: "ERREURS FK TEST Menu Societe", societeId: ID_INEXISTANT, lignes: [] });
+  assert.equal(status, 201);
+  assert.equal(corps.societeId, societeId);
+  idsMenu.push(corps.id);
 });
 
 test("6. POST /menus avec categorieId inexistant : 400, aucune écriture", async () => {
@@ -191,12 +195,17 @@ test("8. PUT /menus/:id avec categorieId inexistant : 400, valeur d'origine cons
   assert.equal(enBase.categorieId, null);
 });
 
-test("9. POST /alias-ingredients avec articleId inexistant : 400, aucune écriture", async () => {
+// Depuis le chantier isolation société : un articleId ne correspondant à aucun article de la
+// société connectée (qu'il soit inexistant ou appartienne à une autre société) est filtré AVANT
+// d'atteindre Prisma (voir server/routes/aliasIngredients.ts) — jamais de violation FK, la requête
+// réussit (204) mais n'écrit silencieusement rien, même principe permissif que pour un articleId
+// désactivé entretemps.
+test("9. POST /alias-ingredients avec articleId inexistant : 204, aucune écriture", async () => {
   const texteTest = "ERREURS FK TEST ingredient texte unique zzz";
   const { status } = await poster("/api/alias-ingredients", {
     correspondances: [{ texte: texteTest, articleId: ID_INEXISTANT }],
   });
-  assert.equal(status, 400);
+  assert.equal(status, 204);
   const cree = await prisma.aliasIngredientImport.findUnique({ where: { texteNormalise: normaliserTexte(texteTest) } });
   assert.equal(cree, null, "aucune correspondance ne doit avoir été créée");
 });

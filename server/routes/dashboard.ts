@@ -7,12 +7,15 @@ import { SEUIL_BON } from "../utils/seuilsFoodCost.js";
 
 const router = Router();
 
-router.get("/", async (_req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
+    const societeId = req.utilisateur!.societeId;
     const [nbIngredients, recettesBrutes, stocks] = await Promise.all([
-      prisma.article.count({ where: { actif: true } }),
-      prisma.recette.findMany({ where: { actif: true }, include: inclusionsRecette }),
+      prisma.article.count({ where: { actif: true, societeId } }),
+      prisma.recette.findMany({ where: { actif: true, societeId }, include: inclusionsRecette }),
+      // Stock n'a pas de societeId propre : scopé via le dépôt (voir mouvements.ts, même principe).
       prisma.stock.findMany({
+        where: { depot: { societeId } },
         include: {
           article: {
             include: {

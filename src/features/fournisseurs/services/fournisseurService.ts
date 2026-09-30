@@ -84,9 +84,7 @@ export async function getDocumentsFournisseur(id: number): Promise<DocumentFourn
   return response.json();
 }
 
-export async function creerFournisseur(
-  input: FournisseurInput & { societeId: number }
-): Promise<Fournisseur> {
+export async function creerFournisseur(input: FournisseurInput): Promise<Fournisseur> {
   const response = await apiFetch(`${API_URL}/fournisseurs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

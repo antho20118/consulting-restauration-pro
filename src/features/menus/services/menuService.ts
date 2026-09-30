@@ -11,7 +11,7 @@ export async function getMenus(): Promise<Menu[]> {
   return response.json();
 }
 
-export async function creerMenu(input: MenuInput & { societeId: number }): Promise<Menu> {
+export async function creerMenu(input: MenuInput): Promise<Menu> {
   const response = await apiFetch(`${API_URL}/menus`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

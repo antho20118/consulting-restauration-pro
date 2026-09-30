@@ -6,9 +6,16 @@ export type CibleProduction =
   | { mode: "portions"; valeur: number }
   | { mode: "poidsFiniG"; valeur: number };
 
-export async function planifierProduction(recetteId: number, cible: CibleProduction, depotId?: number) {
-  const recette = await prisma.recette.findUnique({
-    where: { id: recetteId },
+export async function planifierProduction(
+  recetteId: number,
+  cible: CibleProduction,
+  societeId: number,
+  depotId?: number
+) {
+  // Scopé par société : jamais permettre de planifier la production d'une recette d'une autre
+  // société en devinant/énumérant simplement un id (voir la matrice de permissions, server/app.ts).
+  const recette = await prisma.recette.findFirst({
+    where: { id: recetteId, societeId },
     include: inclusionsRecette,
   });
   if (!recette) throw new Error("Recette introuvable");
@@ -21,7 +28,9 @@ export async function planifierProduction(recetteId: number, cible: CibleProduct
 
   if (!Number.isFinite(echelle) || echelle <= 0) throw new Error("Cible de production invalide");
 
-  const stocks = depotId == null ? [] : await prisma.stock.findMany({ where: { depotId } });
+  // depot: { societeId } en défense en profondeur : jamais lire le stock d'un dépôt d'une autre
+  // société en devinant/énumérant simplement un id.
+  const stocks = depotId == null ? [] : await prisma.stock.findMany({ where: { depotId, depot: { societeId } } });
   const stockByArticle = new Map(stocks.map((s) => [s.articleId, s.quantite]));
 
   const lignes = calculee.lignes.map((ligne) => {

@@ -70,9 +70,7 @@ export async function importerRecettesExcel(
   return response.json();
 }
 
-export async function creerRecette(
-  input: RecetteInput & { societeId: number }
-): Promise<Recette> {
+export async function creerRecette(input: RecetteInput): Promise<Recette> {
   const response = await apiFetch(`${API_URL}/recettes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -352,7 +352,7 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
       if (recette) {
         await modifierRecette(recette.id, payload);
       } else {
-        await creerRecette({ ...payload, societeId: 1 });
+        await creerRecette(payload);
       }
 
       // Mémorise les choix d'article faits sur des lignes issues d'un import texte/photo (voir

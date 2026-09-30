@@ -57,13 +57,16 @@ export type LigneAchat =
 // dupliquée.
 export async function calculerPropositionAchat(
   besoins: BesoinAchat[],
+  societeId: number,
   depotId?: number
 ): Promise<{ lignes: LigneAchat[]; totalHT: number }> {
   const articleIds = [...new Set(besoins.map((b) => b.articleId))];
 
   const [articles, stocks] = await Promise.all([
+    // Scopé par société : jamais permettre à un besoin de désigner un article d'une autre société
+    // en devinant/énumérant simplement un id (voir la matrice de permissions, server/app.ts).
     prisma.article.findMany({
-      where: { id: { in: articleIds }, actif: true },
+      where: { id: { in: articleIds }, actif: true, societeId },
       include: {
         tarifs: {
           where: { actif: true },
@@ -72,8 +75,10 @@ export async function calculerPropositionAchat(
         },
       },
     }),
+    // depot: { societeId } en défense en profondeur, même si l'appelant est censé avoir déjà
+    // vérifié que ce dépôt appartient à la société (voir commandes.ts, achats.ts).
     depotId
-      ? prisma.stock.findMany({ where: { depotId, articleId: { in: articleIds } } })
+      ? prisma.stock.findMany({ where: { depotId, articleId: { in: articleIds }, depot: { societeId } } })
       : Promise.resolve([]),
   ]);
   const articleParId = new Map(articles.map((a) => [a.id, a]));

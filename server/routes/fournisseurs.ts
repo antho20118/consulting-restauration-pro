@@ -35,8 +35,9 @@ export async function genererCodeFournisseur(tx: Prisma.TransactionClient, socie
 router.get("/", async (req, res) => {
   try {
     const inclureInactifs = req.query.inclureInactifs === "true";
+    const societeId = req.utilisateur!.societeId;
     const fournisseurs = await prisma.fournisseur.findMany({
-      where: inclureInactifs ? {} : { actif: true },
+      where: inclureInactifs ? { societeId } : { actif: true, societeId },
       include: { _count: { select: { tarifs: true } } },
       orderBy: { nom: "asc" },
     });
@@ -59,7 +60,9 @@ router.get("/:id", async (req, res) => {
       return;
     }
 
-    const fournisseur = await prisma.fournisseur.findUnique({ where: { id } });
+    const fournisseur = await prisma.fournisseur.findFirst({
+      where: { id, societeId: req.utilisateur!.societeId },
+    });
     if (!fournisseur) {
       res.status(404).json({ error: "Fournisseur introuvable" });
       return;
@@ -84,7 +87,9 @@ router.get("/:id/tarifs", async (req, res) => {
       return;
     }
 
-    const fournisseur = await prisma.fournisseur.findUnique({ where: { id } });
+    const fournisseur = await prisma.fournisseur.findFirst({
+      where: { id, societeId: req.utilisateur!.societeId },
+    });
     if (!fournisseur) {
       res.status(404).json({ error: "Fournisseur introuvable" });
       return;
@@ -126,7 +131,9 @@ router.get("/:id/documents", async (req, res) => {
       return;
     }
 
-    const fournisseur = await prisma.fournisseur.findUnique({ where: { id } });
+    const fournisseur = await prisma.fournisseur.findFirst({
+      where: { id, societeId: req.utilisateur!.societeId },
+    });
     if (!fournisseur) {
       res.status(404).json({ error: "Fournisseur introuvable" });
       return;
@@ -147,7 +154,10 @@ router.get("/:id/documents", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { nom, telephone, email, siteWeb, societeId } = req.body;
+    const { nom, telephone, email, siteWeb } = req.body;
+    // Jamais depuis req.body : la société d'écriture est celle du compte connecté, jamais une
+    // valeur transmise par le client (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma).
+    const societeId = req.utilisateur!.societeId;
 
     // codeFournisseur n'est jamais lu depuis req.body : généré ici, jamais saisi, jamais dérivé du
     // nom (voir genererCodeFournisseur) — même transaction que la création pour que la génération
@@ -177,6 +187,16 @@ router.put("/:id", async (req, res) => {
     const id = Number(req.params.id);
     const { nom, telephone, email, siteWeb } = req.body;
 
+    // Scopé par société : jamais permettre à un compte de modifier un fournisseur d'une autre
+    // société en devinant/énumérant simplement un id (voir la matrice de permissions, server/app.ts).
+    const existant = await prisma.fournisseur.findFirst({
+      where: { id, societeId: req.utilisateur!.societeId },
+    });
+    if (!existant) {
+      res.status(404).json({ error: "Fournisseur introuvable" });
+      return;
+    }
+
     const fournisseur = await prisma.fournisseur.update({
       where: { id },
       data: {
@@ -199,7 +219,14 @@ router.delete("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
 
-    await prisma.fournisseur.update({ where: { id }, data: { actif: false } });
+    const { count } = await prisma.fournisseur.updateMany({
+      where: { id, societeId: req.utilisateur!.societeId },
+      data: { actif: false },
+    });
+    if (count === 0) {
+      res.status(404).json({ error: "Fournisseur introuvable" });
+      return;
+    }
 
     res.status(204).send();
   } catch (error) {
@@ -221,7 +248,9 @@ router.post("/:id/reactiver", async (req, res) => {
       return;
     }
 
-    const existant = await prisma.fournisseur.findUnique({ where: { id } });
+    const existant = await prisma.fournisseur.findFirst({
+      where: { id, societeId: req.utilisateur!.societeId },
+    });
     if (!existant) {
       res.status(404).json({ error: "Fournisseur introuvable" });
       return;

@@ -8,10 +8,10 @@ import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 const router = Router();
 
 // Liste des menus
-router.get("/", async (_req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
     const menus = await prisma.menu.findMany({
-      where: { actif: true },
+      where: { actif: true, societeId: req.utilisateur!.societeId },
       include: inclusionsMenu,
       orderBy: { nom: "asc" },
     });
@@ -28,8 +28,10 @@ router.get("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
-    const menu = await prisma.menu.findUnique({
-      where: { id },
+    // Scopé par société : jamais permettre de deviner/énumérer un menu d'une autre société en
+    // devinant simplement un id (voir la matrice de permissions, server/app.ts).
+    const menu = await prisma.menu.findFirst({
+      where: { id, societeId: req.utilisateur!.societeId },
       include: inclusionsMenu,
     });
 
@@ -48,14 +50,16 @@ router.get("/:id", async (req: Request, res: Response) => {
 // Création d'un menu
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const { nom, description, categorieId, societeId, prixVenteHT, lignes } = req.body as {
+    const { nom, description, categorieId, prixVenteHT, lignes } = req.body as {
       nom: string;
       description?: string | null;
       categorieId?: number | null;
-      societeId: number;
       prixVenteHT?: number | null;
       lignes: { recetteId: number; quantite: number }[];
     };
+    // Jamais depuis req.body : la société d'écriture est celle du compte connecté, jamais une
+    // valeur transmise par le client (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma).
+    const societeId = req.utilisateur!.societeId;
 
     const menu = await prisma.menu.create({
       data: {
@@ -95,6 +99,10 @@ router.put("/:id", async (req: Request, res: Response) => {
     };
 
     const menu = await prisma.$transaction(async (tx) => {
+      // Scopé par société : jamais permettre à un compte de modifier un menu d'une autre société
+      // en devinant/énumérant simplement un id (voir la matrice de permissions, server/app.ts).
+      await tx.menu.findFirstOrThrow({ where: { id, societeId: req.utilisateur!.societeId } });
+
       await tx.menuLigne.deleteMany({ where: { menuId: id } });
 
       return tx.menu.update({
@@ -127,7 +135,14 @@ router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
-    await prisma.menu.update({ where: { id }, data: { actif: false } });
+    const { count } = await prisma.menu.updateMany({
+      where: { id, societeId: req.utilisateur!.societeId },
+      data: { actif: false },
+    });
+    if (count === 0) {
+      res.status(404).json({ error: "Menu introuvable" });
+      return;
+    }
 
     res.status(204).send();
   } catch (error) {

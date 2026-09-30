@@ -104,9 +104,14 @@ export type SuggestionFournisseur = {
 // changer d'article. Chiffre l'économie réelle en euros sur la ligne (en tenant compte du
 // rendement de l'article, déjà validé par calculerCoutRecette ci-dessous) et l'impact sur le food
 // cost de la recette.
-export async function suggestionsEconomieRecette(recetteId: number): Promise<SuggestionFournisseur[]> {
-  const recette = await prisma.recette.findUnique({
-    where: { id: recetteId },
+export async function suggestionsEconomieRecette(
+  recetteId: number,
+  societeId: number
+): Promise<SuggestionFournisseur[]> {
+  // Scopé par société : jamais permettre de deviner/énumérer une recette d'une autre société en
+  // devinant simplement un id (voir la matrice de permissions, server/app.ts).
+  const recette = await prisma.recette.findFirst({
+    where: { id: recetteId, societeId },
     include: inclusionsRecette,
   });
   if (!recette) return [];

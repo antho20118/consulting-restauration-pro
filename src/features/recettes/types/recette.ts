@@ -333,7 +333,6 @@ export type DecisionImportExcel =
       nom: string;
       categorieId: number | null;
       sousCategorieId: number | null;
-      societeId: number;
       lignes: LigneImportExcel[];
     }
   | { action: "mettre_a_jour"; recetteId: number; lignes: LigneImportExcel[] };

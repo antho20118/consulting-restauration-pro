@@ -58,7 +58,6 @@ export type ResultatImportFacture =
 
 export async function creerFacturePhoto(params: {
   fournisseurId: number;
-  societeId: number;
   photoDataUrl: string;
   nomFichierOriginal?: string;
   lignes: LigneListingExtraite[];

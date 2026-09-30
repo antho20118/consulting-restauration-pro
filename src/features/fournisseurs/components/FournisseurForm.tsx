@@ -22,7 +22,7 @@ export default function FournisseurForm({ fournisseur, onClose, onSave }: Props)
       if (fournisseur) {
         await modifierFournisseur(fournisseur.id, payload);
       } else {
-        await creerFournisseur({ ...payload, societeId: 1 });
+        await creerFournisseur(payload);
       }
 
       onSave();

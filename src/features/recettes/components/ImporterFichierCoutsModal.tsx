@@ -196,7 +196,6 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
     setStatuts((s) => ({ ...s, [index]: "en_cours" }));
     try {
       await creerRecette({
-        societeId: 1,
         nom: recette.titre,
         categorieId: categorieChoisie[index] || null,
         sousCategorieId: sousCategorieChoisie[index] || null,

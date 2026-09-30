@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Request, Response } from "express";
 import { z } from "zod";
 import { planifierProduction } from "../utils/planifierProduction.js";
 
@@ -12,14 +13,21 @@ const schema = z.object({
   ]),
 });
 
-router.post("/planifier", async (req, res) => {
+router.post("/planifier", async (req: Request, res: Response) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Données de production invalides", details: parsed.error.flatten() });
     return;
   }
   try {
-    res.json(await planifierProduction(parsed.data.recetteId, parsed.data.cible, parsed.data.depotId));
+    res.json(
+      await planifierProduction(
+        parsed.data.recetteId,
+        parsed.data.cible,
+        req.utilisateur!.societeId,
+        parsed.data.depotId
+      )
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Impossible de planifier la production";
     res.status(message === "Recette introuvable" ? 404 : 400).json({ error: message });

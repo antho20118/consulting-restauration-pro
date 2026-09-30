@@ -72,7 +72,6 @@ export type DocumentFournisseur = {
 
 export async function creerListingPhoto(params: {
   fournisseurId: number;
-  societeId: number;
   photoDataUrl: string;
   nomFichierOriginal?: string;
   lignes: LigneListingExtraite[];

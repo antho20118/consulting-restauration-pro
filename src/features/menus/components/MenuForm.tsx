@@ -87,7 +87,7 @@ export default function MenuForm({ menu, onClose, onSave }: Props) {
       if (menu) {
         await modifierMenu(menu.id, payload);
       } else {
-        await creerMenu({ ...payload, societeId: 1 });
+        await creerMenu(payload);
       }
 
       onSave();

@@ -81,9 +81,12 @@ function commandeAvecUniteBase<
   };
 }
 
-router.get("/", async (_req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
+    // CommandeFournisseur n'a pas de societeId propre : scopé transitivement par le dépôt
+    // (voir mouvements.ts, même principe).
     const commandes = await prisma.commandeFournisseur.findMany({
+      where: { depot: { societeId: req.utilisateur!.societeId } },
       ...inclusionCommande,
       orderBy: { creeLe: "desc" },
     });
@@ -102,7 +105,10 @@ router.get("/:id", async (req: Request, res: Response) => {
   }
 
   try {
-    const commande = await prisma.commandeFournisseur.findUnique({ where: { id }, ...inclusionCommande });
+    const commande = await prisma.commandeFournisseur.findFirst({
+      where: { id, depot: { societeId: req.utilisateur!.societeId } },
+      ...inclusionCommande,
+    });
     if (!commande) {
       res.status(404).json({ error: "Commande introuvable" });
       return;
@@ -129,7 +135,17 @@ router.post("/", async (req: Request, res: Response) => {
 
   try {
     const { besoins, depotId } = parsed.data;
-    const { lignes } = await calculerPropositionAchat(besoins, depotId);
+    const societeId = req.utilisateur!.societeId;
+
+    // Scopé par société : jamais permettre de créer une commande pour un dépôt d'une autre société
+    // en devinant/énumérant simplement un id.
+    const depot = await prisma.depot.findFirst({ where: { id: depotId, societeId } });
+    if (!depot) {
+      res.status(404).json({ error: "Dépôt introuvable" });
+      return;
+    }
+
+    const { lignes } = await calculerPropositionAchat(besoins, societeId, depotId);
     const lignesACommander = lignes.filter(estACommander);
 
     if (lignesACommander.length === 0) {
@@ -196,8 +212,8 @@ router.post("/:id/receptionner", async (req: Request, res: Response) => {
   }
 
   try {
-    const commande = await prisma.commandeFournisseur.findUnique({
-      where: { id: commandeId },
+    const commande = await prisma.commandeFournisseur.findFirst({
+      where: { id: commandeId, depot: { societeId: req.utilisateur!.societeId } },
       include: { lignes: true },
     });
     if (!commande) {
@@ -278,7 +294,9 @@ router.post("/:id/annuler", async (req: Request, res: Response) => {
   }
 
   try {
-    const commande = await prisma.commandeFournisseur.findUnique({ where: { id } });
+    const commande = await prisma.commandeFournisseur.findFirst({
+      where: { id, depot: { societeId: req.utilisateur!.societeId } },
+    });
     if (!commande) {
       res.status(404).json({ error: "Commande introuvable" });
       return;

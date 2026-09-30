@@ -113,7 +113,6 @@ export default function ImportListingPhotoModal({ fournisseurId, onClose, onSave
     try {
       const reponse = await creerListingPhoto({
         fournisseurId,
-        societeId: 1,
         photoDataUrl,
         nomFichierOriginal: nomFichier || undefined,
         lignes: lignesExtraites,

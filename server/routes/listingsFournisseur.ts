@@ -87,12 +87,12 @@ type LigneEntree = {
 // TOUJOURS scopés à fournisseurId (jamais toutes sociétés/fournisseurs confondus, voir
 // ProduitFournisseur : un même code peut légitimement désigner deux produits différents chez deux
 // fournisseurs distincts).
-async function construireContexteRapprochement(fournisseurId: number, societeId?: number) {
+async function construireContexteRapprochement(fournisseurId: number, societeId: number) {
   const [uniteKg, uniteL, articlesExistants, aliasExistants, produitsFournisseurExistants] = await Promise.all([
     prisma.unite.findFirst({ where: { symbole: { equals: "kg", mode: "insensitive" } } }),
     prisma.unite.findFirst({ where: { symbole: { equals: "l", mode: "insensitive" } } }),
     prisma.article.findMany({
-      where: societeId ? { societeId, actif: true } : { actif: true },
+      where: { societeId, actif: true },
       select: { id: true, nom: true, reference: true },
     }),
     prisma.aliasIngredientImport.findMany({ select: { texteNormalise: true, articleId: true } }),
@@ -224,14 +224,18 @@ router.post("/:fournisseurId", async (req: Request, res: Response) => {
       return;
     }
 
-    const { photoDataUrl, nomFichierOriginal, lignes, societeId } = req.body as {
+    const { photoDataUrl, nomFichierOriginal, lignes } = req.body as {
       photoDataUrl?: string;
       nomFichierOriginal?: string;
       lignes?: LigneEntree[];
-      societeId?: number;
     };
+    // Jamais depuis req.body : la société d'écriture est celle du compte connecté, jamais une
+    // valeur transmise par le client (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma).
+    const societeId = req.utilisateur!.societeId;
 
-    const fournisseur = await prisma.fournisseur.findUnique({ where: { id: fournisseurId } });
+    // Scopé par société : jamais permettre d'importer un listing pour un fournisseur d'une autre
+    // société en devinant/énumérant simplement un id.
+    const fournisseur = await prisma.fournisseur.findFirst({ where: { id: fournisseurId, societeId } });
     if (!fournisseur) {
       res.status(404).json({ error: "Fournisseur introuvable" });
       return;
@@ -374,19 +378,23 @@ router.post("/factures/:fournisseurId", async (req: Request, res: Response) => {
       return;
     }
 
-    const { photoDataUrl, nomFichierOriginal, lignes, societeId, numero, dateDocument, montantTotal, confirmerDoublon } =
+    const { photoDataUrl, nomFichierOriginal, lignes, numero, dateDocument, montantTotal, confirmerDoublon } =
       req.body as {
         photoDataUrl?: string;
         nomFichierOriginal?: string;
         lignes?: LigneEntree[];
-        societeId?: number;
         numero?: string | null;
         dateDocument?: string | null;
         montantTotal?: number | null;
         confirmerDoublon?: boolean;
       };
+    // Jamais depuis req.body : la société d'écriture est celle du compte connecté, jamais une
+    // valeur transmise par le client (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma).
+    const societeId = req.utilisateur!.societeId;
 
-    const fournisseur = await prisma.fournisseur.findUnique({ where: { id: fournisseurId } });
+    // Scopé par société : jamais permettre d'importer une facture pour un fournisseur d'une autre
+    // société en devinant/énumérant simplement un id.
+    const fournisseur = await prisma.fournisseur.findFirst({ where: { id: fournisseurId, societeId } });
     if (!fournisseur) {
       res.status(404).json({ error: "Fournisseur introuvable" });
       return;
@@ -475,8 +483,10 @@ router.get("/documents/:documentId", async (req: Request, res: Response) => {
       return;
     }
 
-    const document = await prisma.documentFournisseur.findUnique({
-      where: { id: documentId },
+    // Scopé par société via le fournisseur : jamais permettre de consulter le document d'un
+    // fournisseur d'une autre société en devinant/énumérant simplement un id.
+    const document = await prisma.documentFournisseur.findFirst({
+      where: { id: documentId, fournisseur: { societeId: req.utilisateur!.societeId } },
       include: {
         lignes: {
           include: {
@@ -520,7 +530,11 @@ router.post("/documents/:documentId/valider", async (req: Request, res: Response
       return;
     }
 
-    const document = await prisma.documentFournisseur.findUnique({ where: { id: documentId } });
+    // Scopé par société via le fournisseur : jamais permettre de valider le document d'un
+    // fournisseur d'une autre société en devinant/énumérant simplement un id.
+    const document = await prisma.documentFournisseur.findFirst({
+      where: { id: documentId, fournisseur: { societeId: req.utilisateur!.societeId } },
+    });
     if (!document) {
       res.status(404).json({ error: "Document introuvable" });
       return;

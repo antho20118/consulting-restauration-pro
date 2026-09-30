@@ -11,7 +11,7 @@ export async function getDepots(): Promise<Depot[]> {
   return response.json();
 }
 
-export async function creerDepot(input: DepotInput & { societeId: number }): Promise<Depot> {
+export async function creerDepot(input: DepotInput): Promise<Depot> {
   const response = await apiFetch(`${API_URL}/depots`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -288,7 +288,6 @@ export default function ImporterRecettesExcelSecuriseModal({ onClose, onImporte 
             nom: recette.titre,
             categorieId: categorieChoisie[index] || null,
             sousCategorieId: sousCategorieChoisie[index] || null,
-            societeId: 1,
             lignes,
           },
         });

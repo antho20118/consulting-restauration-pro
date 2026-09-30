@@ -100,7 +100,6 @@ export default function ImportFacturePhotoModal({ fournisseurId, onClose, onSave
     try {
       const reponse = await creerFacturePhoto({
         fournisseurId,
-        societeId: 1,
         photoDataUrl,
         nomFichierOriginal: nomFichier || undefined,
         lignes: lignesExtraites,

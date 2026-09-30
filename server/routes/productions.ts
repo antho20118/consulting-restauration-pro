@@ -37,9 +37,9 @@ const inclusionProduction = {
 // point critique, procédure de contrôle modifiée) et la production existante doit refléter l'état
 // actuel de sa propre recette, pas un instantané obsolète — les contrôles déjà enregistrés, eux,
 // restent inchangés (voir ControleHACCPProduction, jamais réécrit).
-async function etapesCritiquesDeLaRecette(recetteId: number) {
-  const recette = await prisma.recette.findUnique({
-    where: { id: recetteId },
+async function etapesCritiquesDeLaRecette(recetteId: number, societeId: number) {
+  const recette = await prisma.recette.findFirst({
+    where: { id: recetteId, societeId },
     include: { etapes: { orderBy: { ordre: "asc" } } },
   });
   if (!recette) return [];
@@ -48,9 +48,11 @@ async function etapesCritiquesDeLaRecette(recetteId: number) {
   );
 }
 
-router.get("/", async (_req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
+    const societeId = req.utilisateur!.societeId;
     const productions = await prisma.production.findMany({
+      where: { societeId },
       ...inclusionProduction,
       orderBy: { dateProduction: "desc" },
     });
@@ -62,7 +64,7 @@ router.get("/", async (_req: Request, res: Response) => {
     const resultats = [];
     for (const production of productions) {
       if (!etapesParRecette.has(production.recetteId)) {
-        etapesParRecette.set(production.recetteId, await etapesCritiquesDeLaRecette(production.recetteId));
+        etapesParRecette.set(production.recetteId, await etapesCritiquesDeLaRecette(production.recetteId, societeId));
       }
       const etapesCritiques = etapesParRecette.get(production.recetteId)!;
       const etapesControlees = new Set(production.controles.map((c) => c.recetteEtapeId));
@@ -88,12 +90,15 @@ router.get("/:id", async (req: Request, res: Response) => {
   }
 
   try {
-    const production = await prisma.production.findUnique({ where: { id }, ...inclusionProduction });
+    const societeId = req.utilisateur!.societeId;
+    // Scopé par société : jamais permettre de consulter une production d'une autre société en
+    // devinant/énumérant simplement un id (voir la matrice de permissions, server/app.ts).
+    const production = await prisma.production.findFirst({ where: { id, societeId }, ...inclusionProduction });
     if (!production) {
       res.status(404).json({ error: "Production introuvable" });
       return;
     }
-    const etapesCritiques = await etapesCritiquesDeLaRecette(production.recetteId);
+    const etapesCritiques = await etapesCritiquesDeLaRecette(production.recetteId, societeId);
     res.json({ ...production, etapesCritiques });
   } catch (error) {
     console.error(error);
@@ -114,26 +119,35 @@ router.post("/", async (req: Request, res: Response) => {
 
   try {
     const { recetteId, depotId, cible } = parsed.data;
-    const recette = await prisma.recette.findUnique({ where: { id: recetteId }, select: { societeId: true } });
+    const societeId = req.utilisateur!.societeId;
+
+    // Scopé par société : jamais permettre d'enregistrer une production pour une recette d'une
+    // autre société en devinant/énumérant simplement un id (voir la matrice de permissions,
+    // server/app.ts) — le societeId de la production vient toujours de l'identité connectée,
+    // jamais de la recette ou d'un champ transmis par le client.
+    const recette = await prisma.recette.findFirst({ where: { id: recetteId, societeId }, select: { id: true } });
     if (!recette) {
       res.status(404).json({ error: "Recette introuvable" });
       return;
     }
 
-    const planification = await planifierProduction(recetteId, cible as CibleProduction, depotId);
+    const planification = await planifierProduction(recetteId, cible as CibleProduction, societeId, depotId);
 
+    // Qui a réellement enregistré cette production — traçabilité (voir Production.creeParId,
+    // prisma/schema.prisma), jamais l'identité fournie par le client.
     const production = await prisma.production.create({
       data: {
         recetteId,
-        societeId: recette.societeId,
+        societeId,
         depotId,
         portionsProduites: planification.portionsCible,
         poidsFiniProduitG: planification.poidsFiniCibleG,
+        creeParId: req.utilisateur!.id,
       },
       ...inclusionProduction,
     });
 
-    const etapesCritiques = await etapesCritiquesDeLaRecette(recetteId);
+    const etapesCritiques = await etapesCritiquesDeLaRecette(recetteId, societeId);
     res.status(201).json({ ...production, etapesCritiques });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Impossible d'enregistrer la production";
@@ -160,7 +174,10 @@ router.post("/:id/controles", async (req: Request, res: Response) => {
   }
 
   try {
-    const production = await prisma.production.findUnique({ where: { id: productionId } });
+    const societeId = req.utilisateur!.societeId;
+    // Scopé par société : jamais permettre d'ajouter un contrôle à une production d'une autre
+    // société en devinant/énumérant simplement un id (voir la matrice de permissions, server/app.ts).
+    const production = await prisma.production.findFirst({ where: { id: productionId, societeId } });
     if (!production) {
       res.status(404).json({ error: "Production introuvable" });
       return;
@@ -180,11 +197,15 @@ router.post("/:id/controles", async (req: Request, res: Response) => {
         valeur: parsed.data.valeur,
         conforme: parsed.data.conforme,
         commentaire: parsed.data.commentaire || null,
+        // Qui a réellement constaté cette valeur — traçabilité (voir
+        // ControleHACCPProduction.creeParId, prisma/schema.prisma), jamais l'identité fournie par
+        // le client.
+        creeParId: req.utilisateur!.id,
       },
     });
 
     const misAJour = await prisma.production.findUnique({ where: { id: productionId }, ...inclusionProduction });
-    const etapesCritiques = await etapesCritiquesDeLaRecette(production.recetteId);
+    const etapesCritiques = await etapesCritiquesDeLaRecette(production.recetteId, societeId);
     res.status(201).json({ ...misAJour, etapesCritiques });
   } catch (error) {
     console.error(error);

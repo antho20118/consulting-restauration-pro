@@ -11,9 +11,13 @@ const router = Router();
 // client pour pré-remplir automatiquement l'import d'une recette (voir ImporterRecetteModal.tsx).
 // Table de taille modeste par nature (un alias par formulation d'ingrédient déjà rencontrée) :
 // pas besoin de pagination.
-router.get("/", async (_req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
+    // AliasIngredientImport n'a pas de societeId propre (texteNormalise est une clé globale, voir
+    // prisma/schema.prisma) : scopé transitivement par l'article visé, pour ne jamais suggérer à
+    // une société l'articleId d'une autre société (voir la matrice de permissions, server/app.ts).
     const alias = await prisma.aliasIngredientImport.findMany({
+      where: { article: { societeId: req.utilisateur!.societeId } },
       select: { texteNormalise: true, articleId: true },
     });
 
@@ -36,7 +40,21 @@ router.post("/", async (req: Request, res: Response) => {
       correspondances: { texte: string; articleId: number }[];
     };
 
-    const aTraiter = (correspondances ?? []).filter((c) => c.texte?.trim() && c.articleId);
+    const candidates = (correspondances ?? []).filter((c) => c.texte?.trim() && c.articleId);
+
+    // texteNormalise est une clé globale (voir GET ci-dessus) : jamais rediriger cet alias partagé
+    // vers l'articleId d'une AUTRE société en devinant/énumérant simplement un id — silencieusement
+    // ignoré, même principe permissif que pour un articleId désactivé entretemps (voir commentaire
+    // au-dessus de cette route).
+    const articlesDeLaSociete = await prisma.article.findMany({
+      where: {
+        id: { in: [...new Set(candidates.map((c) => c.articleId))] },
+        societeId: req.utilisateur!.societeId,
+      },
+      select: { id: true },
+    });
+    const idsAutorises = new Set(articlesDeLaSociete.map((a) => a.id));
+    const aTraiter = candidates.filter((c) => idsAutorises.has(c.articleId));
 
     await Promise.all(
       aTraiter.map((c) => {
