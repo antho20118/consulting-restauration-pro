@@ -12,20 +12,8 @@ import {
   type ArticleExistantPourCorrespondance,
 } from "../utils/correspondanceArticle";
 import type { Allergene, Ingredient, ValeursNutritionnelles } from "../types/ingredient";
-
-// Libellés affichés dans l'ordre d'une étiquette nutritionnelle réelle, valeurs saisies "pour
-// 100g" de l'unité de base de l'article (voir server/utils/coutRecette.ts, CHAMPS_NUTRITION).
-const CHAMPS_NUTRITION = [
-  { cle: "energie", label: "Énergie (kcal)" },
-  { cle: "proteines", label: "Protéines (g)" },
-  { cle: "glucides", label: "Glucides (g)" },
-  { cle: "sucres", label: "dont sucres (g)" },
-  { cle: "lipides", label: "Lipides (g)" },
-  { cle: "acidesGrasSatures", label: "dont acides gras saturés (g)" },
-  { cle: "fibres", label: "Fibres (g)" },
-  { cle: "sel", label: "Sel (g)" },
-] as const;
-type ChampNutritionCle = (typeof CHAMPS_NUTRITION)[number]["cle"];
+import ImporterNutritionModal from "./ImporterNutritionModal";
+import { CHAMPS_NUTRITION, type ChampNutritionCle } from "../utils/champsNutrition";
 
 type Categorie = {
   id: number;
@@ -86,6 +74,8 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
   // confirmation donnée ne valide jamais silencieusement la création d'un doublon différent après
   // modification du nom ou de la référence saisis.
   const [coupleConfirmeDoublon, setCoupleConfirmeDoublon] = useState<string | null>(null);
+
+  const [modalImportOuvert, setModalImportOuvert] = useState(false);
 
   useEffect(() => {
     apiFetch(`${API_URL}/categories`)
@@ -156,6 +146,12 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
     setAllergeneIds((precedent) =>
       precedent.includes(id) ? precedent.filter((a) => a !== id) : [...precedent, id]
     );
+  }
+
+  function appliquerImportNutrition(resultat: { allergeneIds: number[]; nutrition: Record<ChampNutritionCle, string> }) {
+    setAllergeneIds(resultat.allergeneIds);
+    setNutrition(resultat.nutrition);
+    setModalImportOuvert(false);
   }
 
   async function enregistrer() {
@@ -376,7 +372,12 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
         }}
       />
 
-      <label>Allergènes</label>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <label>Allergènes</label>
+        <button type="button" onClick={() => setModalImportOuvert(true)} style={{ fontSize: 13 }}>
+          📷 Importer depuis une étiquette
+        </button>
+      </div>
       <div
         style={{
           display: "flex",
@@ -439,6 +440,30 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
         <button onClick={onClose}>Annuler</button>
         <button className="btn-primary" onClick={enregistrer}>Enregistrer</button>
       </div>
+
+      {modalImportOuvert && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            overflowY: "auto",
+            padding: "40px 0",
+            zIndex: 20,
+          }}
+        >
+          <ImporterNutritionModal
+            allergenes={allergenes}
+            allergeneIdsActuels={allergeneIds}
+            nutritionActuelle={nutrition}
+            onClose={() => setModalImportOuvert(false)}
+            onValider={appliquerImportNutrition}
+          />
+        </div>
+      )}
     </div>
   );
 }

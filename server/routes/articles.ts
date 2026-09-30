@@ -17,6 +17,17 @@ import {
   type PropositionLigneImport,
 } from "../utils/importListing.js";
 import { resoudreOuCreerProduitFournisseur } from "../utils/produitFournisseur.js";
+import {
+  extraireAllergenesNutrition,
+  ImportIANonConfigureError,
+  PhotoInvalideError,
+} from "../utils/importNutritionIA.js";
+import {
+  tailleDecodeeBase64Octets,
+  avecTimeout,
+  AnalyseTimeoutError,
+  TAILLE_MAX_PHOTO_OCTETS,
+} from "./recettes.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 import {
   repondreErreurEcriture,
@@ -155,6 +166,57 @@ router.get("/", async (req: Request, res: Response) => {
     res.status(500).json({
       error: "Impossible de récupérer les articles",
     });
+  }
+});
+
+// Import des allergènes/valeurs nutritionnelles depuis une étiquette (texte libre ou photo, IA) —
+// même mécanisme que POST /recettes/import-ia (limite de taille, délai, mêmes codes d'erreur).
+// N'écrit rien en base : l'utilisateur revoit le résultat avant de l'appliquer au formulaire
+// ingrédient habituel (voir IngredientForm.tsx), exactement comme pour l'import de recette.
+router.post("/import-nutrition-ia", async (req: Request, res: Response) => {
+  try {
+    const { texte, photoDataUrl } = req.body as { texte?: string; photoDataUrl?: string };
+
+    if (!texte?.trim() && !photoDataUrl) {
+      res.status(400).json({ error: "Texte ou photo d'étiquette requis" });
+      return;
+    }
+
+    if (photoDataUrl) {
+      const correspondance = /^data:image\/[a-zA-Z+]+;base64,(.+)$/.exec(photoDataUrl);
+      if (!correspondance) {
+        res.status(400).json({ error: "Format de photo invalide" });
+        return;
+      }
+      if (tailleDecodeeBase64Octets(correspondance[1]) > TAILLE_MAX_PHOTO_OCTETS) {
+        res.status(400).json({ error: "Photo trop volumineuse (6 Mo maximum)" });
+        return;
+      }
+    }
+
+    const allergenes = await prisma.allergene.findMany({ select: { code: true, nom: true } });
+    const extraction = await avecTimeout(
+      extraireAllergenesNutrition(texte?.trim() ? { texte } : { photoDataUrl: photoDataUrl! }, allergenes),
+      60_000
+    );
+
+    res.json(extraction);
+  } catch (error) {
+    if (error instanceof ImportIANonConfigureError) {
+      res.status(503).json({ error: error.message });
+      return;
+    }
+    if (error instanceof PhotoInvalideError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error instanceof AnalyseTimeoutError) {
+      res.status(504).json({ error: "L'analyse a pris trop de temps. Réessaie avec une photo plus simple." });
+      return;
+    }
+    console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
+    res.status(500).json({ error: "Impossible d'analyser cette étiquette" });
   }
 });
 
