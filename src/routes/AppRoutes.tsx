@@ -23,6 +23,7 @@ const ProductionDetailPage = lazy(() => import("../features/productions/pages/Pr
 const VentesPage = lazy(() => import("../features/ventes/pages/VentesPage"));
 const MenuEngineeringPage = lazy(() => import("../features/ventes/pages/MenuEngineeringPage"));
 const QuestionsPage = lazy(() => import("../features/questions/pages/QuestionsPage"));
+const PrevisionsPage = lazy(() => import("../features/ventes/pages/PrevisionsPage"));
 
 export default function AppRoutes() {
   return (
@@ -46,6 +47,7 @@ export default function AppRoutes() {
           <Route path="productions/:id" element={<ProductionDetailPage />} />
           <Route path="ventes" element={<VentesPage />} />
           <Route path="menu-engineering" element={<MenuEngineeringPage />} />
+          <Route path="previsions" element={<PrevisionsPage />} />
           <Route path="questions" element={<QuestionsPage />} />
           <Route path="parametres" element={<ParametresPage />} />
         </Route>

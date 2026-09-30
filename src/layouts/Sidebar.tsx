@@ -14,6 +14,7 @@ const menu = [
   { label: "📋 Traçabilité HACCP", path: "/productions", indentSuspendu: true },
   { label: "💰 Ventes", path: "/ventes" },
   { label: "📊 Menu engineering", path: "/menu-engineering" },
+  { label: "🔮 Prévisions", path: "/previsions" },
   { label: "💬 Questions / Réponses", path: "/questions" },
   { label: "📦 Mouvements de stock", path: "/mouvements" },
   { label: "🏭 Dépôts", path: "/depots" },

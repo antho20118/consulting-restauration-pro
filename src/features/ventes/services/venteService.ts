@@ -178,3 +178,31 @@ export async function getMenuEngineering(depuis?: string, jusqua?: string): Prom
   if (!response.ok) throw new Error("Impossible de calculer le menu engineering");
   return response.json();
 }
+
+// Miroir de TendancePrevision, server/routes/ventes.ts : méthode volontairement simple (moyenne
+// mobile sur les 3 dernières périodes importées), pas un modèle statistique — chaque document de
+// ventes importé compte pour une période.
+export type TendancePrevision = "hausse" | "stable" | "baisse";
+
+export type PrevisionRecette = {
+  recetteId: number;
+  recetteNom: string | null;
+  historique: number[];
+  previsionProchainePeriode: number;
+  tendance: TendancePrevision;
+  prixVenteHT: number | null;
+  caEstimeProchainePeriode: number | null;
+};
+
+export type ResultatPrevisions = {
+  nbPeriodes: number;
+  items: PrevisionRecette[];
+  previsionQuantiteTotale: number;
+  previsionCaTotale: number | null;
+};
+
+export async function getPrevisions(): Promise<ResultatPrevisions> {
+  const response = await apiFetch(`${API_URL}/ventes/previsions`);
+  if (!response.ok) throw new Error("Impossible de calculer les prévisions de ventes");
+  return response.json();
+}

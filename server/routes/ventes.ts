@@ -489,4 +489,108 @@ router.get("/menu-engineering", async (req: Request, res: Response) => {
   }
 });
 
+export type TendancePrevision = "hausse" | "stable" | "baisse";
+
+// Prévision de ventes — méthode volontairement simple et explicable (moyenne mobile), pas un
+// modèle statistique sophistiqué : chaque DocumentVentes importé représente une période (ventes
+// validées uniquement, voir /reconciliation). Nécessite au moins 2 périodes pour dire quoi que ce
+// soit — jamais une prévision inventée à partir d'une seule période.
+const SEUIL_TENDANCE_PCT = 10;
+
+router.get("/previsions", async (req: Request, res: Response) => {
+  try {
+    const societeId = req.utilisateur!.societeId;
+
+    const documents = await prisma.documentVentes.findMany({
+      where: { societeId },
+      select: { id: true, periodeDebut: true, importeLe: true },
+    });
+    // Ordonnées chronologiquement par la date la plus significative disponible : la période
+    // déclarée par l'utilisateur si elle existe, sinon la date d'import réelle du document.
+    const documentsTries = [...documents].sort(
+      (a, b) => (a.periodeDebut ?? a.importeLe).getTime() - (b.periodeDebut ?? b.importeLe).getTime()
+    );
+    const indexPeriodeParDocument = new Map(documentsTries.map((d, index) => [d.id, index]));
+    const nbPeriodes = documentsTries.length;
+
+    if (nbPeriodes < 2) {
+      res.json({ nbPeriodes, items: [], previsionQuantiteTotale: 0, previsionCaTotale: null });
+      return;
+    }
+
+    const lignesValidees = await prisma.ligneVente.findMany({
+      where: { decision: "VALIDEE", recetteRetenueId: { not: null }, documentVentes: { societeId } },
+      select: { recetteRetenueId: true, quantiteVendue: true, documentVentesId: true },
+    });
+
+    // quantiteParPeriode[recetteId] est un tableau de longueur nbPeriodes, indexé chronologiquement
+    // (0 = ancienne, aucune vente sur une période -> 0, jamais une période absente du tableau : sans
+    // ça, une recette introduite récemment paraîtrait avoir une tendance erratique).
+    const quantiteParPeriode = new Map<number, number[]>();
+    for (const ligne of lignesValidees) {
+      const recetteId = ligne.recetteRetenueId!;
+      const indexPeriode = indexPeriodeParDocument.get(ligne.documentVentesId);
+      if (indexPeriode === undefined) continue;
+      const tableau = quantiteParPeriode.get(recetteId) ?? new Array(nbPeriodes).fill(0);
+      tableau[indexPeriode] += ligne.quantiteVendue;
+      quantiteParPeriode.set(recetteId, tableau);
+    }
+
+    const recettes = await prisma.recette.findMany({
+      where: { id: { in: [...quantiteParPeriode.keys()] } },
+      include: inclusionsRecette,
+    });
+    const recettesAvecCout = calculerCoutsRecettesSansErreur(recettes);
+    const recetteParId = new Map(recettesAvecCout.map((r) => [r.id, r]));
+
+    const items = [...quantiteParPeriode.entries()].map(([recetteId, quantites]) => {
+      const nbDernieresPeriodes = Math.min(3, quantites.length);
+      const dernieres = quantites.slice(-nbDernieresPeriodes);
+      const previsionProchainePeriode = dernieres.reduce((total, q) => total + q, 0) / nbDernieresPeriodes;
+
+      const derniere = quantites[quantites.length - 1];
+      const precedentes = quantites.slice(0, -1);
+      const moyennePrecedentes = precedentes.reduce((total, q) => total + q, 0) / precedentes.length;
+      let tendance: TendancePrevision = "stable";
+      if (moyennePrecedentes > 0) {
+        const variationPct = ((derniere - moyennePrecedentes) / moyennePrecedentes) * 100;
+        if (variationPct >= SEUIL_TENDANCE_PCT) tendance = "hausse";
+        else if (variationPct <= -SEUIL_TENDANCE_PCT) tendance = "baisse";
+      } else if (derniere > 0) {
+        tendance = "hausse";
+      }
+
+      const recette = recetteParId.get(recetteId);
+      const prixVenteHT = recette?.prixVenteHT ?? null;
+      const caEstimeProchainePeriode = prixVenteHT != null ? previsionProchainePeriode * prixVenteHT : null;
+
+      return {
+        recetteId,
+        recetteNom: recette?.nom ?? null,
+        historique: quantites,
+        previsionProchainePeriode,
+        tendance,
+        prixVenteHT,
+        caEstimeProchainePeriode,
+      };
+    });
+
+    const previsionQuantiteTotale = items.reduce((total, item) => total + item.previsionProchainePeriode, 0);
+    // Somme partielle assumée (recettes sans prix de vente simplement exclues) : contrairement à
+    // /reconciliation, il n'y a pas ici de risque de mélanger un prix réel et un prix théorique —
+    // seulement le prix de vente actuel, donc une somme partielle reste une estimation honnête.
+    const recettesAvecPrix = items.filter((item) => item.caEstimeProchainePeriode != null);
+    const previsionCaTotale =
+      recettesAvecPrix.length > 0
+        ? recettesAvecPrix.reduce((total, item) => total + (item.caEstimeProchainePeriode ?? 0), 0)
+        : null;
+
+    res.json({ nbPeriodes, items, previsionQuantiteTotale, previsionCaTotale });
+  } catch (error) {
+    console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
+    res.status(500).json({ error: "Impossible de calculer les prévisions de ventes" });
+  }
+});
+
 export default router;
