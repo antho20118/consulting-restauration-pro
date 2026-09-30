@@ -36,6 +36,7 @@ import ventesRouter from "./routes/ventes.js";
 import sauvegardesRouter from "./routes/sauvegardes.js";
 import journalErreursRouter from "./routes/journalErreurs.js";
 import journalErreursClientRouter from "./routes/journalErreursClient.js";
+import questionsReponsesRouter from "./routes/questionsReponses.js";
 import { journaliserErreur, contexteDepuisRequete } from "./utils/journalErreurs.js";
 
 const app = express();
@@ -99,6 +100,7 @@ app.use("/api/production", productionRouter);
 app.use("/api/productions", ECRITURE_OPERATIONNEL, productionsRouter);
 app.use("/api/haccp", haccpRouter);
 app.use("/api/consulting", consultingRouter);
+app.use("/api/questions", questionsReponsesRouter);
 app.use("/api/documents-fournisseurs", ECRITURE_GESTION, documentsFournisseursRouter);
 app.use("/api/listings-fournisseur", ECRITURE_GESTION, listingsFournisseurRouter);
 app.use("/api/ventes", ECRITURE_GESTION, ventesRouter);
