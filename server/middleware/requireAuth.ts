@@ -16,7 +16,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   const token = entete?.startsWith("Bearer ") ? entete.slice(7) : null;
   const payload = token ? verifierToken(token) : null;
 
-  if (!payload) {
+  // Un jeton signé avant la refonte des comptes nominatifs (ancien identifiant/code partagé, voir
+  // l'historique de ce fichier) reste valide jusqu'à son expiration (12h) mais ne porte pas ce
+  // payload : sans cette vérification, la requête Prisma ci-dessous plante (id manquant) au lieu
+  // de renvoyer un 401 propre — qui déclenche déjà la déconnexion automatique côté client (voir
+  // apiFetch, config/api.ts).
+  if (!payload || typeof payload.id !== "number") {
     res.status(401).json({ error: "Authentification requise" });
     return;
   }
