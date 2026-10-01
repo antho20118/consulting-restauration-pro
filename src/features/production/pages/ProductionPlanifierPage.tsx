@@ -71,6 +71,12 @@ export default function ProductionPlanifierPage() {
   const [planification, setPlanification] = useState<PlanificationProduction | null>(null);
   const [chargementPlan, setChargementPlan] = useState(false);
   const [erreurPlan, setErreurPlan] = useState<string | null>(null);
+  // Le calcul des besoins matières (planifierProduction) a besoin du stock en temps réel —
+  // impossible hors ligne, contrairement à l'enregistrement de la production lui-même (voir
+  // enregistrerLaProduction, qui ne lit jamais `planification`) : débloque donc l'enregistrement
+  // et la saisie HACCP sans le tableau de besoins ni la proposition d'achat, qui eux restent
+  // indisponibles tant que le réseau n'est pas revenu.
+  const [planificationIndisponibleHorsLigne, setPlanificationIndisponibleHorsLigne] = useState(false);
 
   const [proposition, setProposition] = useState<PropositionAchat | null>(null);
   const [chargementAchat, setChargementAchat] = useState(false);
@@ -151,6 +157,8 @@ export default function ProductionPlanifierPage() {
     setIdLocalProductionEnAttente(null);
     setControlesLocauxEnAttente([]);
     setBrouillonsLocaux({});
+    setPlanification(null);
+    setPlanificationIndisponibleHorsLigne(false);
     try {
       // Le champ "Poids fini" se saisit en kg (plus pratique qu'en grammes pour une quantité de
       // production réaliste) mais l'API attend toujours des grammes (voir CibleProduction,
@@ -159,7 +167,11 @@ export default function ProductionPlanifierPage() {
       const res = await planifierProduction(id, { mode, valeur }, depotId);
       setPlanification(res);
     } catch (e) {
-      setErreurPlan(e instanceof Error ? e.message : "Erreur inconnue");
+      if (!navigator.onLine || e instanceof TypeError) {
+        setPlanificationIndisponibleHorsLigne(true);
+      } else {
+        setErreurPlan(e instanceof Error ? e.message : "Erreur inconnue");
+      }
     } finally {
       setChargementPlan(false);
     }
@@ -218,7 +230,10 @@ export default function ProductionPlanifierPage() {
   // enregistrerCommande ci-dessus), jamais celles affichées ici transmises telles quelles. C'est
   // ce lot qui sert ensuite d'ancrage daté aux contrôles HACCP (voir ProductionDetailPage).
   async function enregistrerLaProduction() {
-    if (!planification) return;
+    // planification n'est jamais lue ci-dessous (le serveur recalcule tout à l'enregistrement,
+    // voir le commentaire au-dessus) : seul planificationIndisponibleHorsLigne autorise à
+    // continuer sans elle, jamais un clic "orphelin" avant tout calcul de planification.
+    if (!planification && !planificationIndisponibleHorsLigne) return;
     setChargementProduction(true);
     try {
       const valeur = mode === "poidsFiniG" ? cible * 1000 : cible;
@@ -333,47 +348,61 @@ export default function ProductionPlanifierPage() {
 
       {erreurPlan && <p style={{ color: "#b3261e" }}>{erreurPlan}</p>}
 
-      {planification && (
+      {(planification || planificationIndisponibleHorsLigne) && (
         <div className="fiche-technique-impression" style={{ marginBottom: 24 }}>
-          <p style={{ color: "#666" }}>
-            Cible : {planification.mode === "portions" ? `${planification.portionsCible} portion(s)` : `${(planification.poidsFiniCibleG / 1000).toFixed(2)} kg fini`}
-            {" · "}échelle ×{planification.echelle.toFixed(2)}
-          </p>
+          {planification && (
+            <>
+              <p style={{ color: "#666" }}>
+                Cible : {planification.mode === "portions" ? `${planification.portionsCible} portion(s)` : `${(planification.poidsFiniCibleG / 1000).toFixed(2)} kg fini`}
+                {" · "}échelle ×{planification.echelle.toFixed(2)}
+              </p>
 
-          <h3>Besoins matières</h3>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
-              <thead>
-                <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
-                  <th style={{ padding: "6px 0" }}>Ingrédient</th>
-                  <th style={{ padding: "6px 0" }}>Quantité de production</th>
-                  <th style={{ padding: "6px 0" }}>Stock disponible</th>
-                  <th style={{ padding: "6px 0" }}>Besoin net</th>
-                </tr>
-              </thead>
-              <tbody>
-                {planification.lignes.map((ligne) => (
-                  <tr key={ligne.articleId} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                    <td style={{ padding: "6px 0" }}>{ligne.article.nom}</td>
-                    <td style={{ padding: "6px 0" }}>
-                      {(ligne.quantiteProduction / ligne.unite.facteurBase).toFixed(2)} {ligne.unite.symbole}
-                    </td>
-                    <td style={{ padding: "6px 0" }}>
-                      {(ligne.stockDisponible / ligne.unite.facteurBase).toFixed(2)} {ligne.unite.symbole}
-                    </td>
-                    <td style={{ padding: "6px 0" }}>
-                      {(ligne.besoinNet / ligne.unite.facteurBase).toFixed(2)} {ligne.unite.symbole}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              <h3>Besoins matières</h3>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
+                      <th style={{ padding: "6px 0" }}>Ingrédient</th>
+                      <th style={{ padding: "6px 0" }}>Quantité de production</th>
+                      <th style={{ padding: "6px 0" }}>Stock disponible</th>
+                      <th style={{ padding: "6px 0" }}>Besoin net</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {planification.lignes.map((ligne) => (
+                      <tr key={ligne.articleId} style={{ borderBottom: "1px solid #f0f0f0" }}>
+                        <td style={{ padding: "6px 0" }}>{ligne.article.nom}</td>
+                        <td style={{ padding: "6px 0" }}>
+                          {(ligne.quantiteProduction / ligne.unite.facteurBase).toFixed(2)} {ligne.unite.symbole}
+                        </td>
+                        <td style={{ padding: "6px 0" }}>
+                          {(ligne.stockDisponible / ligne.unite.facteurBase).toFixed(2)} {ligne.unite.symbole}
+                        </td>
+                        <td style={{ padding: "6px 0" }}>
+                          {(ligne.besoinNet / ligne.unite.facteurBase).toFixed(2)} {ligne.unite.symbole}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {planificationIndisponibleHorsLigne && (
+            <p style={{ color: "#946200" }}>
+              📡 Besoins matières indisponibles hors ligne (nécessite le stock en temps réel) — tu
+              peux tout de même enregistrer la production et ses contrôles HACCP ci-dessous ; la
+              proposition d'achat ne sera disponible qu'au retour du réseau.
+            </p>
+          )}
 
           <div className="feuille-production-sans-impression" style={{ marginBottom: 20, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <button className="btn-primary" onClick={genererPropositionAchat} disabled={chargementAchat}>
-              {chargementAchat ? "Calcul…" : "Générer la proposition d'achat"}
-            </button>
+            {planification && (
+              <button className="btn-primary" onClick={genererPropositionAchat} disabled={chargementAchat}>
+                {chargementAchat ? "Calcul…" : "Générer la proposition d'achat"}
+              </button>
+            )}
             <button onClick={enregistrerLaProduction} disabled={chargementProduction}>
               {chargementProduction ? "Enregistrement…" : "Enregistrer la production"}
             </button>
