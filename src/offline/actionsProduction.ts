@@ -43,7 +43,7 @@ export async function enregistrerProductionResiliente(
   }
 }
 
-type ControleSaisi = { recetteEtapeId: number; valeur: string; conforme: boolean; commentaire?: string };
+export type ControleSaisi = { recetteEtapeId: number; valeur: string; conforme: boolean; commentaire?: string };
 
 export type ResultatAjoutControle =
   | { sorte: "synchronise"; production: ProductionDetail }
@@ -79,4 +79,26 @@ export async function ajouterControleResilient(
     }
     throw erreur;
   }
+}
+
+// Un contrôle rattaché à une production ELLE-MÊME pas encore synchronisée (voir
+// ResultatEnregistrementProduction, sorte "en_attente") : aucun id réel n'existe côté serveur,
+// donc aucun appel réseau possible même en ligne — toujours mis en file, résolu automatiquement
+// dès que la production dont il dépend aura elle-même été synchronisée (voir fileAttenteCore.ts,
+// ReferenceProduction "local").
+export async function ajouterControleSurProductionLocale(
+  idLocalProduction: string,
+  controle: ControleSaisi
+): Promise<{ idLocal: string }> {
+  const idLocal = crypto.randomUUID();
+  await ajouterElement({
+    type: "controleHaccp",
+    idLocal,
+    productionRef: { sorte: "local", idLocal: idLocalProduction },
+    recetteEtapeId: controle.recetteEtapeId,
+    valeur: controle.valeur,
+    conforme: controle.conforme,
+    commentaire: controle.commentaire,
+  });
+  return { idLocal };
 }
