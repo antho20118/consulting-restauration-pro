@@ -179,11 +179,17 @@ export default function ProductionPlanifierPage() {
 
   function besoinsAchat(): BesoinAchat[] {
     if (!planification) return [];
-    return planification.lignes.map((ligne) => ({
-      articleId: ligne.articleId,
-      quantite: ligne.quantiteProduction,
-      facteurUniteRecette: 1,
-    }));
+    // Une ligne à 0 (ingrédient dont la quantité à cette échelle arrondit à rien, voir
+    // ligne.quantiteProduction) n'a aucun besoin d'achat à proposer, et ferait échouer la
+    // validation serveur (quantite: z.number().positive(), strictement > 0) pour TOUT le lot —
+    // donc exclue ici plutôt que transmise.
+    return planification.lignes
+      .filter((ligne) => ligne.quantiteProduction > 0)
+      .map((ligne) => ({
+        articleId: ligne.articleId,
+        quantite: ligne.quantiteProduction,
+        facteurUniteRecette: 1,
+      }));
   }
 
   async function genererPropositionAchat() {
