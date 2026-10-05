@@ -41,7 +41,7 @@ before(async () => {
   baseUrl = `http://127.0.0.1:${adresse.port}`;
 
   const societe =
-    (await prisma.societe.findFirst()) ??
+    (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ??
     (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
 

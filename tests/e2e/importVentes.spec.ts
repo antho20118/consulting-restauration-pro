@@ -15,7 +15,7 @@ let recetteId: number;
 const nomRecette = "E2E VENTES Poulet roti maison";
 
 test.beforeAll(async () => {
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
   await creerUtilisateurAdminDeTest(societeId);
 

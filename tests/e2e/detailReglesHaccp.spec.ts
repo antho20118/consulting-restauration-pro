@@ -13,7 +13,7 @@ let societeId: number;
 let recetteId: number;
 
 test.beforeAll(async () => {
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   await creerUtilisateurAdminDeTest(societe.id);
   societeId = societe.id;
 

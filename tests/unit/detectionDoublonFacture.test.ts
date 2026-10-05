@@ -21,7 +21,7 @@ function creerCle(): string {
 }
 
 before(async () => {
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
   const fA = await prisma.fournisseur.create({ data: { nom: "DOUBLON FACTURE TEST Fournisseur A", societeId } });
   fournisseurA = fA.id;

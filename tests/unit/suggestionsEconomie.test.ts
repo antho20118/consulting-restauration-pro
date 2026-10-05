@@ -224,7 +224,7 @@ before(async () => {
 
   token = await connecterAdminDeTest(baseUrl);
 
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
   // Une seule et même (large) catégorie pour tous les articles de ce fichier de test : c'est
   // exactement le scénario qui produisait l'ancien bug (deux articles très différents dans la

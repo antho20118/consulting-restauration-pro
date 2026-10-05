@@ -15,7 +15,7 @@ let fournisseurId: number;
 
 test.beforeAll(async () => {
 
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   await creerUtilisateurAdminDeTest(societe.id);
 
   const fournisseur = await prisma.fournisseur.create({ data: { nom: "E2E CODE OBLIGATOIRE Fournisseur", societeId: societe.id } });
