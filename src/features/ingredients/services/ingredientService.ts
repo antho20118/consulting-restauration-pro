@@ -43,7 +43,7 @@ export async function getAllergenes(): Promise<Allergene[]> {
 }
 
 export async function creerIngredient(
-  input: IngredientInput & { tvaId: number; societeId: number; type: string }
+  input: IngredientInput & { tvaId: number; type: string }
 ): Promise<Ingredient> {
   const response = await apiFetch(`${API_URL}/articles`, {
     method: "POST",

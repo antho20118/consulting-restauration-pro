@@ -78,7 +78,11 @@ export async function creerRecette(input: RecetteInput): Promise<Recette> {
   });
 
   if (!response.ok) {
-    throw new Error("Impossible de créer la recette");
+    // Lit le message réel du serveur (ex. doublon détecté côté serveur, 409 — voir
+    // confirmerDoublon, RecetteInput) plutôt qu'un message générique qui masquerait pourquoi
+    // l'enregistrement a échoué.
+    const corps = await response.json().catch(() => null);
+    throw new Error(corps?.error || "Impossible de créer la recette");
   }
 
   return response.json();
@@ -92,7 +96,8 @@ export async function modifierRecette(id: number, input: RecetteInput): Promise<
   });
 
   if (!response.ok) {
-    throw new Error("Impossible de modifier la recette");
+    const corps = await response.json().catch(() => null);
+    throw new Error(corps?.error || "Impossible de modifier la recette");
   }
 
   return response.json();

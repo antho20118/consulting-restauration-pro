@@ -114,7 +114,6 @@ export type ResultatImport = {
 };
 
 export async function apercuListing(payload: {
-  societeId: number;
   fournisseurNom: string;
   // Fournisseur imposé par le contexte de navigation (fiche fournisseur → Listings → Importer,
   // voir cadrage « déplacement de l'import listing ») : quand fourni, prime strictement sur
@@ -136,7 +135,6 @@ export async function apercuListing(payload: {
 }
 
 export async function importerListing(payload: {
-  societeId: number;
   fournisseurNom: string;
   // Identité stable par défaut du fichier (voir cadrage) : optionnel, prime sur fournisseurNom
   // quand fourni. Un code inconnu ou inactif fait échouer tout l'import (409) plutôt que de créer

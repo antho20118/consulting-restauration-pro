@@ -6,7 +6,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 
 import app from "../../server/app.js";
-import { connecterAdminDeTest } from "../helpers/auth.js";
+import { connecterAdminDeTest, connecterSuperAdminDeTest } from "../helpers/auth.js";
 
 // Test d'intégration réel (vrai serveur Express, vrai jeton) de GET /api/sauvegardes et
 // GET /api/sauvegardes/:nomFichier — voir tests/unit/documentsFournisseursRoute.test.ts pour le
@@ -15,6 +15,7 @@ import { connecterAdminDeTest } from "../helpers/auth.js";
 let server: Server;
 let baseUrl: string;
 let token: string;
+let tokenNonSuperAdmin: string;
 let dossierTemporaire: string;
 let dossierSauvegardes: string;
 
@@ -36,7 +37,11 @@ before(async () => {
   if (!adresse || typeof adresse === "string") throw new Error("Adresse du serveur de test invalide");
   baseUrl = `http://127.0.0.1:${adresse.port}`;
 
-  token = await connecterAdminDeTest(baseUrl);
+  // Route réservée à l'opérateur de la plateforme (voir requireSuperAdmin.ts, F01 de l'audit du
+  // 2026-10-01) : les tests "succès" utilisent un compte superAdmin, un test dédié ci-dessous
+  // vérifie qu'un PROPRIETAIRE "normal" (celui des autres suites) est bien refusé.
+  token = await connecterSuperAdminDeTest(baseUrl);
+  tokenNonSuperAdmin = await connecterAdminDeTest(baseUrl);
 });
 
 after(async () => {
@@ -53,6 +58,18 @@ test("401 sans jeton d'authentification, sur la liste comme sur le téléchargem
 
   const fichierSansJeton = await fetch(`${baseUrl}/api/sauvegardes/sauvegarde-2026-01-01T00-00-00-000Z.json`);
   assert.equal(fichierSansJeton.status, 401);
+});
+
+test("403 pour un PROPRIETAIRE authentifié mais non superAdmin, sur la liste comme sur le téléchargement (F01)", async () => {
+  const liste = await fetch(`${baseUrl}/api/sauvegardes`, {
+    headers: { Authorization: `Bearer ${tokenNonSuperAdmin}` },
+  });
+  assert.equal(liste.status, 403);
+
+  const fichier = await fetch(`${baseUrl}/api/sauvegardes/sauvegarde-2026-01-01T00-00-00-000Z.json`, {
+    headers: { Authorization: `Bearer ${tokenNonSuperAdmin}` },
+  });
+  assert.equal(fichier.status, 403);
 });
 
 test("GET /api/sauvegardes : liste vide (tableau, pas une erreur) quand le dossier n'existe pas encore", async () => {

@@ -27,6 +27,8 @@ let etapeDresserId: number;
 let etapeAutreId: number;
 const productionIds: number[] = [];
 const recetteIds: number[] = [];
+// Articles créés par les tests F04 (déduction de stock) ci-dessous, en plus de l'article principal.
+const articlesSupplementaires: number[] = [];
 
 function authHeaders() {
   return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
@@ -79,6 +81,11 @@ before(async () => {
   });
   articleId = article.id;
 
+  // Stock largement suffisant pour la ligne de recette ci-dessous (échelle 10, besoin réel
+  // 10000g) : depuis F04, POST /productions déduit réellement le stock consommé, donc le premier
+  // test ci-dessous échouerait avec 400 (stock insuffisant) sans ce seed.
+  await prisma.stock.create({ data: { articleId, depotId, quantite: 1_000_000 } });
+
   // Trois étapes : une détectée automatiquement par mots-clés (cuisson), une déclarée point
   // critique manuellement sans mot-clé détectable, une ni l'un ni l'autre (jamais critique).
   const recette = await creerRecette({
@@ -112,12 +119,17 @@ before(async () => {
 });
 
 after(async () => {
+  const tousLesArticles = [articleId, ...articlesSupplementaires];
   await prisma.controleHACCPProduction.deleteMany({ where: { productionId: { in: productionIds } } });
+  // Les mouvements de stock tracés par F04 référencent productionId : à supprimer avant les
+  // productions elles-mêmes (FK), puis le stock et les articles supplémentaires créés ici.
+  await prisma.mouvementStock.deleteMany({ where: { productionId: { in: productionIds } } });
   await prisma.production.deleteMany({ where: { id: { in: productionIds } } });
   await prisma.recetteLigne.deleteMany({ where: { recetteId: { in: recetteIds } } });
   await prisma.recetteEtape.deleteMany({ where: { recetteId: { in: recetteIds } } });
   await prisma.recette.deleteMany({ where: { id: { in: recetteIds } } });
-  await prisma.article.deleteMany({ where: { id: articleId } });
+  await prisma.stock.deleteMany({ where: { articleId: { in: tousLesArticles } } });
+  await prisma.article.deleteMany({ where: { id: { in: tousLesArticles } } });
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
   });
@@ -286,6 +298,155 @@ test("POST /productions/:id/controles : 404 pour une production inexistante", as
     body: JSON.stringify({ recetteEtapeId: etapeCuissonId, valeur: "x", conforme: true }),
   });
   assert.equal(reponse.status, 404);
+});
+
+// F04 — POST /productions déduit réellement le stock consommé (voir appliquerMouvementStock,
+// server/utils/mouvementStock.ts) : même règle "le stock ne descend jamais sous zéro" que la saisie
+// manuelle (mouvements.ts) et la réception de commande (commandes.ts), jamais une troisième
+// implémentation séparée.
+
+test("POST /productions : déduit le stock de chaque ingrédient consommé et trace un MouvementStock SORTIE par article, avec productionId", async () => {
+  const articleB = await prisma.article.create({
+    data: { nom: "PRODUCTIONS TEST F04 Article B", type: "MATIERE_PREMIERE", categorieId, tvaId, societeId, actif: true },
+  });
+  const articleC = await prisma.article.create({
+    data: { nom: "PRODUCTIONS TEST F04 Article C", type: "MATIERE_PREMIERE", categorieId, tvaId, societeId, actif: true },
+  });
+  articlesSupplementaires.push(articleB.id, articleC.id);
+
+  await prisma.stock.create({ data: { articleId: articleB.id, depotId, quantite: 10000 } });
+  await prisma.stock.create({ data: { articleId: articleC.id, depotId, quantite: 6000 } });
+
+  // portions=1, échelle 5 (cible 5 portions) : besoin exact B = 2kg×5 = 10000g, C = 1kg×5 = 5000g —
+  // le stock de B (10000g) doit descendre exactement à 0, celui de C (6000g) à 1000g.
+  const recette = await creerRecette({
+    societeId,
+    nom: "PRODUCTIONS TEST F04 Recette multi-ingrédients",
+    categorieId: null,
+    sousCategorieId: null,
+    portions: 1,
+    lignes: [
+      { articleId: articleB.id, quantite: 2, uniteId: uniteKgId, gainCuissonPct: 0 },
+      { articleId: articleC.id, quantite: 1, uniteId: uniteKgId, gainCuissonPct: 0 },
+    ],
+    etapes: [],
+  });
+
+  const reponse = await fetch(`${baseUrl}/api/productions`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ recetteId: recette.id, depotId, cible: { mode: "portions", valeur: 5 } }),
+  });
+  const texte = await reponse.text();
+  assert.equal(reponse.status, 201, texte);
+  const production = JSON.parse(texte);
+  productionIds.push(production.id);
+
+  const stockB = await prisma.stock.findUnique({ where: { articleId_depotId: { articleId: articleB.id, depotId } } });
+  const stockC = await prisma.stock.findUnique({ where: { articleId_depotId: { articleId: articleC.id, depotId } } });
+  assert.equal(stockB?.quantite, 0, "le stock de B doit être consommé exactement jusqu'à 0");
+  assert.equal(stockC?.quantite, 1000, "le stock de C ne doit être déduit que de son propre besoin (5000g), pas de celui de B");
+
+  const mouvements = await prisma.mouvementStock.findMany({
+    where: { productionId: production.id },
+    orderBy: { articleId: "asc" },
+  });
+  assert.equal(mouvements.length, 2, "un mouvement SORTIE distinct par ingrédient consommé");
+  for (const mouvement of mouvements) {
+    assert.equal(mouvement.type, "SORTIE");
+    assert.equal(mouvement.depotId, depotId);
+    assert.ok(mouvement.motif?.includes(`#${production.id}`), "le motif doit référencer la production");
+  }
+  const mouvementB = mouvements.find((m) => m.articleId === articleB.id);
+  const mouvementC = mouvements.find((m) => m.articleId === articleC.id);
+  assert.equal(mouvementB?.quantite, 10000);
+  assert.equal(mouvementC?.quantite, 5000);
+});
+
+test("POST /productions : stock insuffisant pour un seul ingrédient → 400, aucune écriture (ni production, ni mouvement, ni stock modifié pour l'autre ingrédient)", async () => {
+  const articleSuffisant = await prisma.article.create({
+    data: { nom: "PRODUCTIONS TEST F04 Article suffisant", type: "MATIERE_PREMIERE", categorieId, tvaId, societeId, actif: true },
+  });
+  const articleInsuffisant = await prisma.article.create({
+    data: { nom: "PRODUCTIONS TEST F04 Article insuffisant", type: "MATIERE_PREMIERE", categorieId, tvaId, societeId, actif: true },
+  });
+  articlesSupplementaires.push(articleSuffisant.id, articleInsuffisant.id);
+
+  await prisma.stock.create({ data: { articleId: articleSuffisant.id, depotId, quantite: 1_000_000 } });
+  // Besoin réel 5000g (1kg × échelle 5), stock disponible 100g seulement.
+  await prisma.stock.create({ data: { articleId: articleInsuffisant.id, depotId, quantite: 100 } });
+
+  const recette = await creerRecette({
+    societeId,
+    nom: "PRODUCTIONS TEST F04 Recette stock insuffisant",
+    categorieId: null,
+    sousCategorieId: null,
+    portions: 1,
+    lignes: [
+      { articleId: articleSuffisant.id, quantite: 1, uniteId: uniteKgId, gainCuissonPct: 0 },
+      { articleId: articleInsuffisant.id, quantite: 1, uniteId: uniteKgId, gainCuissonPct: 0 },
+    ],
+    etapes: [],
+  });
+
+  const nbProductionsAvant = await prisma.production.count({ where: { recetteId: recette.id } });
+
+  const reponse = await fetch(`${baseUrl}/api/productions`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ recetteId: recette.id, depotId, cible: { mode: "portions", valeur: 5 } }),
+  });
+  assert.equal(reponse.status, 400);
+
+  const nbProductionsApres = await prisma.production.count({ where: { recetteId: recette.id } });
+  assert.equal(nbProductionsApres, nbProductionsAvant, "aucune production ne doit être créée si le stock est insuffisant");
+
+  const stockSuffisant = await prisma.stock.findUnique({
+    where: { articleId_depotId: { articleId: articleSuffisant.id, depotId } },
+  });
+  const stockInsuffisant = await prisma.stock.findUnique({
+    where: { articleId_depotId: { articleId: articleInsuffisant.id, depotId } },
+  });
+  assert.equal(stockSuffisant?.quantite, 1_000_000, "le stock de l'ingrédient suffisant ne doit pas avoir été déduit (transaction annulée)");
+  assert.equal(stockInsuffisant?.quantite, 100, "le stock de l'ingrédient insuffisant doit rester inchangé");
+
+  const mouvements = await prisma.mouvementStock.findMany({
+    where: { articleId: { in: [articleSuffisant.id, articleInsuffisant.id] } },
+  });
+  assert.equal(mouvements.length, 0, "aucun mouvement de stock ne doit avoir été créé");
+});
+
+test("POST /productions : sans dépôt choisi, aucune déduction de stock (comportement préexistant préservé)", async () => {
+  const articleSansDepot = await prisma.article.create({
+    data: { nom: "PRODUCTIONS TEST F04 Article sans dépôt", type: "MATIERE_PREMIERE", categorieId, tvaId, societeId, actif: true },
+  });
+  articlesSupplementaires.push(articleSansDepot.id);
+  // Aucun stock créé pour cet article : si la déduction s'appliquait malgré l'absence de dépôt,
+  // la production échouerait en 400 (stock insuffisant). Elle doit au contraire réussir.
+
+  const recette = await creerRecette({
+    societeId,
+    nom: "PRODUCTIONS TEST F04 Recette sans dépôt",
+    categorieId: null,
+    sousCategorieId: null,
+    portions: 1,
+    lignes: [{ articleId: articleSansDepot.id, quantite: 1, uniteId: uniteKgId, gainCuissonPct: 0 }],
+    etapes: [],
+  });
+
+  const reponse = await fetch(`${baseUrl}/api/productions`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ recetteId: recette.id, cible: { mode: "portions", valeur: 5 } }),
+  });
+  const texte = await reponse.text();
+  assert.equal(reponse.status, 201, texte);
+  const production = JSON.parse(texte);
+  productionIds.push(production.id);
+  assert.equal(production.depotId, null);
+
+  const mouvements = await prisma.mouvementStock.findMany({ where: { productionId: production.id } });
+  assert.equal(mouvements.length, 0, "sans dépôt, aucun mouvement de stock ne doit être créé");
 });
 
 test("401 sans authentification sur toutes les routes productions", async () => {

@@ -8,6 +8,7 @@ import authRouter from "./routes/auth.js";
 import { requireAuth } from "./middleware/requireAuth.js";
 import { autoriserEcriture } from "./middleware/autoriserEcriture.js";
 import { requireRole } from "./middleware/requireRole.js";
+import { requireSuperAdmin } from "./middleware/requireSuperAdmin.js";
 import utilisateursRouter from "./routes/utilisateurs.js";
 import articlesRouter from "./routes/articles.js";
 import categoriesRouter from "./routes/categories.js";
@@ -104,7 +105,10 @@ app.use("/api/questions", questionsReponsesRouter);
 app.use("/api/documents-fournisseurs", ECRITURE_GESTION, documentsFournisseursRouter);
 app.use("/api/listings-fournisseur", ECRITURE_GESTION, listingsFournisseurRouter);
 app.use("/api/ventes", ECRITURE_GESTION, ventesRouter);
-app.use("/api/sauvegardes", requireRole(["PROPRIETAIRE"]), sauvegardesRouter);
+// requireSuperAdmin, pas requireRole(["PROPRIETAIRE"]) : cette route exporte/télécharge une
+// sauvegarde complète de TOUTES les sociétés sans filtre (voir prisma/sauvegarder.ts) — un
+// PROPRIETAIRE n'a d'autorité que sur SA société, jamais sur celles des autres clients.
+app.use("/api/sauvegardes", requireSuperAdmin, sauvegardesRouter);
 app.use("/api/journal-erreurs", requireRole(["PROPRIETAIRE"]), journalErreursRouter);
 
 app.get("/health", (_req, res) => {

@@ -204,7 +204,6 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
         await creerIngredient({
           ...payload,
           tvaId: 1,
-          societeId: 1,
           type: "MATIERE_PREMIERE",
           confirmationArticleId: correspondanceParReference?.id,
         });

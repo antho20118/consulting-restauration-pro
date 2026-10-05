@@ -226,6 +226,10 @@ export default function ImporterFichierCoutsModal({ onClose, onImporte }: Props)
             };
           }),
         etapes: [],
+        // Transmis au serveur, qui revérifie le doublon à cet instant précis (voir F03) — jusqu'ici
+        // seul le contrôle client (aConflitDoublon) existait, contournable par un appel direct à
+        // l'API malgré la confirmation affichée ici.
+        confirmerDoublon: confirmationsDoublon[index] === true,
       });
       setStatuts((s) => ({ ...s, [index]: "importee" }));
       onImporte();

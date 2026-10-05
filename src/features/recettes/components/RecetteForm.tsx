@@ -354,6 +354,10 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
       photo,
       lignes,
       etapes,
+      // Transmis au serveur, qui revérifie le doublon à cet instant précis (voir F03, server/
+      // routes/recettes.ts) — le contrôle client ci-dessus (correspondancesRecette) reste une
+      // vérification rapide pour l'utilisateur, jamais la seule protection.
+      confirmerDoublon: confirmationDoublon,
     };
 
     try {

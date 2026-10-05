@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
 import { connecterAdminDeTest } from "../helpers/auth.js";
+import { hacherCode } from "../../server/utils/auth.js";
 
 // Test d'intégration réel contre POST /api/recettes et PUT /api/recettes/:id (app Express réelle,
 // vrai Postgres).
@@ -249,4 +250,134 @@ test("15. Non-régression : lignes=[] toujours accepté (choix produit)", async 
   assert.equal(status, 201);
   recetteIds.push(corps.id);
   assert.deepEqual(corps.lignes, []);
+});
+
+// Régression F03 (audit du 2026-10-01) : aucune protection serveur contre les doublons de nom de
+// recette, malgré un avertissement côté client (RecetteForm.tsx) trivialement contournable par un
+// appel API direct. Les tests suivants vérifient le correctif (recalcul serveur, scopé par
+// société, confirmable explicitement via confirmerDoublon).
+
+test("16. [F03] POST avec un nom déjà utilisé par une recette active : refus (409), aucune écriture", async () => {
+  const premiere = await creerRecette(payloadBase("RECETTE VALIDATION TEST Doublon"));
+  assert.equal(premiere.status, 201);
+  recetteIds.push(premiere.corps.id);
+
+  const avant = await prisma.recette.count();
+  const { status, corps } = await creerRecette(payloadBase("RECETTE VALIDATION TEST Doublon"));
+  assert.equal(status, 409);
+  assert.equal(corps.error, "Une recette portant ce nom existe déjà");
+  assert.equal(corps.doublons.length, 1);
+  assert.equal(corps.doublons[0].id, premiere.corps.id);
+  const apres = await prisma.recette.count();
+  assert.equal(apres, avant, "aucune seconde recette ne doit avoir été créée");
+});
+
+test("17. [F03] POST avec confirmerDoublon=true : le doublon est créé malgré tout", async () => {
+  const premiere = await creerRecette(payloadBase("RECETTE VALIDATION TEST Doublon Confirme"));
+  assert.equal(premiere.status, 201);
+  recetteIds.push(premiere.corps.id);
+
+  const { status, corps } = await creerRecette(
+    payloadBase("RECETTE VALIDATION TEST Doublon Confirme", { confirmerDoublon: true })
+  );
+  assert.equal(status, 201);
+  recetteIds.push(corps.id);
+  assert.notEqual(corps.id, premiere.corps.id);
+
+  const total = await prisma.recette.count({ where: { nom: "RECETTE VALIDATION TEST Doublon Confirme" } });
+  assert.equal(total, 2);
+});
+
+test("18. [F03] la comparaison est insensible à la casse et aux espaces superflus", async () => {
+  const premiere = await creerRecette(payloadBase("RECETTE VALIDATION TEST Casse"));
+  assert.equal(premiere.status, 201);
+  recetteIds.push(premiere.corps.id);
+
+  const { status } = await creerRecette(payloadBase("  recette validation test casse  "));
+  assert.equal(status, 409);
+});
+
+test("19. [F03] une recette DÉSACTIVÉE du même nom ne bloque jamais une nouvelle création", async () => {
+  const premiere = await creerRecette(payloadBase("RECETTE VALIDATION TEST Inactive"));
+  assert.equal(premiere.status, 201);
+  recetteIds.push(premiere.corps.id);
+  await prisma.recette.update({ where: { id: premiere.corps.id }, data: { actif: false } });
+
+  const { status, corps } = await creerRecette(payloadBase("RECETTE VALIDATION TEST Inactive"));
+  assert.equal(status, 201, "une recette désactivée n'est jamais un doublon bloquant");
+  recetteIds.push(corps.id);
+});
+
+test("20. [F03] le contrôle est scopé par société : deux sociétés distinctes peuvent partager un nom", async () => {
+  // Un VRAI second compte, rattaché à une AUTRE société, avec son propre jeton — un societeId
+  // usurpé dans le corps n'aurait rien prouvé ici : il est de toute façon ignoré côté serveur
+  // depuis le correctif F02, donc les deux appels auraient atterri dans LA MÊME société réelle
+  // (celle du compte "admin") et auraient dû entrer en collision à juste titre.
+  const autreSociete = await prisma.societe.create({ data: { nom: "RECETTE VALIDATION TEST Autre Société" } });
+  const identifiantAutre = "recette-validation-test-autre-societe";
+  await prisma.utilisateur.create({
+    data: {
+      identifiant: identifiantAutre,
+      codeHache: hacherCode("1234"),
+      role: "PROPRIETAIRE",
+      societeId: autreSociete.id,
+    },
+  });
+  try {
+    const premiere = await creerRecette(payloadBase("RECETTE VALIDATION TEST Multi Société"));
+    assert.equal(premiere.status, 201);
+    recetteIds.push(premiere.corps.id);
+
+    const connexionAutre = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifiant: identifiantAutre, code: "1234" }),
+    });
+    const { token: tokenAutre } = await connexionAutre.json();
+
+    const reponse = await fetch(`${baseUrl}/api/recettes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenAutre}` },
+      body: JSON.stringify(payloadBase("RECETTE VALIDATION TEST Multi Société", { societeId: autreSociete.id })),
+    });
+    assert.equal(reponse.status, 201, "même nom, mais dans une société réellement différente (JWT) — jamais un doublon cross-société");
+    const corps = await reponse.json();
+
+    await prisma.recette.delete({ where: { id: corps.id } });
+  } finally {
+    await prisma.utilisateur.delete({ where: { identifiant: identifiantAutre } });
+    await prisma.societe.delete({ where: { id: autreSociete.id } });
+  }
+});
+
+test("21. [F03] PUT : renommer SANS changer le nom (ou juste la casse/les espaces) ne se bloque jamais sur soi-même", async () => {
+  const base = await creerRecette(payloadBase("RECETTE VALIDATION TEST Renommage Soi"));
+  assert.equal(base.status, 201);
+  recetteIds.push(base.corps.id);
+
+  const { status } = await modifierRecette(
+    base.corps.id,
+    payloadBase("  recette validation test renommage soi  ")
+  );
+  assert.equal(status, 200, "une recette ne doit jamais être bloquée sur sa propre ligne");
+});
+
+test("22. [F03] PUT : renommer en collision avec une AUTRE recette active : refus (409), nom d'origine conservé", async () => {
+  const cible = await creerRecette(payloadBase("RECETTE VALIDATION TEST Cible Existante"));
+  assert.equal(cible.status, 201);
+  recetteIds.push(cible.corps.id);
+
+  const aRenommer = await creerRecette(payloadBase("RECETTE VALIDATION TEST A Renommer"));
+  assert.equal(aRenommer.status, 201);
+  recetteIds.push(aRenommer.corps.id);
+
+  const { status, corps } = await modifierRecette(
+    aRenommer.corps.id,
+    payloadBase("RECETTE VALIDATION TEST Cible Existante")
+  );
+  assert.equal(status, 409);
+  assert.equal(corps.doublons[0].id, cible.corps.id);
+
+  const enBase = await prisma.recette.findUniqueOrThrow({ where: { id: aRenommer.corps.id } });
+  assert.equal(enBase.nom, "RECETTE VALIDATION TEST A Renommer");
 });

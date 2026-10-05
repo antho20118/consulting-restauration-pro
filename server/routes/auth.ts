@@ -77,6 +77,7 @@ router.post("/login", async (req: Request, res: Response) => {
         identifiant: utilisateur.identifiant,
         role: utilisateur.role,
         societeId: utilisateur.societeId,
+        superAdmin: utilisateur.superAdmin,
       },
     });
   } catch (error) {

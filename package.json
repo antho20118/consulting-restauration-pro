@@ -14,6 +14,7 @@
     "db:backfill-code-fournisseur": "tsx prisma/backfillCodeFournisseur.ts",
     "db:fusionner-doublons-fournisseurs": "tsx prisma/fusionnerDoublonsFournisseurs.ts",
     "db:sauvegarder": "tsx prisma/sauvegarder.ts",
+    "db:definir-super-admin": "tsx prisma/definirSuperAdmin.ts",
     "postinstall": "prisma generate && node scripts/copierAssetsTesseract.mjs",
     "typecheck": "tsc -b --pretty false",
     "test": "node --import tsx --test tests/unit/*.test.ts tests/smoke/*.test.ts",

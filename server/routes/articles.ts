@@ -547,7 +547,12 @@ router.delete("/:id", async (req: Request, res: Response) => {
 // nouvel article avec son premier tarif.
 router.post("/import", async (req: Request, res: Response) => {
   try {
-    const { societeId, fournisseurNom, categorieId, tvaId, type, lignes } = req.body;
+    const { fournisseurNom, categorieId, tvaId, type, lignes } = req.body;
+    // Jamais depuis req.body : la société d'écriture est celle du compte connecté, jamais une
+    // valeur transmise par le client (même principe que POST /articles ci-dessus) — un societeId
+    // client aurait permis de créer des articles/fournisseurs dans N'IMPORTE QUELLE société (voir
+    // audit du 2026-10-01, F02).
+    const societeId = req.utilisateur!.societeId;
     // Métadonnées du fichier source (nom/type MIME/taille), transmises par le client depuis le
     // File choisi à l'étape 1 — jamais inventées : voir Phase 6 (historique des imports Excel via
     // DocumentFournisseur, réutilisé tel quel). codeFournisseur : identité par défaut du fichier
@@ -580,7 +585,10 @@ router.post("/import", async (req: Request, res: Response) => {
         res.status(400).json({ error: "Identifiant fournisseur invalide" });
         return;
       }
-      const fournisseurContexte = await prisma.fournisseur.findUnique({ where: { id: fournisseurIdContexte } });
+      // Scopé par société (findFirst, jamais findUnique sur le seul id) : sans ça, un id de
+      // fournisseur d'une AUTRE société serait accepté tel quel (divulgation + rattachement
+      // cross-société des articles/tarifs créés par cet import — voir audit du 2026-10-01, F15).
+      const fournisseurContexte = await prisma.fournisseur.findFirst({ where: { id: fournisseurIdContexte, societeId } });
       if (!fournisseurContexte) {
         res.status(404).json({ error: "Fournisseur introuvable" });
         return;
@@ -1132,7 +1140,9 @@ router.post("/import", async (req: Request, res: Response) => {
 // ligne par ligne (articleId précis), jamais globalement — voir PHASE 3/4 de PR #79.
 router.post("/import/apercu", async (req: Request, res: Response) => {
   try {
-    const { societeId, fournisseurNom, lignes } = req.body;
+    const { fournisseurNom, lignes } = req.body;
+    // Jamais depuis req.body : même principe que POST /import ci-dessus (F02).
+    const societeId = req.utilisateur!.societeId;
     const { fournisseurId: fournisseurIdContexte } = req.body as { fournisseurId?: number };
 
     if (!Array.isArray(lignes) || lignes.length === 0) {
@@ -1150,7 +1160,8 @@ router.post("/import/apercu", async (req: Request, res: Response) => {
         res.status(400).json({ error: "Identifiant fournisseur invalide" });
         return;
       }
-      const fournisseurContexte = await prisma.fournisseur.findUnique({ where: { id: fournisseurIdContexte } });
+      // Scopé par société — même correctif que POST /import ci-dessus (F15).
+      const fournisseurContexte = await prisma.fournisseur.findFirst({ where: { id: fournisseurIdContexte, societeId } });
       if (!fournisseurContexte) {
         res.status(404).json({ error: "Fournisseur introuvable" });
         return;

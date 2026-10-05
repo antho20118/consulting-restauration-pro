@@ -12,7 +12,16 @@ type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0
 // construction dans le cas d'une commande — voir la FK déjà validée à la création de la ligne).
 export async function appliquerMouvementStock(
   tx: TransactionClient,
-  params: { articleId: number; depotId: number; type: "ENTREE" | "SORTIE"; quantite: number; motif?: string | null }
+  params: {
+    articleId: number;
+    depotId: number;
+    type: "ENTREE" | "SORTIE";
+    quantite: number;
+    motif?: string | null;
+    // Production ayant consommé cet article (voir POST /productions) — absent pour une saisie
+    // manuelle ou une réception de commande, les deux autres appelants de cette fonction.
+    productionId?: number | null;
+  }
 ): Promise<{ id: number }> {
   const delta = params.type === "ENTREE" ? params.quantite : -params.quantite;
 
@@ -38,6 +47,7 @@ export async function appliquerMouvementStock(
       type: params.type,
       quantite: params.quantite,
       motif: params.motif ?? null,
+      productionId: params.productionId ?? null,
     },
   });
 }
