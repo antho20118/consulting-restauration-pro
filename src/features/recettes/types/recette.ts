@@ -319,6 +319,12 @@ export type RecetteInput = {
   photo: string | null;
   lignes: LigneRecetteInput[];
   etapes: EtapeRecetteInput[];
+  // Confirmation explicite qu'une recette portant ce nom existe déjà (voir le doublon recalculé
+  // côté serveur, server/routes/recettes.ts) et que l'utilisateur veut quand même l'enregistrer —
+  // un booléen (pas un id précis comme pour les articles) : plusieurs recettes homonymes actives
+  // restent possibles, aucune contrainte d'unicité sur Recette.nom. Absent/false tant qu'aucun
+  // doublon n'a été confirmé.
+  confirmerDoublon?: boolean;
 };
 
 // Import Excel sécurisé (voir ImporterRecettesExcelSecuriseModal.tsx) : une recette existante

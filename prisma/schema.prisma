@@ -37,6 +37,12 @@ model Utilisateur {
   role        RoleUtilisateur
   actif       Boolean         @default(true)
 
+  // Distinct du rôle PROPRIETAIRE, qui ne porte que les droits à l'intérieur d'UNE société : ce
+  // champ identifie l'opérateur de la plateforme elle-même (accès cross-société), jamais accordé à
+  // un compte client — voir GET /api/sauvegardes (server/routes/sauvegardes.ts), seule route qui le
+  // vérifie, et prisma/definirSuperAdmin.ts pour l'activer sur un compte.
+  superAdmin Boolean @default(false)
+
   societeId Int
   societe   Societe @relation(fields: [societeId], references: [id])
 
@@ -571,8 +577,16 @@ model MouvementStock {
   // ligne de commande ne peut créer qu'un seul mouvement.
   ligneCommande LigneCommandeFournisseur?
 
+  // Production ayant consommé cet ingrédient (voir Production, POST /productions) — nullable : un
+  // mouvement saisi à la main ou issu d'une réception n'en a pas. PAS un FK unique comme
+  // ligneCommande ci-dessus : une production consomme en général PLUSIEURS articles (une ligne de
+  // recette = une sortie de stock), donc une seule production peut créer PLUSIEURS mouvements.
+  productionId Int?
+  production   Production? @relation(fields: [productionId], references: [id])
+
   @@index([articleId])
   @@index([depotId])
+  @@index([productionId])
 }
 
 enum StatutCommandeFournisseur {
@@ -674,6 +688,10 @@ model Production {
   createdAt DateTime @default(now())
 
   controles ControleHACCPProduction[]
+  // Sorties de stock générées par cette production (une par article de la recette, voir POST
+  // /productions) — jamais créées quand aucun dépôt n'a été choisi (même choix qu'à la
+  // planification, voir planifierProduction.ts : "Aucun (pas de déduction de stock)").
+  mouvementsStock MouvementStock[]
 
   @@index([recetteId])
   @@index([dateProduction])

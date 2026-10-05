@@ -366,8 +366,28 @@ router.post("/import-excel", async (req: Request, res: Response) => {
     const resultats = await prisma.$transaction(async (tx) => {
       const sortie: { action: DecisionImportExcel["action"]; recette: ReturnType<typeof calculerCoutRecette> }[] = [];
 
+      // Revérifié à CET instant (même principe que POST/PUT /recettes, F03) : la décision "creer"
+      // a été prise côté client à l'aperçu (ImporterRecettesExcelSecuriseModal.tsx), sur la base
+      // des recettes existantes à ce moment-là — sans ce contrôle, une recette créée par un AUTRE
+      // import concurrent entre l'aperçu et cet appel serait dupliquée silencieusement. Chargé une
+      // seule fois (jamais une requête par décision) ; complété au fur et à mesure avec les noms
+      // déjà créés dans CE lot, pour couvrir aussi le cas où deux décisions "creer" du même lot
+      // portent le même nom — comparaison trim + insensible à la casse, comme POST/PUT /recettes.
+      const nomsExistants = new Set(
+        (await tx.recette.findMany({ where: { actif: true, societeId }, select: { nom: true } })).map((r) =>
+          r.nom.trim().toLowerCase()
+        )
+      );
+
       for (const decision of decisions) {
         if (decision.action === "creer") {
+          const nomTrim = decision.nom.trim();
+          const nomCle = nomTrim.toLowerCase();
+          if (nomsExistants.has(nomCle)) {
+            throw new Error(`Conflit d'import : une recette nommée "${nomTrim}" existe déjà — aucune écriture effectuée.`);
+          }
+          nomsExistants.add(nomCle);
+
           const creee = await tx.recette.create({
             data: {
               nom: decision.nom,
@@ -492,6 +512,31 @@ router.post("/", async (req: Request, res: Response) => {
     // valeur transmise par le client (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma).
     const societeId = req.utilisateur!.societeId;
 
+    // Aucune contrainte `@@unique` sur Recette.nom (homonymie parfois légitime, ex. "Sauce
+    // tomate" dans deux catégories) : le rapprochement existait déjà côté client (RecetteForm.tsx,
+    // ImporterRecettesExcelSecuriseModal.tsx) mais jamais revérifié ici — une requête API directe,
+    // ou simplement deux onglets ouverts en parallèle, créait un doublon silencieux malgré
+    // l'avertissement affiché (voir audit du 2026-10-01, F03). Recalculé à CET instant (jamais une
+    // liste transmise par le client), scopé par société, actif uniquement (une recette désactivée
+    // ne bloque jamais une nouvelle création du même nom). confirmerDoublon (booléen, pas un id
+    // précis comme pour les articles) : plusieurs recettes homonymes actives restent possibles
+    // (aucune contrainte d'unicité, homonymie parfois légitime) — la confirmation porte donc sur
+    // « je sais, crée quand même », jamais sur UN candidat précis parmi d'éventuels doublons.
+    const nomTrim = nom.trim();
+    const confirmerDoublon = req.body.confirmerDoublon === true;
+    const candidatsMemeNom = await prisma.recette.findMany({
+      where: { actif: true, societeId },
+      select: { id: true, nom: true },
+    });
+    const doublonsNom = candidatsMemeNom.filter((r) => r.nom.trim().toLowerCase() === nomTrim.toLowerCase());
+    if (doublonsNom.length > 0 && !confirmerDoublon) {
+      res.status(409).json({
+        error: "Une recette portant ce nom existe déjà",
+        doublons: doublonsNom.map((d) => ({ id: d.id, nom: d.nom })),
+      });
+      return;
+    }
+
     const recette = await prisma.$transaction(async (tx) => {
       const creee = await tx.recette.create({
         data: {
@@ -580,6 +625,28 @@ router.put("/:id", async (req: Request, res: Response) => {
       }
     }
 
+    // Jamais depuis req.body (même principe que POST ci-dessus).
+    const societeId = req.utilisateur!.societeId;
+
+    // Même correctif F03 qu'à la création, pour le renommage : exclut explicitement la recette
+    // elle-même (id: { not: id }), pour qu'enregistrer une recette SANS changer son nom (ou en ne
+    // changeant que la casse/les espaces) ne se bloque jamais sur sa propre ligne — seul un
+    // renommage qui entre en collision avec une AUTRE recette active de la société est concerné.
+    const nomTrim = nom.trim();
+    const confirmerDoublon = req.body.confirmerDoublon === true;
+    const candidatsMemeNom = await prisma.recette.findMany({
+      where: { actif: true, societeId, id: { not: id } },
+      select: { id: true, nom: true },
+    });
+    const doublonsNom = candidatsMemeNom.filter((r) => r.nom.trim().toLowerCase() === nomTrim.toLowerCase());
+    if (doublonsNom.length > 0 && !confirmerDoublon) {
+      res.status(409).json({
+        error: "Une recette portant ce nom existe déjà",
+        doublons: doublonsNom.map((d) => ({ id: d.id, nom: d.nom })),
+      });
+      return;
+    }
+
     // calculerCoutRecette (qui valide au passage portions > 0, le rendement de chaque article,
     // etc.) doit être appelée DANS cette même transaction, pour que Prisma annule aussi le
     // remplacement des lignes/étapes déjà effectué si elle échoue — même correctif et même raison
@@ -588,7 +655,7 @@ router.put("/:id", async (req: Request, res: Response) => {
       // Scopé par société : jamais permettre à un compte de modifier une recette d'une autre
       // société en devinant/énumérant simplement un id (voir la matrice de permissions,
       // server/app.ts).
-      await tx.recette.findFirstOrThrow({ where: { id, societeId: req.utilisateur!.societeId } });
+      await tx.recette.findFirstOrThrow({ where: { id, societeId } });
 
       await tx.recetteLigne.deleteMany({ where: { recetteId: id } });
       await tx.recetteEtape.deleteMany({ where: { recetteId: id } });

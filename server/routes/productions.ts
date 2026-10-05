@@ -6,6 +6,7 @@ import prisma from "../prisma.js";
 import { planifierProduction, type CibleProduction } from "../utils/planifierProduction.js";
 import { evaluerEtapesHACCP } from "../utils/haccp.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
+import { appliquerMouvementStock, StockInsuffisantError } from "../utils/mouvementStock.js";
 
 const router = Router();
 
@@ -136,23 +137,52 @@ router.post("/", async (req: Request, res: Response) => {
 
     const planification = await planifierProduction(recetteId, cible as CibleProduction, societeId, depotId);
 
-    // Qui a réellement enregistré cette production — traçabilité (voir Production.creeParId,
-    // prisma/schema.prisma), jamais l'identité fournie par le client.
-    const production = await prisma.production.create({
-      data: {
-        recetteId,
-        societeId,
-        depotId,
-        portionsProduites: planification.portionsCible,
-        poidsFiniProduitG: planification.poidsFiniCibleG,
-        creeParId: req.utilisateur!.id,
-      },
-      ...inclusionProduction,
+    // Création de la production et déduction du stock consommé dans la même transaction : si le
+    // stock est insuffisant pour un seul ingrédient, toute la production est annulée (aucune
+    // écriture partielle, ni la production ni un mouvement de stock) — même règle "le stock ne
+    // descend jamais sous zéro" qu'ailleurs (voir appliquerMouvementStock, server/utils/mouvementStock.ts).
+    const production = await prisma.$transaction(async (tx) => {
+      // Qui a réellement enregistré cette production — traçabilité (voir Production.creeParId,
+      // prisma/schema.prisma), jamais l'identité fournie par le client.
+      const production = await tx.production.create({
+        data: {
+          recetteId,
+          societeId,
+          depotId,
+          portionsProduites: planification.portionsCible,
+          poidsFiniProduitG: planification.poidsFiniCibleG,
+          creeParId: req.utilisateur!.id,
+        },
+        ...inclusionProduction,
+      });
+
+      // Sans dépôt choisi, aucune déduction de stock (comportement préexistant : une production
+      // "hors stock", ex. recette non suivie en stock) — les quantités sont déjà en unité de base,
+      // comme Stock.quantite (voir planifierProduction.ts).
+      if (depotId != null) {
+        for (const ligne of planification.lignes) {
+          if (ligne.quantiteProduction <= 0) continue;
+          await appliquerMouvementStock(tx, {
+            articleId: ligne.articleId,
+            depotId,
+            type: "SORTIE",
+            quantite: ligne.quantiteProduction,
+            motif: `Production #${production.id}`,
+            productionId: production.id,
+          });
+        }
+      }
+
+      return production;
     });
 
     const etapesCritiques = await etapesCritiquesDeLaRecette(recetteId, societeId);
     res.status(201).json({ ...production, etapesCritiques });
   } catch (error) {
+    if (error instanceof StockInsuffisantError) {
+      res.status(400).json({ error: "Stock insuffisant pour enregistrer cette production" });
+      return;
+    }
     const message = error instanceof Error ? error.message : "Impossible d'enregistrer la production";
     const statutHttp = message === "Recette introuvable" ? 404 : 500;
     if (statutHttp === 500) {

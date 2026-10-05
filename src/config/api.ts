@@ -26,6 +26,11 @@ export type UtilisateurConnecte = {
   identifiant: string;
   role: RoleUtilisateur;
   societeId: number;
+  // Distinct du rôle PROPRIETAIRE (qui ne porte des droits qu'À L'INTÉRIEUR d'une société) :
+  // identifie l'opérateur de la plateforme (voir schema.prisma, server/middleware/
+  // requireSuperAdmin.ts) — ici uniquement pour masquer une UI réservée, jamais une source de
+  // vérité pour l'autorisation (toujours revérifié côté serveur, comme pour `role`).
+  superAdmin: boolean;
 };
 
 export function getUtilisateur(): UtilisateurConnecte | null {

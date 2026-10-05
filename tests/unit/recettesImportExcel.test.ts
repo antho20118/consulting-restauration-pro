@@ -459,3 +459,72 @@ test("CONFLIT — deux décisions 'mettre_a_jour' visant la même recette : reje
     "aucune des deux décisions en conflit n'a dû être appliquée"
   );
 });
+
+// Régression TOCTOU (signalé lors de l'audit du 2026-10-01, même root cause que F03) : la décision
+// "creer" est prise côté client à l'aperçu, sur la base des recettes existantes À CE MOMENT-LÀ —
+// sans revérification serveur au moment de l'écriture, une recette créée entre l'aperçu et cet
+// appel (import concurrent, ou doublon interne au lot) était dupliquée silencieusement.
+
+test("TOCTOU — 'creer' avec un nom déjà existant (créé APRÈS l'aperçu, donc pas vu par le client) : rejet, aucune écriture", async () => {
+  const nom = "IMPORT EXCEL TEST toctou deja existant";
+  const creation = await fetch(`${baseUrl}/api/recettes`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      nom,
+      societeId,
+      categorieId: categorieRecetteId,
+      portions: 1,
+      lignes: [{ articleId: articleAId, quantite: 1, uniteId: uniteKgId }],
+      etapes: [],
+    }),
+  });
+  const recette = await creation.json();
+  recetteIds.push(recette.id);
+
+  const reponse = await fetch(`${baseUrl}/api/recettes/import-excel`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      decisions: [
+        {
+          action: "creer",
+          nom,
+          categorieId: categorieRecetteId,
+          sousCategorieId: null,
+          societeId,
+          lignes: [{ articleId: articleBId, quantite: 2, uniteId: uniteKgId }],
+        },
+      ],
+    }),
+  });
+  assert.equal(reponse.status, 500, "rejet explicite, jamais une création silencieuse d'un doublon");
+
+  const apres = await prisma.recette.count({ where: { nom } });
+  assert.equal(apres, 1, "toujours une seule recette portant ce nom — aucune seconde créée");
+});
+
+test("TOCTOU — deux décisions 'creer' du même lot portant le même nom : rejet, aucune écriture", async () => {
+  const nom = "IMPORT EXCEL TEST toctou doublon interne au lot";
+  const avant = await prisma.recette.count({ where: { nom } });
+  assert.equal(avant, 0);
+
+  const decisionCreer = (quantite: number) => ({
+    action: "creer" as const,
+    nom,
+    categorieId: categorieRecetteId,
+    sousCategorieId: null,
+    societeId,
+    lignes: [{ articleId: articleAId, quantite, uniteId: uniteKgId }],
+  });
+
+  const reponse = await fetch(`${baseUrl}/api/recettes/import-excel`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ decisions: [decisionCreer(1), decisionCreer(2)] }),
+  });
+  assert.equal(reponse.status, 500, "rejet explicite, jamais un écrasement ni une double création silencieuse");
+
+  const apres = await prisma.recette.count({ where: { nom } });
+  assert.equal(apres, 0, "ni la première ni la seconde décision ne doivent avoir été conservées (rollback complet)");
+});

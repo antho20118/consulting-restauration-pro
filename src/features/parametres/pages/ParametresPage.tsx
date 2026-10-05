@@ -32,6 +32,9 @@ export default function ParametresPage() {
   // Masqué côté client à qui n'est pas PROPRIETAIRE (server/routes/utilisateurs.ts refuse
   // de toute façon la moindre requête avec un autre rôle — jamais une sécurité côté client seule).
   const estProprietaire = getUtilisateur()?.role === "PROPRIETAIRE";
+  // Sauvegardes : réservé à l'opérateur de la plateforme, pas à tout PROPRIETAIRE (voir
+  // server/middleware/requireSuperAdmin.ts — la route exporte TOUTES les sociétés sans filtre).
+  const estSuperAdmin = getUtilisateur()?.superAdmin === true;
 
   return (
     <div style={{ padding: 20 }}>
@@ -71,9 +74,11 @@ export default function ParametresPage() {
         <IdentifiantsSection />
       </Section>
 
-      <Section titre="Sauvegardes">
-        <SauvegardesSection />
-      </Section>
+      {estSuperAdmin && (
+        <Section titre="Sauvegardes">
+          <SauvegardesSection />
+        </Section>
+      )}
 
       {estProprietaire && (
         <Section titre="Journal des erreurs">

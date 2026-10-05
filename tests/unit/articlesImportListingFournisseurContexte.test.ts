@@ -22,6 +22,12 @@ let tvaId: number;
 let vibelId: number;
 let superUId: number;
 let fournisseurInactifId: number;
+// Audit du 2026-10-01 (F02/F15) : une AUTRE société, avec son propre fournisseur, jamais rattachée
+// au compte "admin" de test — sert à prouver qu'un societeId ou un fournisseurId de contexte
+// transmis par le client ne peuvent jamais faire écrire ou divulguer des données hors de la
+// société réelle du compte connecté (JWT), quoi que le corps de la requête prétende.
+let autreSocieteId: number;
+let fournisseurAutreSocieteId: number;
 
 function authHeaders() {
   return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
@@ -70,6 +76,13 @@ before(async () => {
   superUId = superU.id;
   const inactif = await prisma.fournisseur.create({ data: { nom: "CONTEXTE TEST INACTIF", societeId, actif: false } });
   fournisseurInactifId = inactif.id;
+
+  const autreSociete = await prisma.societe.create({ data: { nom: "CONTEXTE TEST Autre Société" } });
+  autreSocieteId = autreSociete.id;
+  const fournisseurAutreSociete = await prisma.fournisseur.create({
+    data: { nom: "CONTEXTE TEST Fournisseur Autre Société", societeId: autreSocieteId },
+  });
+  fournisseurAutreSocieteId = fournisseurAutreSociete.id;
 });
 
 after(async () => {
@@ -93,6 +106,7 @@ after(async () => {
   });
   await prisma.article.deleteMany({ where: { nom: { startsWith: "CONTEXTE TEST" } } });
   await prisma.fournisseur.deleteMany({ where: { nom: { startsWith: "CONTEXTE TEST" } } });
+  await prisma.societe.deleteMany({ where: { id: autreSocieteId } });
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
   });
@@ -264,4 +278,58 @@ test("8. aperçu avec fournisseurId de contexte inactif : 409, aucun appel Prism
     lignes: [{ designation: "CONTEXTE TEST Apercu Inactif", prix: "5.00" }],
   });
   assert.equal(status, 409);
+});
+
+// Régression F02 (audit du 2026-10-01) : POST /articles/import dérivait auparavant la société
+// d'écriture du corps de la requête (societeId) au lieu du compte connecté — un societeId
+// usurpé aurait permis de créer des articles/fournisseurs dans N'IMPORTE QUELLE société.
+test("9. [F02] un societeId usurpé dans le corps est ignoré : l'article est créé dans la société RÉELLE du compte connecté", async () => {
+  const { status, corps } = await poster({
+    societeId: autreSocieteId, // usurpation : ce n'est PAS la société du compte "admin" connecté
+    fournisseurNom: "CONTEXTE TEST VIBEL",
+    categorieId,
+    tvaId,
+    type: "MATIERE_PREMIERE",
+    // Désignation sans mot commun avec les articles déjà créés par les tests précédents de ce
+    // même fichier (ex. "CONTEXTE TEST Article Vibel") : au-delà de 60% de mots partagés
+    // (similariteJaccard, SEUIL_CORRESPONDANCE_DESIGNATION), la ligne serait mise "en attente de
+    // confirmation" au lieu d'être créée directement — non pertinent ici, l'objet du test est la
+    // société d'écriture, pas le rapprochement approximatif.
+    lignes: [{ designation: "CONTEXTE TEST Isolation Societe Zzyzx", reference: "CTX-F02", prix: "9.00" }],
+  });
+  assert.equal(status, 200);
+  assert.equal(corps.crees, 1);
+
+  const article = await prisma.article.findFirstOrThrow({ where: { nom: "CONTEXTE TEST Isolation Societe Zzyzx" } });
+  assert.equal(article.societeId, societeId, "jamais la société usurpée dans le corps");
+  assert.notEqual(article.societeId, autreSocieteId);
+});
+
+// Régression F15 (audit du 2026-10-01) : le fournisseur de contexte était résolu par findUnique
+// sur le seul id, sans vérifier sa société — un fournisseurId d'une AUTRE société était accepté
+// tel quel (divulgation de son nom/statut + rattachement cross-société des tarifs créés).
+test("10. [F15] un fournisseurId de contexte appartenant à une AUTRE société est refusé (404), jamais utilisé", async () => {
+  const { status, corps } = await poster({
+    societeId,
+    fournisseurId: fournisseurAutreSocieteId,
+    categorieId,
+    tvaId,
+    type: "MATIERE_PREMIERE",
+    lignes: [{ designation: "CONTEXTE TEST F15 Ne doit pas exister", prix: "1.00" }],
+  });
+  assert.equal(status, 404);
+  assert.equal(corps.error, "Fournisseur introuvable");
+
+  const article = await prisma.article.findFirst({ where: { nom: "CONTEXTE TEST F15 Ne doit pas exister" } });
+  assert.equal(article, null);
+});
+
+test("11. [F15] même refus (404) sur l'aperçu (POST /import/apercu) pour un fournisseurId de contexte d'une AUTRE société", async () => {
+  const { status, corps } = await apercu({
+    societeId,
+    fournisseurId: fournisseurAutreSocieteId,
+    lignes: [{ designation: "CONTEXTE TEST F15 Apercu", prix: "1.00" }],
+  });
+  assert.equal(status, 404);
+  assert.equal(corps.error, "Fournisseur introuvable");
 });

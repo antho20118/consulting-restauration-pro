@@ -213,7 +213,6 @@ export default function ImportListingModal({ fournisseurId, fournisseurNom: four
 
     try {
       const { propositions: propositionsRecues } = await apercuListing({
-        societeId: 1,
         fournisseurNom,
         fournisseurId,
         lignes: lignesConstruites,
@@ -257,7 +256,6 @@ export default function ImportListingModal({ fournisseurId, fournisseurNom: four
       });
 
       const reponse = await importerListing({
-        societeId: 1,
         fournisseurNom,
         fournisseurId,
         categorieId,
