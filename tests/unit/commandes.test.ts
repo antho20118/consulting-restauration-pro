@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
-import { connecterAdminDeTest } from "../helpers/auth.js";
+import { connecterAdminDeTest, creerUtilisateurAutreSocieteDeTest } from "../helpers/auth.js";
 
 // Test d'intégration réel contre POST/GET /api/commandes (boucle achats complète, Phase 1 du plan
 // d'action : commande enregistrée → réception → mise à jour stock). Mêmes fixtures que
@@ -38,7 +38,7 @@ before(async () => {
 
   token = await connecterAdminDeTest(baseUrl);
 
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
   const categorie =
     (await prisma.categorie.findFirst()) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test" } }));
@@ -376,6 +376,52 @@ test("annule une commande EN_ATTENTE, refuse d'annuler une commande déjà reçu
     headers: authHeaders(),
   });
   assert.equal(reponseDouble.status, 409, "une commande déjà annulée ne peut pas l'être une seconde fois");
+});
+
+// F07 de l'audit forensique : GET/:id, POST/:id/receptionner et POST/:id/annuler sont déjà bien
+// scopés par société côté serveur (voir findFirst({ where: { id, depot: { societeId } } }),
+// server/routes/commandes.ts), mais ce filtrage n'était couvert par aucun test de non-régression
+// — seul le 404 sur un id totalement inexistant l'était, jamais le cas d'une commande appartenant
+// réellement à une AUTRE société.
+test("GET/:id, POST/:id/receptionner et POST/:id/annuler refusent (404) une commande d'une autre société", async () => {
+  const autreSociete = await creerUtilisateurAutreSocieteDeTest(baseUrl);
+  const depotAutreSociete = await prisma.depot.create({
+    data: { nom: "COMMANDES TEST Autre Société Dépôt", societeId: autreSociete.societeId },
+  });
+  const fournisseurAutreSociete = await prisma.fournisseur.create({
+    data: { nom: "COMMANDES TEST Autre Société Fournisseur", societeId: autreSociete.societeId },
+  });
+  const commandeAutreSociete = await prisma.commandeFournisseur.create({
+    data: { fournisseurId: fournisseurAutreSociete.id, depotId: depotAutreSociete.id },
+  });
+
+  const reponseGet = await fetch(`${baseUrl}/api/commandes/${commandeAutreSociete.id}`, { headers: authHeaders() });
+  assert.equal(reponseGet.status, 404);
+
+  // lignes non vide : seul le contenu réel importe pour passer la validation Zod (schemaReception
+  // exige min(1)) — jamais atteint dans ce test, puisque le 404 société doit intervenir avant toute
+  // vérification du contenu des lignes.
+  const reponseReception = await fetch(`${baseUrl}/api/commandes/${commandeAutreSociete.id}/receptionner`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ lignes: [{ ligneId: 1, quantiteRecueBase: 1 }] }),
+  });
+  assert.equal(reponseReception.status, 404);
+
+  const reponseAnnuler = await fetch(`${baseUrl}/api/commandes/${commandeAutreSociete.id}/annuler`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  assert.equal(reponseAnnuler.status, 404);
+
+  const enBase = await prisma.commandeFournisseur.findUniqueOrThrow({ where: { id: commandeAutreSociete.id } });
+  assert.equal(enBase.statut, "EN_ATTENTE", "jamais modifiée par le compte d'une autre société");
+
+  await prisma.commandeFournisseur.deleteMany({ where: { id: commandeAutreSociete.id } });
+  await prisma.depot.deleteMany({ where: { id: depotAutreSociete.id } });
+  await prisma.fournisseur.deleteMany({ where: { id: fournisseurAutreSociete.id } });
+  await prisma.utilisateur.deleteMany({ where: { societeId: autreSociete.societeId } });
+  await prisma.societe.deleteMany({ where: { id: autreSociete.societeId } });
 });
 
 test("401 sans authentification sur toutes les routes commandes", async () => {

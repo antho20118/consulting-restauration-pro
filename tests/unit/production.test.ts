@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
-import { connecterAdminDeTest } from "../helpers/auth.js";
+import { connecterAdminDeTest, creerUtilisateurAutreSocieteDeTest } from "../helpers/auth.js";
 
 // Test d'intégration réel : démarre l'application Express réelle sur un port éphémère, crée les
 // données nécessaires via Prisma/l'API réelle sur la base Postgres configurée par DATABASE_URL,
@@ -68,7 +68,7 @@ before(async () => {
 
   // Données de référence attendues déjà présentes via `npm run db:seed` ; créées ici à la volée
   // si absentes, pour que ce test reste indépendant de l'ordre d'exécution du seed.
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
 
   const categorie =
@@ -424,4 +424,61 @@ test("[11] renvoie 404 pour une recette inexistante", async () => {
     body: JSON.stringify({ recetteId: 999999999, cible: { mode: "portions", valeur: 10 } }),
   });
   assert.equal(reponse.status, 404);
+});
+
+// F07 de l'audit forensique : planifierProduction.ts scope déjà la recette ET le dépôt par société
+// (findFirst({ where: { id, societeId } }), findMany({ where: { depotId, depot: { societeId } } }))
+// mais ce filtrage n'était couvert par aucun test de non-régression — seul le 404 sur un id
+// totalement inexistant l'était, jamais le cas d'un id appartenant réellement à une AUTRE société.
+test("[F07] POST /production/planifier renvoie 404 pour une recette appartenant à une autre société", async () => {
+  const autreSociete = await creerUtilisateurAutreSocieteDeTest(baseUrl);
+  const recetteAutreSociete = await prisma.recette.create({
+    data: { nom: "PRODUCTION TEST Autre Société", societeId: autreSociete.societeId, portions: 1, actif: true },
+  });
+
+  const reponse = await fetch(`${baseUrl}/api/production/planifier`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ recetteId: recetteAutreSociete.id, cible: { mode: "portions", valeur: 10 } }),
+  });
+  assert.equal(reponse.status, 404);
+
+  await prisma.recette.deleteMany({ where: { id: recetteAutreSociete.id } });
+  await prisma.utilisateur.deleteMany({ where: { societeId: autreSociete.societeId } });
+  await prisma.societe.deleteMany({ where: { id: autreSociete.societeId } });
+});
+
+test("[F07] POST /production/planifier avec un depotId d'une autre société traite le stock comme inexistant (besoinNet = besoin total), jamais le vrai stock de cette autre société", async () => {
+  const autreSociete = await creerUtilisateurAutreSocieteDeTest(baseUrl);
+  const depotAutreSociete = await prisma.depot.create({
+    data: { nom: "PRODUCTION TEST Autre Société Dépôt", societeId: autreSociete.societeId },
+  });
+  // Un stock bien réel existe pour cet article dans l'autre société, à cette adresse de dépôt :
+  // s'il était pris en compte, besoinNet serait réduit — preuve directe d'une fuite si ce test échoue.
+  await prisma.stock.create({ data: { articleId: articleKgId, depotId: depotAutreSociete.id, quantite: 999999 } });
+
+  const recette = await creerRecette({
+    societeId,
+    nom: "PRODUCTION TEST RECETTE DEPOT AUTRE SOCIETE",
+    categorieId: null,
+    sousCategorieId: null,
+    portions: 4,
+    lignes: [{ articleId: articleKgId, quantite: 1, uniteId: uniteKgId, gainCuissonPct: 0 }],
+    etapes: [],
+  });
+
+  const reponse = await fetch(`${baseUrl}/api/production/planifier`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ recetteId: recette.id, depotId: depotAutreSociete.id, cible: { mode: "portions", valeur: 40 } }),
+  });
+  assert.equal(reponse.status, 200);
+  const resultat = await reponse.json();
+  assert.equal(resultat.lignes[0].stockDisponible, 0, "le stock d'une autre société ne doit jamais être lu, même via un depotId deviné");
+  assert.equal(resultat.lignes[0].besoinNet, 10000, "sans stock pris en compte, le besoin net doit être le besoin brut total");
+
+  await prisma.stock.deleteMany({ where: { depotId: depotAutreSociete.id } });
+  await prisma.depot.deleteMany({ where: { id: depotAutreSociete.id } });
+  await prisma.utilisateur.deleteMany({ where: { societeId: autreSociete.societeId } });
+  await prisma.societe.deleteMany({ where: { id: autreSociete.societeId } });
 });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
-import { connecterAdminDeTest } from "../helpers/auth.js";
+import { connecterAdminDeTest, creerUtilisateurAutreSocieteDeTest } from "../helpers/auth.js";
 
 // Test d'intégration réel (app Express réelle, vrai Postgres) pour le chantier « P2025,
 // POST /mouvements » : un articleId ou depotId inexistant fait échouer les findUniqueOrThrow de
@@ -54,7 +54,7 @@ before(async () => {
 
   token = await connecterAdminDeTest(baseUrl);
 
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
   const categorie = (await prisma.categorie.findFirst()) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test" } }));
   categorieId = categorie.id;
@@ -210,4 +210,54 @@ test("5. Non-régression : une erreur qui n'est PAS P2025 (octet NUL rejeté par
     stockAvant?.quantite,
     "le stock ne doit pas avoir été modifié par la tentative échouée (rollback complet de la transaction)"
   );
+});
+
+// F07 de l'audit forensique : un articleId/depotId appartenant à une AUTRE société produit
+// exactement le même P2025 qu'un id inexistant (findFirstOrThrow scopé par societeId, voir
+// server/routes/mouvements.ts) — mais ce cas précis (id réel, juste pas dans la bonne société)
+// n'était couvert par aucun test jusqu'ici, seul l'id totalement inexistant l'était (tests 1-3
+// ci-dessus).
+test("6. [F07] POST /mouvements avec un articleId ou un depotId d'une AUTRE société : 400 comme un id inexistant, aucune écriture", async () => {
+  const autreSociete = await creerUtilisateurAutreSocieteDeTest(baseUrl);
+  const depotAutreSociete = await prisma.depot.create({
+    data: { nom: "P2025 MVT TEST Autre Société Dépôt", societeId: autreSociete.societeId },
+  });
+  const articleAutreSociete = await prisma.article.create({
+    data: {
+      nom: "P2025 MVT TEST Autre Société Article",
+      type: "MATIERE_PREMIERE",
+      categorieId,
+      tvaId,
+      societeId: autreSociete.societeId,
+      actif: true,
+    },
+  });
+
+  const { status: statutArticleAutreSociete } = await poster({
+    articleId: articleAutreSociete.id,
+    depotId: depotTestId,
+    type: "ENTREE",
+    quantite: 5,
+    motif: "P2025 MVT TEST cas 6a",
+  });
+  assert.equal(statutArticleAutreSociete, 400, "un articleId réel d'une autre société doit être refusé comme s'il était inexistant");
+
+  const { status: statutDepotAutreSociete } = await poster({
+    articleId: articleTestId,
+    depotId: depotAutreSociete.id,
+    type: "ENTREE",
+    quantite: 5,
+    motif: "P2025 MVT TEST cas 6b",
+  });
+  assert.equal(statutDepotAutreSociete, 400, "un depotId réel d'une autre société doit être refusé comme s'il était inexistant");
+
+  const mouvements = await prisma.mouvementStock.findMany({
+    where: { OR: [{ articleId: articleAutreSociete.id }, { depotId: depotAutreSociete.id }] },
+  });
+  assert.equal(mouvements.length, 0, "aucun mouvement ne doit avoir été créé, ni sur l'article ni sur le dépôt de l'autre société");
+
+  await prisma.article.deleteMany({ where: { id: articleAutreSociete.id } });
+  await prisma.depot.deleteMany({ where: { id: depotAutreSociete.id } });
+  await prisma.utilisateur.deleteMany({ where: { societeId: autreSociete.societeId } });
+  await prisma.societe.deleteMany({ where: { id: autreSociete.societeId } });
 });

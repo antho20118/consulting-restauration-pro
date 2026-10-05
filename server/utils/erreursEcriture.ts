@@ -92,6 +92,18 @@ export async function repondreErreurEcriture(
     return;
   }
 
+  // P2025 : le garde-fou findFirstOrThrow/findUniqueOrThrow placé en tête de la transaction
+  // d'écriture (scopé par societeId — voir les commentaires « jamais permettre... en
+  // devinant/énumérant simplement un id » dans chaque routeur appelant) n'a trouvé aucune
+  // ressource : identifiant inexistant OU appartenant à une autre société (voir F07 de l'audit
+  // forensique : non testé jusqu'ici, ce qui laissait passer ce cas en 500 générique au lieu du
+  // 404 cohérent avec GET/DELETE sur la même ressource — aucune donnée n'est jamais écrite dans ce
+  // cas, le filtrage lui-même était déjà correct, seul le code HTTP renvoyé était faux).
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+    res.status(404).json({ error: "Ressource introuvable" });
+    return;
+  }
+
   console.error(error);
   // Seul ce dernier recours (une erreur imprévue, jamais un des cas métier ci-dessus déjà attendus
   // et délibérément non journalisés) est écrit dans le journal — voir server/utils/journalErreurs.ts.
