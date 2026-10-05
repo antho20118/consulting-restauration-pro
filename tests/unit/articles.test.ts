@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
-import { connecterAdminDeTest } from "../helpers/auth.js";
+import { connecterAdminDeTest, creerUtilisateurAutreSocieteDeTest } from "../helpers/auth.js";
 
 // Test d'intégration réel contre POST /api/articles et PUT /api/articles/:id (app Express réelle,
 // vrai Postgres) — voir tests/unit/articlesImportListing.test.ts pour le même principe.
@@ -39,7 +39,7 @@ before(async () => {
 
   token = await connecterAdminDeTest(baseUrl);
 
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
   const categorie = (await prisma.categorie.findFirst()) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test" } }));
   categorieId = categorie.id;
@@ -444,4 +444,43 @@ test("PUT /articles/:id — absence de la clé nutrition laisse une fiche exista
   assert.equal(reponse.status, 200, texte);
   const corps = JSON.parse(texte);
   assert.equal(corps.nutrition.energie, 300, "la fiche nutritionnelle ne doit jamais être effacée silencieusement");
+});
+
+// F07 de l'audit forensique : l'isolation société est bien appliquée côté serveur sur PUT/DELETE
+// /articles/:id (voir findFirstOrThrow scopé par societeId), mais n'était couverte par aucun test
+// de non-régression — seul le 404 sur un id totalement inexistant l'était, jamais le cas d'un id
+// appartenant réellement à une AUTRE société (voir tests/helpers/auth.ts).
+test("PUT et DELETE /articles/:id refusent (404) un article appartenant à une autre société, sans le modifier", async () => {
+  const autreSociete = await creerUtilisateurAutreSocieteDeTest(baseUrl);
+  const articleAutreSociete = await prisma.article.create({
+    data: {
+      nom: "ARTICLES VALIDATION TEST Autre Société",
+      type: "MATIERE_PREMIERE",
+      categorieId,
+      tvaId,
+      societeId: autreSociete.societeId,
+      actif: true,
+    },
+  });
+
+  const reponsePut = await fetch(`${baseUrl}/api/articles/${articleAutreSociete.id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ nom: "PIRATE", reference: "", categorieId, rendement: 100 }),
+  });
+  assert.equal(reponsePut.status, 404, "jamais 500 : l'id existe réellement, juste dans une autre société");
+
+  const reponseDelete = await fetch(`${baseUrl}/api/articles/${articleAutreSociete.id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  assert.equal(reponseDelete.status, 404);
+
+  const enBase = await prisma.article.findUniqueOrThrow({ where: { id: articleAutreSociete.id } });
+  assert.equal(enBase.nom, "ARTICLES VALIDATION TEST Autre Société", "jamais modifié par le compte d'une autre société");
+  assert.equal(enBase.actif, true, "jamais désactivé par le compte d'une autre société");
+
+  await prisma.article.deleteMany({ where: { id: articleAutreSociete.id } });
+  await prisma.utilisateur.deleteMany({ where: { societeId: autreSociete.societeId } });
+  await prisma.societe.deleteMany({ where: { id: autreSociete.societeId } });
 });

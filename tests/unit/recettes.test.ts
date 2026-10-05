@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
-import { connecterAdminDeTest } from "../helpers/auth.js";
+import { connecterAdminDeTest, creerUtilisateurAutreSocieteDeTest } from "../helpers/auth.js";
 
 // Test d'intégration réel contre POST/PUT /api/recettes (app Express réelle, Postgres configuré
 // par DATABASE_URL). Voir tests/unit/mouvements.test.ts pour le même principe appliqué à un autre
@@ -42,7 +42,7 @@ before(async () => {
 
   token = await connecterAdminDeTest(baseUrl);
 
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
 
   const categorie =
@@ -219,4 +219,47 @@ test("PUT /api/recettes/:id avec des données valides : fonctionne normalement (
   assert.equal(misAJour.nom, "RECETTES TEST modification valide APRES");
   assert.equal(misAJour.portions, 5);
   assert.equal(misAJour.coutTotal, 20);
+});
+
+// F07 de l'audit forensique : l'isolation société est bien appliquée côté serveur sur GET/PUT/DELETE
+// /recettes/:id (voir findFirstOrThrow scopé par societeId, server/routes/recettes.ts), mais
+// n'était couverte par aucun test de non-régression — seul le 404 sur un id totalement inexistant
+// l'était, jamais le cas d'un id appartenant réellement à une AUTRE société.
+test("GET/PUT/DELETE /api/recettes/:id refusent (404) une recette appartenant à une autre société, sans la modifier", async () => {
+  const autreSociete = await creerUtilisateurAutreSocieteDeTest(baseUrl);
+  const recetteAutreSociete = await prisma.recette.create({
+    data: {
+      nom: "RECETTES TEST Autre Société",
+      societeId: autreSociete.societeId,
+      portions: 1,
+      actif: true,
+    },
+  });
+
+  const reponseGet = await fetch(`${baseUrl}/api/recettes/${recetteAutreSociete.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(reponseGet.status, 404);
+
+  const reponsePut = await fetch(`${baseUrl}/api/recettes/${recetteAutreSociete.id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ nom: "PIRATE", categorieId: null, portions: 99, lignes: [], etapes: [] }),
+  });
+  assert.equal(reponsePut.status, 404, "jamais 500 : l'id existe réellement, juste dans une autre société");
+
+  const reponseDelete = await fetch(`${baseUrl}/api/recettes/${recetteAutreSociete.id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(reponseDelete.status, 404);
+
+  const enBase = await prisma.recette.findUniqueOrThrow({ where: { id: recetteAutreSociete.id } });
+  assert.equal(enBase.nom, "RECETTES TEST Autre Société", "jamais modifiée par le compte d'une autre société");
+  assert.equal(enBase.portions, 1);
+  assert.equal(enBase.actif, true, "jamais désactivée par le compte d'une autre société");
+
+  await prisma.recette.deleteMany({ where: { id: recetteAutreSociete.id } });
+  await prisma.utilisateur.deleteMany({ where: { societeId: autreSociete.societeId } });
+  await prisma.societe.deleteMany({ where: { id: autreSociete.societeId } });
 });

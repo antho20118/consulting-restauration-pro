@@ -4,7 +4,7 @@ import type { Server } from "node:http";
 import { evaluerEtapesHACCP, reglesHACCP } from "../../server/utils/haccp.js";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
-import { connecterAdminDeTest } from "../helpers/auth.js";
+import { connecterAdminDeTest, creerUtilisateurAutreSocieteDeTest } from "../helpers/auth.js";
 
 // Teste server/utils/haccp.ts après l'audit produit qui a identifié deux défauts :
 //
@@ -162,7 +162,7 @@ before(async () => {
 
   token = await connecterAdminDeTest(baseUrl);
 
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
   const categorieRecette =
     (await prisma.categorieRecette.findFirst()) ?? (await prisma.categorieRecette.create({ data: { nom: "Catégorie recette de test" } }));
@@ -234,4 +234,24 @@ test("[20] GET /api/haccp/evaluer/:id renvoie 404 pour une recette inexistante",
 test("[21] GET /api/haccp/evaluer/:id refuse un identifiant invalide (400)", async () => {
   const reponse = await fetch(`${baseUrl}/api/haccp/evaluer/pas-un-nombre`, { headers: { Authorization: `Bearer ${token}` } });
   assert.equal(reponse.status, 400);
+});
+
+// F07 de l'audit forensique : GET /api/haccp/evaluer/:id est déjà bien scopé par société côté
+// serveur (voir findFirst({ where: { id, societeId } }), server/routes/haccp.ts), mais ce filtrage
+// n'était couvert par aucun test de non-régression — seul le 404 sur un id totalement inexistant
+// l'était, jamais le cas d'une recette appartenant réellement à une AUTRE société.
+test("[F07] GET /api/haccp/evaluer/:id renvoie 404 pour une recette appartenant à une autre société", async () => {
+  const autreSociete = await creerUtilisateurAutreSocieteDeTest(baseUrl);
+  const recetteAutreSociete = await prisma.recette.create({
+    data: { nom: "HACCP TEST Autre Société", societeId: autreSociete.societeId, portions: 1, actif: true },
+  });
+
+  const reponse = await fetch(`${baseUrl}/api/haccp/evaluer/${recetteAutreSociete.id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(reponse.status, 404);
+
+  await prisma.recette.deleteMany({ where: { id: recetteAutreSociete.id } });
+  await prisma.utilisateur.deleteMany({ where: { societeId: autreSociete.societeId } });
+  await prisma.societe.deleteMany({ where: { id: autreSociete.societeId } });
 });

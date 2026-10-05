@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
-import { connecterAdminDeTest } from "../helpers/auth.js";
+import { connecterAdminDeTest, creerUtilisateurAutreSocieteDeTest } from "../helpers/auth.js";
 
 // Test d'intégration réel contre POST /api/achats/proposition (app Express réelle, Postgres
 // configuré par DATABASE_URL). Voir tests/unit/production.test.ts pour le même principe appliqué
@@ -35,7 +35,7 @@ before(async () => {
 
   token = await connecterAdminDeTest(baseUrl);
 
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
 
   const categorie =
@@ -182,6 +182,43 @@ test("signale ARTICLE_INTROUVABLE pour un articleId inexistant (au lieu de l'ome
   assert.equal(resultat.lignes.length, 1);
   assert.equal(resultat.lignes[0].statut, "ARTICLE_INTROUVABLE");
   assert.equal(resultat.lignes[0].besoinBase, 2000);
+});
+
+// F07 de l'audit forensique : calculerPropositionAchat scope déjà l'article par société (voir
+// findMany({ where: { id: { in: articleIds }, societeId } }), server/utils/propositionAchat.ts),
+// mais ce filtrage n'était couvert par aucun test de non-régression — un article d'une AUTRE
+// société doit être traité EXACTEMENT comme un articleId inexistant (ARTICLE_INTROUVABLE,
+// générique « Article #<id> »), jamais révéler son vrai nom ni son vrai tarif.
+test("[F07] un articleId appartenant à une autre société est traité comme introuvable, jamais révélé", async () => {
+  const autreSociete = await creerUtilisateurAutreSocieteDeTest(baseUrl);
+  const articleAutreSociete = await prisma.article.create({
+    data: {
+      nom: "ACHATS TEST SECRET Autre Société",
+      type: "MATIERE_PREMIERE",
+      categorieId,
+      tvaId,
+      societeId: autreSociete.societeId,
+      actif: true,
+    },
+  });
+
+  const reponse = await fetch(`${baseUrl}/api/achats/proposition`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      besoins: [{ articleId: articleAutreSociete.id, quantite: 2, facteurUniteRecette: 1000 }],
+    }),
+  });
+  assert.equal(reponse.status, 200);
+  const resultat = await reponse.json();
+
+  assert.equal(resultat.lignes.length, 1);
+  assert.equal(resultat.lignes[0].statut, "ARTICLE_INTROUVABLE");
+  assert.equal(resultat.lignes[0].article, `Article #${articleAutreSociete.id}`, "jamais le vrai nom de l'article d'une autre société");
+
+  await prisma.article.deleteMany({ where: { id: articleAutreSociete.id } });
+  await prisma.utilisateur.deleteMany({ where: { societeId: autreSociete.societeId } });
+  await prisma.societe.deleteMany({ where: { id: autreSociete.societeId } });
 });
 
 test("STOCK_SUFFISANT quand le stock d'un dépôt couvre le besoin", async () => {

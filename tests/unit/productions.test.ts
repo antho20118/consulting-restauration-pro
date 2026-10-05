@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import app from "../../server/app.js";
 import prisma from "../../server/prisma.js";
-import { connecterAdminDeTest } from "../helpers/auth.js";
+import { connecterAdminDeTest, creerUtilisateurAutreSocieteDeTest } from "../helpers/auth.js";
 
 // Test d'intégration réel contre POST/GET /api/productions (Phase 2 du plan d'action :
 // traçabilité HACCP datée, liée à un lot réellement produit — voir la discussion de cadrage : un
@@ -59,7 +59,7 @@ before(async () => {
 
   token = await connecterAdminDeTest(baseUrl);
 
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
   const categorie =
     (await prisma.categorie.findFirst()) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test" } }));
@@ -447,6 +447,41 @@ test("POST /productions : sans dépôt choisi, aucune déduction de stock (compo
 
   const mouvements = await prisma.mouvementStock.findMany({ where: { productionId: production.id } });
   assert.equal(mouvements.length, 0, "sans dépôt, aucun mouvement de stock ne doit être créé");
+});
+
+// F07 de l'audit forensique : GET /:id et POST /:id/controles sont déjà bien scopés par société
+// côté serveur (voir findFirst({ where: { id, societeId } }), server/routes/productions.ts), mais
+// ce filtrage n'était couvert par aucun test de non-régression — seul le 404 sur un id totalement
+// inexistant l'était, jamais le cas d'une production appartenant réellement à une AUTRE société.
+test("GET /productions/:id et POST /productions/:id/controles refusent (404) une production d'une autre société", async () => {
+  const autreSociete = await creerUtilisateurAutreSocieteDeTest(baseUrl);
+  const recetteAutreSociete = await prisma.recette.create({
+    data: { nom: "PRODUCTIONS TEST Autre Société Recette", societeId: autreSociete.societeId, portions: 1, actif: true },
+  });
+  const productionAutreSociete = await prisma.production.create({
+    data: {
+      recetteId: recetteAutreSociete.id,
+      societeId: autreSociete.societeId,
+      portionsProduites: 1,
+      poidsFiniProduitG: 0,
+      creeParId: null,
+    },
+  });
+
+  const reponseGet = await fetch(`${baseUrl}/api/productions/${productionAutreSociete.id}`, { headers: authHeaders() });
+  assert.equal(reponseGet.status, 404);
+
+  const reponseControle = await fetch(`${baseUrl}/api/productions/${productionAutreSociete.id}/controles`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ recetteEtapeId: etapeCuissonId, valeur: "x", conforme: true }),
+  });
+  assert.equal(reponseControle.status, 404);
+
+  await prisma.production.deleteMany({ where: { id: productionAutreSociete.id } });
+  await prisma.recette.deleteMany({ where: { id: recetteAutreSociete.id } });
+  await prisma.utilisateur.deleteMany({ where: { societeId: autreSociete.societeId } });
+  await prisma.societe.deleteMany({ where: { id: autreSociete.societeId } });
 });
 
 test("401 sans authentification sur toutes les routes productions", async () => {
