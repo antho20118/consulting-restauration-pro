@@ -57,7 +57,7 @@ before(async () => {
 
   token = await connecterAdminDeTest(baseUrl);
 
-  const societe = (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+  const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
   const categorie = (await prisma.categorie.findFirst()) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test" } }));
   categorieId = categorie.id;
@@ -86,29 +86,48 @@ before(async () => {
 });
 
 after(async () => {
-  const fournisseursTest = await prisma.fournisseur.findMany({
-    where: { nom: { startsWith: "PFI TEST" } },
-    select: { id: true },
-  });
-  const fournisseurIds = fournisseursTest.map((f) => f.id);
+  try {
+    const fournisseursTest = await prisma.fournisseur.findMany({
+      where: { nom: { startsWith: "PFI TEST" } },
+      select: { id: true },
+    });
+    const fournisseurIds = fournisseursTest.map((f) => f.id);
 
-  const documents = await prisma.documentFournisseur.findMany({
-    where: { fournisseurId: { in: fournisseurIds } },
-    select: { id: true },
-  });
-  await prisma.ligneDocumentFournisseur.deleteMany({ where: { documentId: { in: documents.map((d) => d.id) } } });
-  await prisma.documentFournisseur.deleteMany({ where: { id: { in: documents.map((d) => d.id) } } });
-  await prisma.tarifArticle.deleteMany({ where: { fournisseurId: { in: fournisseurIds } } });
-  await prisma.tarifArticle.deleteMany({ where: { articleId: { in: articleIds } } });
-  await prisma.produitFournisseur.deleteMany({ where: { fournisseurId: { in: fournisseurIds } } });
-  await prisma.article.deleteMany({ where: { id: { in: articleIds } } });
-  await prisma.article.deleteMany({ where: { nom: { startsWith: "PFI TEST" } } });
-  await prisma.fournisseur.deleteMany({ where: { id: { in: fournisseurIds } } });
-  await prisma.societeCompteur.deleteMany({ where: { societeId: societeIdAutre } });
-  await prisma.societe.deleteMany({ where: { id: societeIdAutre } });
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => (error ? reject(error) : resolve()));
-  });
+    const documents = await prisma.documentFournisseur.findMany({
+      where: { fournisseurId: { in: fournisseurIds } },
+      select: { id: true },
+    });
+    await prisma.ligneDocumentFournisseur.deleteMany({ where: { documentId: { in: documents.map((d) => d.id) } } });
+    await prisma.documentFournisseur.deleteMany({ where: { id: { in: documents.map((d) => d.id) } } });
+
+    // Nettoyage par préfixe de nom, pas seulement articleIds : un run précédent interrompu avant
+    // d'atteindre ce hook (crash, kill) laisse des articles "PFI TEST ..." orphelins avec leur
+    // propre TarifArticle encore attaché, hors de articleIds (vide dans ce run-ci) — les inclure
+    // dans la même requête évite d'échouer sur la contrainte de clé étrangère en tentant de
+    // supprimer ces articles sans d'abord supprimer leurs tarifs (même correctif que
+    // tests/unit/articlesImportListing.test.ts et identiteFournisseurImportListing.test.ts).
+    const articlesASupprimer = await prisma.article.findMany({
+      where: { OR: [{ id: { in: articleIds } }, { nom: { startsWith: "PFI TEST" } }] },
+      select: { id: true },
+    });
+    const idsASupprimer = articlesASupprimer.map((a) => a.id);
+    await prisma.tarifArticle.deleteMany({
+      where: { OR: [{ fournisseurId: { in: fournisseurIds } }, { articleId: { in: idsASupprimer } }] },
+    });
+    await prisma.produitFournisseur.deleteMany({ where: { fournisseurId: { in: fournisseurIds } } });
+    await prisma.article.deleteMany({ where: { id: { in: idsASupprimer } } });
+    await prisma.fournisseur.deleteMany({ where: { id: { in: fournisseurIds } } });
+    await prisma.societeCompteur.deleteMany({ where: { societeId: societeIdAutre } });
+    await prisma.societe.deleteMany({ where: { id: societeIdAutre } });
+  } finally {
+    // Toujours fermer le serveur HTTP, même si le nettoyage ci-dessus échoue : un handle serveur
+    // resté ouvert empêche ce processus de fichier de jamais se terminer, ce qui bloque
+    // indéfiniment tous les fichiers suivants sous --test-concurrency=1 (même raison que
+    // tests/unit/articlesImportListing.test.ts).
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
 });
 
 test("A1 — création d'un fournisseur génère automatiquement un codeFournisseur au format FOU-XXXX", async () => {

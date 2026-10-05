@@ -44,7 +44,7 @@ before(async () => {
   token = await connecterAdminDeTest(baseUrl);
 
   const societe =
-    (await prisma.societe.findFirst()) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
+    (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   const fournisseur = await prisma.fournisseur.create({
     data: { nom: "DOCUMENTS FOURNISSEUR TEST Route", societeId: societe.id },
   });
