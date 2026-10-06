@@ -9,6 +9,7 @@ import { requireAuth } from "./middleware/requireAuth.js";
 import { autoriserEcriture } from "./middleware/autoriserEcriture.js";
 import { requireRole } from "./middleware/requireRole.js";
 import { requireSuperAdmin } from "./middleware/requireSuperAdmin.js";
+import { autoriserEcritureSuperAdmin } from "./middleware/autoriserEcritureSuperAdmin.js";
 import utilisateursRouter from "./routes/utilisateurs.js";
 import articlesRouter from "./routes/articles.js";
 import categoriesRouter from "./routes/categories.js";
@@ -82,7 +83,9 @@ app.use("/api/articles", ECRITURE_GESTION, articlesRouter);
 app.use("/api/categories", ECRITURE_GESTION, categoriesRouter);
 app.use("/api/categories-recette", ECRITURE_GESTION, categoriesRecetteRouter);
 app.use("/api/sous-categories-recette", ECRITURE_GESTION, sousCategoriesRecetteRouter);
-app.use("/api/unites", ECRITURE_GESTION, unitesRouter);
+// unites : référentiel partagé entre sociétés, écriture réservée à l'opérateur de la plateforme
+// (voir F11 de l'audit forensique et le commentaire du modèle Unite dans schema.prisma).
+app.use("/api/unites", autoriserEcritureSuperAdmin, unitesRouter);
 app.use("/api/recettes", ECRITURE_GESTION, recettesRouter);
 app.use("/api/menus", ECRITURE_GESTION, menusRouter);
 app.use("/api/dashboard", dashboardRouter);
@@ -90,7 +93,9 @@ app.use("/api/dashboard", dashboardRouter);
 // modification réservée au PROPRIETAIRE — jamais au CHEF, contrairement au reste du groupe gestion.
 app.use("/api/societe", autoriserEcriture(["PROPRIETAIRE"]), societeRouter);
 app.use("/api/fournisseurs", ECRITURE_GESTION, fournisseursRouter);
-app.use("/api/tva", ECRITURE_GESTION, tvaRouter);
+// tva : référentiel partagé entre sociétés, écriture réservée à l'opérateur de la plateforme (voir
+// F11 de l'audit forensique et le commentaire du modèle TVA dans schema.prisma).
+app.use("/api/tva", autoriserEcritureSuperAdmin, tvaRouter);
 app.use("/api/allergenes", ECRITURE_GESTION, allergenesRouter);
 app.use("/api/mouvements", ECRITURE_OPERATIONNEL, mouvementsRouter);
 app.use("/api/depots", ECRITURE_GESTION, depotsRouter);

@@ -248,10 +248,13 @@ router.post("/import-ia", async (req: Request, res: Response) => {
     // Mêmes listes, non filtrées sur actif, que celles proposées par le formulaire de recette
     // (voir GET /categories-recette, /sous-categories-recette) : la catégorie détectée doit
     // toujours pouvoir être choisie parmi les options réellement proposées à l'utilisateur.
+    // CategorieRecette/SousCategorieRecette sont cloisonnées par société (F11 de l'audit
+    // forensique) : sans ce filtre, l'extraction suggérerait des catégories d'une autre société.
+    const societeId = req.utilisateur!.societeId;
     const [unites, categories, sousCategories] = await Promise.all([
       prisma.unite.findMany({ where: { actif: true } }),
-      prisma.categorieRecette.findMany(),
-      prisma.sousCategorieRecette.findMany(),
+      prisma.categorieRecette.findMany({ where: { societeId } }),
+      prisma.sousCategorieRecette.findMany({ where: { societeId } }),
     ]);
     const extraction = await avecTimeout(
       extraireRecette(
@@ -387,6 +390,25 @@ router.post("/import-excel", async (req: Request, res: Response) => {
             throw new Error(`Conflit d'import : une recette nommée "${nomTrim}" existe déjà — aucune écriture effectuée.`);
           }
           nomsExistants.add(nomCle);
+
+          // CategorieRecette/SousCategorieRecette sont désormais cloisonnées par société (voir
+          // F11 de l'audit forensique) : jamais accepter un id d'une autre société en devinant.
+          if (decision.categorieId != null) {
+            const categorieValide = await tx.categorieRecette.findFirst({
+              where: { id: decision.categorieId, societeId },
+            });
+            if (!categorieValide) {
+              throw new Error(`Catégorie invalide pour la recette "${decision.nom}"`);
+            }
+          }
+          if (decision.sousCategorieId != null) {
+            const sousCategorieValide = await tx.sousCategorieRecette.findFirst({
+              where: { id: decision.sousCategorieId, societeId },
+            });
+            if (!sousCategorieValide) {
+              throw new Error(`Sous-catégorie invalide pour la recette "${decision.nom}"`);
+            }
+          }
 
           const creee = await tx.recette.create({
             data: {
@@ -537,6 +559,25 @@ router.post("/", async (req: Request, res: Response) => {
       return;
     }
 
+    // CategorieRecette/SousCategorieRecette sont désormais cloisonnées par société (voir F11 de
+    // l'audit forensique) : jamais accepter un id d'une autre société en devinant/énumérant.
+    if (categorieId != null) {
+      const categorieValide = await prisma.categorieRecette.findFirst({ where: { id: categorieId, societeId } });
+      if (!categorieValide) {
+        res.status(400).json({ error: "Catégorie invalide" });
+        return;
+      }
+    }
+    if (sousCategorieId != null) {
+      const sousCategorieValide = await prisma.sousCategorieRecette.findFirst({
+        where: { id: sousCategorieId, societeId },
+      });
+      if (!sousCategorieValide) {
+        res.status(400).json({ error: "Sous-catégorie invalide" });
+        return;
+      }
+    }
+
     const recette = await prisma.$transaction(async (tx) => {
       const creee = await tx.recette.create({
         data: {
@@ -645,6 +686,25 @@ router.put("/:id", async (req: Request, res: Response) => {
         doublons: doublonsNom.map((d) => ({ id: d.id, nom: d.nom })),
       });
       return;
+    }
+
+    // CategorieRecette/SousCategorieRecette sont désormais cloisonnées par société (voir F11 de
+    // l'audit forensique) : jamais accepter un id d'une autre société en devinant/énumérant.
+    if (categorieId != null) {
+      const categorieValide = await prisma.categorieRecette.findFirst({ where: { id: categorieId, societeId } });
+      if (!categorieValide) {
+        res.status(400).json({ error: "Catégorie invalide" });
+        return;
+      }
+    }
+    if (sousCategorieId != null) {
+      const sousCategorieValide = await prisma.sousCategorieRecette.findFirst({
+        where: { id: sousCategorieId, societeId },
+      });
+      if (!sousCategorieValide) {
+        res.status(400).json({ error: "Sous-catégorie invalide" });
+        return;
+      }
     }
 
     // calculerCoutRecette (qui valide au passage portions > 0, le rendement de chaque article,

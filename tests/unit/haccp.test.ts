@@ -165,7 +165,7 @@ before(async () => {
   const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
   const categorieRecette =
-    (await prisma.categorieRecette.findFirst()) ?? (await prisma.categorieRecette.create({ data: { nom: "Catégorie recette de test" } }));
+    (await prisma.categorieRecette.findFirst({ where: { societeId }, orderBy: { id: "asc" } })) ?? (await prisma.categorieRecette.create({ data: { nom: "Catégorie recette de test", societeId } }));
   categorieRecetteId = categorieRecette.id;
 });
 

@@ -72,7 +72,7 @@ before(async () => {
 
   const societe = (await prisma.societe.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.societe.create({ data: { nom: "Société de test" } }));
   societeId = societe.id;
-  const categorie = (await prisma.categorie.findFirst()) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test" } }));
+  const categorie = (await prisma.categorie.findFirst({ where: { societeId }, orderBy: { id: "asc" } })) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test", societeId } }));
   categorieId = categorie.id;
   const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   tvaId = tva.id;
@@ -138,12 +138,12 @@ test("2. POST /fournisseurs : un societeId transmis par le client est ignoré, l
 test("3. POST /sous-categories-recette avec parentId inexistant : 400, aucune écriture", async () => {
   const { status } = await poster("/api/sous-categories-recette", { nom: "ERREURS FK TEST SousCategorie", parentId: ID_INEXISTANT });
   assert.equal(status, 400);
-  const cree = await prisma.sousCategorieRecette.findFirst({ where: { nom: "ERREURS FK TEST SousCategorie" } });
+  const cree = await prisma.sousCategorieRecette.findFirst({ where: { nom: "ERREURS FK TEST SousCategorie", societeId } });
   assert.equal(cree, null, "aucune sous-catégorie ne doit avoir été créée");
 });
 
 test("4. PUT /sous-categories-recette/:id avec parentId inexistant : 400, valeur d'origine conservée", async () => {
-  const base = await prisma.sousCategorieRecette.create({ data: { nom: "ERREURS FK TEST SousCategorie Base" } });
+  const base = await prisma.sousCategorieRecette.create({ data: { nom: "ERREURS FK TEST SousCategorie Base", societeId } });
   idsSousCategorie.push(base.id);
 
   const { status } = await mettreAJour(`/api/sous-categories-recette/${base.id}`, { nom: "ERREURS FK TEST SousCategorie Renommee", parentId: ID_INEXISTANT });
