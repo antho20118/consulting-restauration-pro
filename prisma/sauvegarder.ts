@@ -12,14 +12,24 @@
 // Liste des tables obtenue depuis le schéma Prisma lui-même (Prisma.dmmf), jamais une liste
 // recopiée à la main qui pourrait oublier un modèle ajouté plus tard.
 //
+// Format versionné (F08 de l'audit forensique, phase 2) : l'enveloppe porte formatVersion (version
+// de la forme du fichier lui-même) et derniereMigrationAppliquee (lue depuis _prisma_migrations,
+// jamais déduite du schema.prisma courant) — c'est ce dernier champ qui permet à
+// prisma/restaurer.ts de faire évoluer une ancienne sauvegarde jusqu'au schéma courant en rejouant
+// les vraies migrations, plutôt que d'exiger un format figé pour toujours. Voir la conception F08
+// phase 2 pour le raisonnement complet.
+//
 // Usage : npx tsx prisma/sauvegarder.ts
 
 import fs from "node:fs/promises";
 import path from "node:path";
 import { PrismaClient, Prisma } from "@prisma/client";
 import { racineStockage } from "../server/utils/storageDocumentsFournisseur.js";
+import { derniereMigrationAppliquee } from "./utils/migrationsAppliquees.js";
 
 const prisma = new PrismaClient();
+
+const FORMAT_VERSION = 1;
 
 type AccesseurModele = { findMany: () => Promise<unknown[]> };
 
@@ -30,19 +40,25 @@ async function main() {
   const nomsModeles = Prisma.dmmf.datamodel.models.map((m) => m.name);
   const client = prisma as unknown as Record<string, AccesseurModele>;
 
-  const donnees: Record<string, unknown[]> = {};
+  const modeles: Record<string, unknown[]> = {};
   for (const nomModele of nomsModeles) {
     const accesseur = nomModele.charAt(0).toLowerCase() + nomModele.slice(1);
-    donnees[nomModele] = await client[accesseur].findMany();
+    modeles[nomModele] = await client[accesseur].findMany();
   }
 
-  const horodatage = new Date().toISOString().replace(/[:.]/g, "-");
+  const migration = await derniereMigrationAppliquee(prisma);
+  const creeLe = new Date().toISOString();
+  const enveloppe = { formatVersion: FORMAT_VERSION, creeLe, derniereMigrationAppliquee: migration, modeles };
+
+  const horodatage = creeLe.replace(/[:.]/g, "-");
   const nomFichier = `sauvegarde-${horodatage}.json`;
   const cheminFichier = path.join(dossierSauvegardes, nomFichier);
-  await fs.writeFile(cheminFichier, JSON.stringify(donnees, null, 2), "utf8");
+  await fs.writeFile(cheminFichier, JSON.stringify(enveloppe, null, 2), "utf8");
 
   console.log(`✅ Sauvegarde écrite : ${cheminFichier}`);
-  for (const [nomModele, lignes] of Object.entries(donnees)) {
+  console.log(`  formatVersion: ${FORMAT_VERSION}`);
+  console.log(`  derniereMigrationAppliquee: ${migration}`);
+  for (const [nomModele, lignes] of Object.entries(modeles)) {
     console.log(`  ${nomModele}: ${lignes.length} ligne(s)`);
   }
   console.log(`\nTéléchargement : GET /api/sauvegardes/${nomFichier} (jeton requis, voir la page Paramètres).`);
