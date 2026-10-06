@@ -14,6 +14,16 @@ ALTER TABLE "Categorie" ADD COLUMN "societeId" INTEGER;
 ALTER TABLE "CategorieRecette" ADD COLUMN "societeId" INTEGER;
 ALTER TABLE "SousCategorieRecette" ADD COLUMN "societeId" INTEGER;
 
+-- Garantit qu'une société existe pour porter les catégories déjà présentes : certaines sont
+-- insérées en dur par des migrations antérieures (20260913104632_seed_donnees_reference et les
+-- migrations categorie_recette_*/sous_categorie_*), alors que "Societe" n'est elle-même créée que
+-- par l'application ou prisma/seed.ts, jamais par une migration — sur une base neuve (constaté en
+-- CI), "Societe" est donc encore vide à ce stade et le backfill ci-dessous assignerait NULL sans
+-- cette ligne, faisant échouer la contrainte NOT NULL plus bas.
+INSERT INTO "Societe" ("nom", "updatedAt")
+SELECT 'Mon entreprise', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM "Societe");
+
 -- Migration des données : à la date de cette migration, une seule société existe (voir le même
 -- principe déjà appliqué dans 20260930090000_utilisateurs_roles) — toutes les lignes existantes de
 -- ces trois tables lui sont rattachées, puisqu'elles étaient de facto partagées par cette société
