@@ -229,7 +229,7 @@ before(async () => {
   // Une seule et même (large) catégorie pour tous les articles de ce fichier de test : c'est
   // exactement le scénario qui produisait l'ancien bug (deux articles très différents dans la
   // même catégorie d'ingrédients) — sert à prouver que la catégorie n'a plus aucune influence.
-  const categorie = (await prisma.categorie.findFirst()) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test" } }));
+  const categorie = (await prisma.categorie.findFirst({ where: { societeId }, orderBy: { id: "asc" } })) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test", societeId } }));
   categorieId = categorie.id;
   const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   tvaId = tva.id;

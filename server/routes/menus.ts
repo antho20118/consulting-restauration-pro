@@ -64,6 +64,16 @@ router.post("/", async (req: Request, res: Response) => {
     // valeur transmise par le client (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma).
     const societeId = req.utilisateur!.societeId;
 
+    // CategorieRecette est désormais cloisonnée par société (voir F11 de l'audit forensique) :
+    // jamais accepter un categorieId d'une autre société en devinant/énumérant simplement un id.
+    if (categorieId != null) {
+      const categorieValide = await prisma.categorieRecette.findFirst({ where: { id: categorieId, societeId } });
+      if (!categorieValide) {
+        res.status(400).json({ error: "Catégorie invalide" });
+        return;
+      }
+    }
+
     const menu = await prisma.menu.create({
       data: {
         nom,
@@ -100,6 +110,18 @@ router.put("/:id", async (req: Request, res: Response) => {
       prixVenteHT?: number | null;
       lignes: { recetteId: number; quantite: number }[];
     };
+
+    // CategorieRecette est désormais cloisonnée par société (voir F11 de l'audit forensique) :
+    // jamais accepter un categorieId d'une autre société en devinant/énumérant simplement un id.
+    if (categorieId != null) {
+      const categorieValide = await prisma.categorieRecette.findFirst({
+        where: { id: categorieId, societeId: req.utilisateur!.societeId },
+      });
+      if (!categorieValide) {
+        res.status(400).json({ error: "Catégorie invalide" });
+        return;
+      }
+    }
 
     const menu = await prisma.$transaction(async (tx) => {
       // Scopé par société : jamais permettre à un compte de modifier un menu d'une autre société

@@ -263,6 +263,14 @@ router.post("/", async (req: Request, res: Response) => {
       }
     }
 
+    // Categorie est désormais cloisonnée par société (voir F11 de l'audit forensique) : jamais
+    // accepter un categorieId d'une autre société en devinant/énumérant simplement un id.
+    const categorieValide = await prisma.categorie.findFirst({ where: { id: categorieId, societeId } });
+    if (!categorieValide) {
+      res.status(400).json({ error: "Catégorie invalide" });
+      return;
+    }
+
     const article = await prisma.$transaction(async (tx) => {
       const created = await tx.article.create({
         data: {
@@ -384,6 +392,18 @@ router.put("/:id", async (req: Request, res: Response) => {
           });
           return;
         }
+      }
+    }
+
+    // Categorie est désormais cloisonnée par société (voir F11 de l'audit forensique) : jamais
+    // accepter un categorieId d'une autre société en devinant/énumérant simplement un id.
+    if (categorieId !== undefined) {
+      const categorieValide = await prisma.categorie.findFirst({
+        where: { id: categorieId, societeId: req.utilisateur!.societeId },
+      });
+      if (!categorieValide) {
+        res.status(400).json({ error: "Catégorie invalide" });
+        return;
       }
     }
 
@@ -680,7 +700,9 @@ router.post("/import", async (req: Request, res: Response) => {
       prisma.unite.findFirst({ where: { symbole: { equals: "pièce", mode: "insensitive" } } }),
       prisma.conditionnement.findFirst({ orderBy: { id: "asc" } }),
       prisma.allergene.findMany(),
-      prisma.categorie.findMany({ where: { actif: true } }),
+      // Cloisonné par société depuis F11 de l'audit forensique : jamais proposer/réutiliser la
+      // catégorie d'une autre société lors d'un import.
+      prisma.categorie.findMany({ where: { actif: true, societeId } }),
       prisma.article.findMany({
         where: { societeId, actif: true },
         select: { id: true, nom: true, reference: true },
@@ -1057,10 +1079,12 @@ router.post("/import", async (req: Request, res: Response) => {
         if (categorieExistanteId) {
           categorieIdLigne = categorieExistanteId;
         } else {
+          // Clé unique désormais (societeId, nom) depuis F11 de l'audit forensique — jamais nom
+          // seul, qui créerait sinon un conflit avec une catégorie de même nom d'une autre société.
           const categorieCreee = await prisma.categorie.upsert({
-            where: { nom: nomCategorie },
+            where: { societeId_nom: { societeId, nom: nomCategorie } },
             update: {},
-            create: { nom: nomCategorie },
+            create: { nom: nomCategorie, societeId },
           });
           categorieIdParNom.set(cleCategorie, categorieCreee.id);
           categorieIdLigne = categorieCreee.id;

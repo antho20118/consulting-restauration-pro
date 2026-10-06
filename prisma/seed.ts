@@ -36,21 +36,22 @@ async function main() {
     await prisma.depot.create({ data: { nom: "Dépôt principal", societeId: societe.id } });
   }
 
-  // Catégories de base (ingrédients)
+  // Catégories de base (ingrédients) — cloisonnées par société depuis F11 de l'audit forensique
   for (const nom of ["Épicerie", "Frais", "Surgelés", "Boissons", "Entretien"]) {
     await prisma.categorie.upsert({
-      where: { nom },
+      where: { societeId_nom: { societeId: societe.id, nom } },
       update: {},
-      create: { nom },
+      create: { nom, societeId: societe.id },
     });
   }
 
-  // Catégories de recettes (distinctes des catégories d'ingrédients ci-dessus)
+  // Catégories de recettes (distinctes des catégories d'ingrédients ci-dessus), cloisonnées par
+  // société depuis F11 de l'audit forensique
   for (const nom of ["Entrée", "Plat", "Dessert", "Autre", "Festif", "Mariage"]) {
     await prisma.categorieRecette.upsert({
-      where: { nom },
+      where: { societeId_nom: { societeId: societe.id, nom } },
       update: {},
-      create: { nom },
+      create: { nom, societeId: societe.id },
     });
   }
 

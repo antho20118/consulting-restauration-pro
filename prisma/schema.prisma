@@ -72,14 +72,17 @@ model Societe {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  depots          Depot[]
-  fournisseurs    Fournisseur[]
-  articles        Article[]
-  recettes        Recette[]
-  menus           Menu[]
-  productions     Production[]
-  utilisateurs    Utilisateur[]
-  documentsVentes DocumentVentes[]
+  depots                Depot[]
+  fournisseurs          Fournisseur[]
+  articles              Article[]
+  recettes              Recette[]
+  menus                 Menu[]
+  productions           Production[]
+  utilisateurs          Utilisateur[]
+  documentsVentes       DocumentVentes[]
+  categories            Categorie[]
+  categoriesRecette     CategorieRecette[]
+  sousCategoriesRecette SousCategorieRecette[]
 }
 
 model Depot {
@@ -101,45 +104,63 @@ model Depot {
   productions Production[]
 }
 
+// Cloisonné par société (F11 de l'audit forensique) : chaque société organise ses ingrédients à sa
+// façon, contrairement à TVA/Unite qui restent volontairement partagés (voir ces modèles).
 model Categorie {
   id      Int     @id @default(autoincrement())
-  nom     String  @unique
+  nom     String
   couleur String?
   icone   String?
 
   actif Boolean @default(true)
 
+  societeId Int
+  societe   Societe @relation(fields: [societeId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   articles Article[]
+
+  @@unique([societeId, nom])
 }
 
 // Catégories des recettes (Entrée, Plat, Dessert…), distinctes des catégories des ingrédients
 // (Épicerie, Frais…) : les deux ne classent pas la même chose et ne doivent pas être mélangées.
+// Cloisonné par société (F11 de l'audit forensique), même principe que Categorie ci-dessus.
 model CategorieRecette {
   id    Int     @id @default(autoincrement())
-  nom   String  @unique
+  nom   String
   actif Boolean @default(true)
+
+  societeId Int
+  societe   Societe @relation(fields: [societeId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   recettes Recette[]
   menus    Menu[]
+
+  @@unique([societeId, nom])
 }
 
 // Deuxième axe de classement des recettes, indépendant de CategorieRecette (Entrée/Plat/Dessert...)
 // : le type d'ingrédient principal (Viande, Poisson, Pâtes, Riz...), pour filtrer les recettes par
-// ce critère en plus de leur catégorie.
+// ce critère en plus de leur catégorie. Cloisonné par société (F11 de l'audit forensique), même
+// principe que Categorie ci-dessus.
 model SousCategorieRecette {
   id    Int     @id @default(autoincrement())
-  nom   String  @unique
+  nom   String
   actif Boolean @default(true)
+
+  societeId Int
+  societe   Societe @relation(fields: [societeId], references: [id])
 
   // Hiérarchie à un niveau : une sous-catégorie racine (ex. Viande) peut avoir des
   // sous-catégories enfants (ex. Bœuf, Veau, Porc, Agneau) pour préciser encore le
-  // classement sans multiplier les axes de classement.
+  // classement sans multiplier les axes de classement. Un enfant appartient toujours à la même
+  // société que son parent (vérifié côté route, jamais garanti par le schéma seul).
   parentId Int?
   parent   SousCategorieRecette?  @relation("SousCategorieHierarchie", fields: [parentId], references: [id])
   enfants  SousCategorieRecette[] @relation("SousCategorieHierarchie")
@@ -149,9 +170,15 @@ model SousCategorieRecette {
 
   recettes Recette[]
 
+  @@unique([societeId, nom])
   @@index([parentId])
 }
 
+// Volontairement partagé entre toutes les sociétés, contrairement à Categorie/CategorieRecette/
+// SousCategorieRecette (F11 de l'audit forensique) : les taux de TVA sont fixés par la loi, pas un
+// choix propre à chaque restaurant. L'écriture est réservée à l'opérateur de la plateforme (voir
+// autoriserEcritureSuperAdmin.ts) pour qu'une société ne puisse jamais modifier/supprimer un taux
+// utilisé par les autres ; la lecture reste ouverte à tout rôle authentifié.
 model TVA {
   id   Int    @id @default(autoincrement())
   nom  String
@@ -481,6 +508,9 @@ model Stock {
   @@unique([articleId, depotId])
 }
 
+// Volontairement partagé entre toutes les sociétés, même principe que TVA ci-dessus (F11 de
+// l'audit forensique) : personne n'a besoin de redéfinir "kg" ou "L" par société. Écriture
+// réservée à l'opérateur de la plateforme (voir autoriserEcritureSuperAdmin.ts).
 model Unite {
   id          Int     @id @default(autoincrement())
   nom         String
