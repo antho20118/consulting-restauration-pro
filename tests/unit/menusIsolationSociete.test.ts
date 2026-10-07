@@ -214,9 +214,20 @@ test("F. GET /api/menus/:id après une tentative interdite ne renvoie aucune don
 
   const lecture = await obtenir(token, `/api/menus/${menuId}`);
   assert.equal(lecture.status, 200);
-  const corpsSerialise = JSON.stringify(lecture.corps);
-  assert.ok(!corpsSerialise.includes(nomRecetteB), "le nom de la recette B ne doit jamais apparaître dans la lecture du menu");
-  assert.ok(!corpsSerialise.includes(String(recetteB)), "l'id de la recette B ne doit jamais apparaître dans la lecture du menu");
+  // Vérification structurelle (jamais une recherche de sous-chaîne sur un id numérique brut dans
+  // tout le JSON : un petit entier comme celui d'une recette peut coïncider par hasard avec
+  // n'importe quel autre nombre du payload — coût, quantité, id d'un autre enregistrement — une
+  // fois la base de test chargée de milliers de lignes, comme en CI).
+  assert.ok(
+    !JSON.stringify(lecture.corps).includes(nomRecetteB),
+    "le nom de la recette B ne doit jamais apparaître dans la lecture du menu"
+  );
+  assert.equal(lecture.corps.lignes.length, 1, "le menu ne doit contenir que sa ligne d'origine");
+  assert.equal(lecture.corps.lignes[0].recette.id, recetteA, "la seule ligne du menu doit toujours pointer vers la recette A");
+  assert.ok(
+    !lecture.corps.lignes.some((ligne: { recette: { id: number } }) => ligne.recette.id === recetteB),
+    "aucune ligne ne doit pointer vers la recette B"
+  );
 });
 
 test("G. recetteId inexistant : même réponse générique que recetteId d'une autre société, aucune distinction possible", async () => {
