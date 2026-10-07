@@ -12,7 +12,12 @@ const TYPES_UNITE = ["poids", "volume", "unite"];
 
 const UNITE_VIDE: UniteInput = { nom: "", symbole: "", type: "poids", facteurBase: 1 };
 
-export default function UnitesManager() {
+// F11 de l'audit forensique, volet UI : même raisonnement que TvaManager — Unite est un
+// référentiel partagé entre toutes les sociétés (voir schema.prisma et
+// server/middleware/autoriserEcritureSuperAdmin.ts, qui refuse déjà toute écriture côté serveur à
+// qui n'est pas superAdmin). `estSuperAdmin` ne sert ici qu'à masquer l'UI, jamais une source de
+// vérité d'autorisation (toujours revérifiée côté serveur).
+export default function UnitesManager({ estSuperAdmin }: { estSuperAdmin: boolean }) {
   const [unites, setUnites] = useState<Unite[]>([]);
   const [edits, setEdits] = useState<Record<number, UniteInput>>({});
   const [nouvelle, setNouvelle] = useState<UniteInput>(UNITE_VIDE);
@@ -69,6 +74,25 @@ export default function UnitesManager() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
+  }
+
+  if (!estSuperAdmin) {
+    return (
+      <div>
+        <p style={{ color: "#898781", marginTop: 0 }}>
+          Référentiel partagé entre toutes les sociétés — modification réservée à l'administrateur
+          de la plateforme.
+        </p>
+        {unites.map((unite) => (
+          <div key={unite.id} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            <span style={{ flex: 2 }}>{unite.nom}</span>
+            <span style={{ width: 80 }}>{unite.symbole}</span>
+            <span style={{ width: 100 }}>{unite.type}</span>
+            <span style={{ width: 90 }}>{unite.facteurBase}</span>
+          </div>
+        ))}
+      </div>
+    );
   }
 
   return (
