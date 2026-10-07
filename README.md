@@ -38,6 +38,12 @@ Voir `.env.example` :
 
 - `DATABASE_URL` : chaîne de connexion PostgreSQL
 - `VITE_API_URL` : URL de base de l'API consommée par le frontend (le préfixe `/api` est ajouté automatiquement, voir `src/config/api.ts`)
+- `DOCUMENTS_STORAGE_PATH` : racine du volume persistant pour les fichiers fournisseurs et les sauvegardes (voir [docs/sauvegarde-restauration.md](docs/sauvegarde-restauration.md))
+- `RESTORE_TARGET_DATABASE_URL` : base cible d'une restauration — jamais `DATABASE_URL` (voir [docs/sauvegarde-restauration.md](docs/sauvegarde-restauration.md))
+
+## Sauvegarde et restauration
+
+Voir [docs/sauvegarde-restauration.md](docs/sauvegarde-restauration.md) : création d'une sauvegarde (`npm run db:sauvegarder`), format versionné, dry-run et restauration réelle (`npm run db:restaurer`), et règle d'immuabilité des migrations historiques.
 
 ## Déploiement
 
