@@ -1,11 +1,26 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import { z } from "zod";
 
 import prisma from "../prisma.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
+
+// `parentId` reste optionnel (absent ≡ null) : certains appelants existants (voir
+// isolationReferentielsCategorie.test.ts) n'envoient que `nom` sur un PUT de renommage pur, sans
+// jamais vouloir toucher au parent.
+const schemaEcriture = z.object({
+  nom: z.string().trim().min(1),
+  parentId: z.number().int().positive().nullable().optional(),
+});
+
+// Hiérarchie à un seul niveau par conception (voir prisma/schema.prisma sur SousCategorieRecette,
+// et SousCategoriesRecetteManager.tsx qui ne propose déjà que des racines comme parent) : un parent
+// qui a lui-même un parent ne doit jamais être accepté, sous peine de créer une chaîne à plusieurs
+// niveaux que ni le schéma ni l'interface ne prévoient.
+const MESSAGE_PARENT_INVALIDE = "Sous-catégorie parente invalide";
 
 // Liste des sous-catégories de recettes (type d'ingrédient principal)
 router.get("/", async (req: Request, res: Response) => {
@@ -21,8 +36,14 @@ router.get("/", async (req: Request, res: Response) => {
 
 // Création d'une sous-catégorie de recette
 router.post("/", async (req: Request, res: Response) => {
+  const parsed = schemaEcriture.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Sous-catégorie de recette invalide", details: parsed.error.flatten() });
+    return;
+  }
+
   try {
-    const { nom, parentId } = req.body as { nom: string; parentId?: number | null };
+    const { nom, parentId } = parsed.data;
     // Jamais depuis req.body : la société d'écriture est celle du compte connecté, jamais une
     // valeur transmise par le client (voir F02 de l'audit forensique).
     const societeId = req.utilisateur!.societeId;
@@ -31,8 +52,8 @@ router.post("/", async (req: Request, res: Response) => {
       // Un parent ne peut être choisi que parmi les sous-catégories de la même société (voir F11
       // de l'audit forensique) : sans ce contrôle, un id d'une autre société serait accepté tel quel.
       const parent = await prisma.sousCategorieRecette.findFirst({ where: { id: parentId, societeId } });
-      if (!parent) {
-        res.status(400).json({ error: "Sous-catégorie parente invalide" });
+      if (!parent || parent.parentId !== null) {
+        res.status(400).json({ error: MESSAGE_PARENT_INVALIDE });
         return;
       }
     }
@@ -53,15 +74,36 @@ router.post("/", async (req: Request, res: Response) => {
 
 // Renommage d'une sous-catégorie de recette
 router.put("/:id", async (req: Request, res: Response) => {
+  const parsed = schemaEcriture.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Sous-catégorie de recette invalide", details: parsed.error.flatten() });
+    return;
+  }
+
   try {
     const id = Number(req.params.id);
-    const { nom, parentId } = req.body as { nom: string; parentId?: number | null };
+    const { nom, parentId } = parsed.data;
     const societeId = req.utilisateur!.societeId;
+
+    // Jamais devenir son propre parent (voir F09/F10 de l'audit : auto-référence non gardée).
+    if (parentId === id) {
+      res.status(400).json({ error: MESSAGE_PARENT_INVALIDE });
+      return;
+    }
 
     if (parentId != null) {
       const parent = await prisma.sousCategorieRecette.findFirst({ where: { id: parentId, societeId } });
-      if (!parent) {
-        res.status(400).json({ error: "Sous-catégorie parente invalide" });
+      if (!parent || parent.parentId !== null) {
+        res.status(400).json({ error: MESSAGE_PARENT_INVALIDE });
+        return;
+      }
+
+      // Vérifier que le parent choisi est une racine ne suffit pas : si la sous-catégorie modifiée
+      // a elle-même déjà des enfants, la rattacher à ce parent produirait quand même une chaîne à
+      // 3 niveaux (parent → elle → ses enfants), contraire à la hiérarchie à un seul niveau.
+      const nbEnfants = await prisma.sousCategorieRecette.count({ where: { parentId: id } });
+      if (nbEnfants > 0) {
+        res.status(400).json({ error: MESSAGE_PARENT_INVALIDE });
         return;
       }
     }
