@@ -87,6 +87,17 @@ export async function repondreErreurEcriture(
     return;
   }
 
+  // P2002 : violation d'une contrainte unique (doublon) — une erreur prévisible côté appelant,
+  // jamais une panne serveur, au même titre que P2003/P2025 juste en dessous. Le message reste
+  // volontairement générique et ne dérive jamais de `error.meta.target` (champ/table en cause) :
+  // Prisma n'expose pas toujours cette information de façon exploitable selon le modèle concerné,
+  // et le générique reste correct dans tous les cas plutôt que risquer d'exposer un détail interne
+  // (nom de colonne/table) au client. Jamais journalisée, comme les autres cas métier ci-dessus.
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    res.status(409).json({ error: "Une ressource avec ces informations existe déjà" });
+    return;
+  }
+
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
     res.status(400).json({ error: "Référence invalide : un champ désigne un enregistrement inexistant" });
     return;
