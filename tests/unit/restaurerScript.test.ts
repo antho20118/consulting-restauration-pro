@@ -204,6 +204,109 @@ test("restauration réelle réussie : comptages exacts et migration finale align
 });
 
 // ============================================================================================
+// Correctif post-audit indépendant : réalignement des séquences PostgreSQL après restauration.
+// Avant correction, chargerDonnees() insère les lignes avec leurs IDs explicites du backup (via
+// upsert, voir inserer() dans restaurer.ts), mais ne touche jamais aux séquences PostgreSQL qui
+// génèrent les IDs automatiques (colonnes `Int @id @default(autoincrement())`, 34 modèles du
+// schéma courant). Une séquence fraîchement migrée démarre à 1 et n'avance que si une migration
+// insère elle-même une ligne sans ID explicite — c'est le cas réel de "Societe" : la migration F11
+// (20261005170000_cloisonne_referentiels_categories) y insère conditionnellement "Mon entreprise"
+// SI la table est encore vide à ce stade, ce qui est vrai pendant la phase 1 de restaurer.ts
+// (schéma reconstruit AVANT le chargement des données du backup). Le MAX(id) réel après
+// restauration n'est donc pas toujours celui du tout premier élément créé côté source — d'où la
+// vérification ci-dessous par requête directe du MAX(id) réel de la cible juste après restauration
+// (jamais une valeur supposée a priori), avant tout INSERT supplémentaire du test lui-même.
+test("séquences PostgreSQL : un INSERT normal après restauration ne collisionne jamais avec un ID restauré (modèle racine et modèle dépendant FK)", async () => {
+  const nomCible = `f08_seq_${randomUUID().replace(/-/g, "")}`;
+  await creerBaseTest(nomCible);
+  basesACreer.push(nomCible);
+  const urlCible = urlBase(nomCible);
+  const ancienneUrl = process.env.RESTORE_TARGET_DATABASE_URL;
+  process.env.RESTORE_TARGET_DATABASE_URL = urlCible;
+  try {
+    const rapport = await restaurer(fichierSauvegardeReelle, false);
+    assert.equal(rapport.succes, true, `restauration en échec : ${JSON.stringify(rapport)}`);
+
+    const prisma = new PrismaClient({ datasources: { db: { url: urlCible } } });
+    try {
+      // C. Plusieurs tables auto-incrémentées distinctes, réalignées sans liste codée en dur — pris
+      // IMMÉDIATEMENT après restauration, avant tout INSERT supplémentaire de ce test, pour que la
+      // comparaison porte sur l'état exact produit par la restauration elle-même. Le MAX(id) réel
+      // de chaque table est lu directement sur la cible (jamais supposé a priori — voir le
+      // commentaire du test), ce qui couvre aussi correctement le cas Societe (modifiée par le
+      // backfill conditionnel de la migration F11, voir plus haut).
+      for (const table of ["Societe", "Article", "Categorie", "TVA", "Allergene"]) {
+        const [{ max }] = await prisma.$queryRawUnsafe<{ max: number }[]>(`SELECT MAX("id") AS max FROM "${table}"`);
+        const [{ last_value }] = await prisma.$queryRawUnsafe<{ last_value: bigint }[]>(
+          `SELECT last_value FROM "${table}_id_seq"`
+        );
+        assert.equal(
+          Number(last_value),
+          max,
+          `la séquence de ${table} devrait être exactement au MAX(id) réel restauré (${max}), trouvé ${last_value}`
+        );
+      }
+
+      // A. Modèle racine (Societe) : le prochain INSERT automatique (sans ID explicite) doit
+      // recevoir un ID strictement supérieur à tout ID déjà restauré, sans quoi il échoue avec une
+      // violation de contrainte unique (Societe_pkey) — c'est exactement la preuve du bug avant
+      // correction (voir le rapport F08).
+      const [{ max: maxSocieteAvant }] = await prisma.$queryRawUnsafe<{ max: number }[]>(
+        `SELECT MAX("id") AS max FROM "Societe"`
+      );
+      const nouvelleSociete = await prisma.societe.create({ data: { nom: "Nouvelle société post-restauration" } });
+      assert.ok(
+        nouvelleSociete.id > maxSocieteAvant,
+        `le nouvel ID Societe (${nouvelleSociete.id}) doit être strictement supérieur au MAX(id) restauré (${maxSocieteAvant}) — la séquence n'a pas été réalignée`
+      );
+
+      // Modèle dépendant avec FK (Article -> Categorie/TVA/Societe) : même preuve, sur un modèle
+      // dont l'insertion automatique dépend aussi de clés étrangères valides.
+      const categorie = await prisma.categorie.findFirstOrThrow({ where: { nom: "Épicerie" } });
+      const tva = await prisma.tVA.findFirstOrThrow({ where: { nom: "TVA 20%" } });
+      const nouvelArticle = await prisma.article.create({
+        data: {
+          nom: "Nouvel article post-restauration",
+          type: "MATIERE_PREMIERE",
+          categorieId: categorie.id,
+          tvaId: tva.id,
+          societeId: nouvelleSociete.id,
+          rendement: 100,
+        },
+      });
+      assert.ok(
+        nouvelArticle.id > idArticleSource,
+        `le nouvel ID Article (${nouvelArticle.id}) doit être strictement supérieur à l'ID restauré (${idArticleSource}) — la séquence n'a pas été réalignée`
+      );
+
+      // B. Table vide dans le backup (Fournisseur : jamais créée dans le jeu de données de test, et
+      // jamais pré-seedée par aucune migration — vérifié) : un INSERT normal doit fonctionner sans
+      // incident particulier, en recevant l'id 1 comme sur une base neuve — aucune réparation
+      // spéciale requise pour une table sans ligne restaurée.
+      const fournisseur = await prisma.fournisseur.create({
+        data: { nom: "Nouveau fournisseur", societeId: nouvelleSociete.id },
+      });
+      assert.equal(fournisseur.id, 1, "le premier Fournisseur jamais créé doit recevoir l'id 1, comme sur une base neuve");
+
+      // D. Aucun effet sur une clé primaire COMPOSITE (ArticleAllergene) ou NON auto-incrémentée
+      // (ValeurNutritionnelle.articleId) : la logique de réalignement ne doit ni planter ni
+      // interférer sur ces deux modèles, qui n'ont simplement aucune séquence à réaligner.
+      const nouvelAllergene = await prisma.allergene.create({ data: { nom: "Lactose", code: "LACTOSE" } });
+      await prisma.articleAllergene.create({ data: { articleId: nouvelArticle.id, allergeneId: nouvelAllergene.id } });
+      await prisma.valeurNutritionnelle.create({ data: { articleId: nouvelArticle.id, energie: 100 } });
+      const articleAllergeneVerif = await prisma.articleAllergene.findFirstOrThrow({
+        where: { articleId: nouvelArticle.id, allergeneId: nouvelAllergene.id },
+      });
+      assert.equal(articleAllergeneVerif.articleId, nouvelArticle.id);
+    } finally {
+      await prisma.$disconnect();
+    }
+  } finally {
+    process.env.RESTORE_TARGET_DATABASE_URL = ancienneUrl;
+  }
+});
+
+// ============================================================================================
 // Scénario 10 : cible non vide → refus.
 // ============================================================================================
 
@@ -559,6 +662,38 @@ test("PREUVE DE PROVENANCE : backup historique avec AccesApplication personnalis
       const categorie = await prismaVerif.categorie.findFirstOrThrow({ where: { id: idCategorieHistorique } });
       assert.equal(categorie.societeId, idSocieteHistorique);
       assert.equal(categorie.nom, "Catégorie historique test");
+
+      // E. Séquences PostgreSQL correctement réalignées après un scénario historique complet
+      // (rejeu de migrations + backfill F11), pas seulement après une restauration sur le schéma
+      // courant : un INSERT automatique sur Utilisateur (créé par la migration utilisateurs_roles
+      // pendant le rattrapage, donc avec un ID jamais explicitement présent dans le backup lui-même)
+      // et sur Societe (chargée depuis le backup) doit recevoir un ID jamais déjà utilisé.
+      const [{ max: maxUtilisateurAvant }] = await prismaVerif.$queryRawUnsafe<{ max: number }[]>(
+        `SELECT MAX("id") AS max FROM "Utilisateur"`
+      );
+      const nouvelUtilisateur = await prismaVerif.utilisateur.create({
+        data: {
+          identifiant: "nouvel_utilisateur_post_historique",
+          codeHache: "hash",
+          role: "CHEF",
+          societeId: idSocieteHistorique,
+        },
+      });
+      assert.ok(
+        nouvelUtilisateur.id > maxUtilisateurAvant,
+        `le nouvel ID Utilisateur (${nouvelUtilisateur.id}) doit être strictement supérieur au MAX(id) déjà présent (${maxUtilisateurAvant})`
+      );
+
+      const [{ max: maxSocieteAvant }] = await prismaVerif.$queryRawUnsafe<{ max: number }[]>(
+        `SELECT MAX("id") AS max FROM "Societe"`
+      );
+      const nouvelleSocieteHistorique = await prismaVerif.societe.create({
+        data: { nom: "Nouvelle société post-restauration historique" },
+      });
+      assert.ok(
+        nouvelleSocieteHistorique.id > maxSocieteAvant,
+        `le nouvel ID Societe (${nouvelleSocieteHistorique.id}) doit être strictement supérieur au MAX(id) déjà présent (${maxSocieteAvant})`
+      );
     } finally {
       await prismaVerif.$disconnect();
     }

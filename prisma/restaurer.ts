@@ -44,6 +44,7 @@ import { construireGrapheRestauration, type GrapheRestauration } from "./utils/o
 import { construireGrapheDepuisIntrospection } from "./utils/grapheIntrospection.js";
 import { introspecterSchema, type SchemaIntrospecte, type ColonneIntrospectee } from "./utils/introspectionSchema.js";
 import { derniereMigrationAppliquee } from "./utils/migrationsAppliquees.js";
+import { realignerSequences, type RealignementSequence } from "./utils/realignementSequences.js";
 
 const RACINE_DEPOT = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const DOSSIER_MIGRATIONS_REEL = path.join(RACINE_DEPOT, "prisma", "migrations");
@@ -506,6 +507,7 @@ export type RapportRestauration = {
   chargement: RapportChargement;
   violationsInvariants: ViolationInvariant[];
   fichiersOrphelins: RapportFichiersOrphelins | null;
+  sequencesRealignees: RealignementSequence[];
   succes: boolean;
   erreur?: string;
 };
@@ -594,6 +596,21 @@ export async function restaurer(cheminFichier: string, dryRun: boolean): Promise
       );
     }
 
+    // Réalignement des séquences PostgreSQL (correctif suite à un second audit indépendant) :
+    // obligatoirement APRÈS le rattrapage complet vers le schéma courant ci-dessus, jamais avant —
+    // une migration rejouée pendant le rattrapage peut elle-même insérer/supprimer/transformer des
+    // lignes et donc changer le MAX(id) réel d'une table ; le calcul doit porter sur l'état FINAL
+    // de la base restaurée, pas sur l'état intermédiaire issu du seul chargement du backup. Avant
+    // ce réalignement, un INSERT automatique suivant la restauration pouvait réutiliser un ID déjà
+    // restauré (violation de contrainte unique) — voir prisma/utils/realignementSequences.ts.
+    const prismaSequences = new PrismaClient({ datasources: { db: { url: urlCible } } });
+    let sequencesRealignees: RealignementSequence[];
+    try {
+      sequencesRealignees = await realignerSequences(prismaSequences);
+    } finally {
+      await prismaSequences.$disconnect();
+    }
+
     // Vérification d'intégrité.
     const prismaVerif = new PrismaClient({ datasources: { db: { url: urlCible } } });
     let migrationFinaleCible: string;
@@ -630,6 +647,7 @@ export async function restaurer(cheminFichier: string, dryRun: boolean): Promise
       chargement,
       violationsInvariants,
       fichiersOrphelins,
+      sequencesRealignees,
       succes,
     };
   } finally {
@@ -697,6 +715,7 @@ async function main() {
           (orphelins.length > 0 ? ` — ${orphelins.length} orphelin(s) (base restaurée, documents incomplets)` : "")
       );
     }
+    console.log(`\nSéquences PostgreSQL réalignées : ${rapport.sequencesRealignees.length}`);
 
     console.log(`\n${rapport.succes ? "✅ RESTAURATION RÉUSSIE" : "❌ RESTAURATION EN ÉCHEC"}`);
     if (!rapport.dryRun && rapport.succes) {
