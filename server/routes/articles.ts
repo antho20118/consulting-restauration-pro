@@ -1389,9 +1389,13 @@ router.post("/rechercher-par-reference", async (req: Request, res: Response) => 
     }
 
     const refsNettoyees = [...new Set(references.map((r) => String(r).trim()).filter(Boolean))];
+    // Jamais depuis req.body : la société de lecture est celle du compte connecté (même principe
+    // que les écritures de ce fichier) — sans ce filtre, une référence devinée/énumérée exposait
+    // nom/prix/unité d'un article d'une AUTRE société (faille confirmée, audit F09/F10).
+    const societeId = req.utilisateur!.societeId;
 
     const articles = await prisma.article.findMany({
-      where: { reference: { in: refsNettoyees }, actif: true },
+      where: { reference: { in: refsNettoyees }, actif: true, societeId },
       include: {
         tarifs: {
           where: { actif: true },

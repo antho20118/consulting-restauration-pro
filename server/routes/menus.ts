@@ -8,6 +8,20 @@ import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreur
 
 const router = Router();
 
+// Cloisonnement multi-société (faille confirmée : un recetteId d'une autre société pouvait être
+// injecté dans un menu sans aucune vérification, contrairement à categorieId juste au-dessus dans
+// les mêmes handlers — GET /:id réexposait ensuite nom/coût/allergènes/nutrition de la recette
+// étrangère via inclusionsMenu). Vérification groupée (une seule requête, jamais une par ligne) ;
+// ne distingue jamais "recetteId inexistant" de "recetteId d'une autre société" dans la réponse.
+async function recettesAppartiennentALaSociete(recetteIds: number[], societeId: number): Promise<boolean> {
+  if (recetteIds.length === 0) return true;
+  const recettesValides = await prisma.recette.findMany({
+    where: { id: { in: recetteIds }, societeId },
+    select: { id: true },
+  });
+  return recettesValides.length === recetteIds.length;
+}
+
 // Liste des menus
 router.get("/", async (req: Request, res: Response) => {
   try {
@@ -74,6 +88,15 @@ router.post("/", async (req: Request, res: Response) => {
       }
     }
 
+    // Jamais accepter un recetteId d'une autre société en devinant/énumérant simplement un id
+    // (même principe que categorieId ci-dessus) — voir le commentaire de
+    // recettesAppartiennentALaSociete en tête de fichier.
+    const recetteIds = [...new Set((lignes ?? []).map((ligne) => ligne.recetteId))];
+    if (!(await recettesAppartiennentALaSociete(recetteIds, societeId))) {
+      res.status(400).json({ error: "Une ou plusieurs recettes sont invalides" });
+      return;
+    }
+
     const menu = await prisma.menu.create({
       data: {
         nom,
@@ -121,6 +144,15 @@ router.put("/:id", async (req: Request, res: Response) => {
         res.status(400).json({ error: "Catégorie invalide" });
         return;
       }
+    }
+
+    // Même garde-fou qu'à la création (voir POST / ci-dessus) : vérifié AVANT le $transaction, donc
+    // avant tout deleteMany/update — un payload contenant une recette étrangère laisse le menu
+    // existant strictement inchangé.
+    const recetteIds = [...new Set((lignes ?? []).map((ligne) => ligne.recetteId))];
+    if (!(await recettesAppartiennentALaSociete(recetteIds, req.utilisateur!.societeId))) {
+      res.status(400).json({ error: "Une ou plusieurs recettes sont invalides" });
+      return;
     }
 
     const menu = await prisma.$transaction(async (tx) => {
