@@ -63,11 +63,11 @@ export default function ParametresPage() {
       </Section>
 
       <Section titre="Unités">
-        <UnitesManager />
+        <UnitesManager estSuperAdmin={estSuperAdmin} />
       </Section>
 
       <Section titre="TVA">
-        <TvaManager />
+        <TvaManager estSuperAdmin={estSuperAdmin} />
       </Section>
 
       <Section titre="Mon compte">

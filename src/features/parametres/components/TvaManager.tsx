@@ -5,7 +5,15 @@ import type { Tva, TvaInput } from "../types/parametres";
 
 const TVA_VIDE: TvaInput = { nom: "", taux: 0 };
 
-export default function TvaManager() {
+// F11 de l'audit forensique, volet UI : TVA est un référentiel partagé entre toutes les sociétés
+// (voir schema.prisma et server/middleware/autoriserEcritureSuperAdmin.ts, qui refuse déjà toute
+// écriture côté serveur à qui n'est pas superAdmin). La lecture reste ouverte à tout rôle — chaque
+// société doit pouvoir choisir un taux existant dans ses formulaires d'ingrédients — mais les
+// contrôles d'édition/suppression/ajout n'ont plus de sens pour un simple PROPRIETAIRE : avant ce
+// correctif, ils s'affichaient normalement puis échouaient silencieusement (toast d'erreur 403) au
+// clic, sans jamais expliquer pourquoi. `estSuperAdmin` ne sert ici qu'à masquer l'UI (comme pour
+// tout le reste de l'application, voir config/api.ts) — jamais une source de vérité d'autorisation.
+export default function TvaManager({ estSuperAdmin }: { estSuperAdmin: boolean }) {
   const [tvas, setTvas] = useState<Tva[]>([]);
   const [edits, setEdits] = useState<Record<number, TvaInput>>({});
   const [nouvelle, setNouvelle] = useState<TvaInput>(TVA_VIDE);
@@ -55,6 +63,23 @@ export default function TvaManager() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erreur inconnue");
     }
+  }
+
+  if (!estSuperAdmin) {
+    return (
+      <div>
+        <p style={{ color: "#898781", marginTop: 0 }}>
+          Référentiel partagé entre toutes les sociétés — modification réservée à l'administrateur
+          de la plateforme.
+        </p>
+        {tvas.map((tva) => (
+          <div key={tva.id} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            <span style={{ flex: 1 }}>{tva.nom}</span>
+            <span>{tva.taux} %</span>
+          </div>
+        ))}
+      </div>
+    );
   }
 
   return (
