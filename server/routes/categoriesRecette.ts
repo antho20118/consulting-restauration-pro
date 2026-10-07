@@ -1,10 +1,14 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import { z } from "zod";
 
 import prisma from "../prisma.js";
+import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
+
+const schemaEcriture = z.object({ nom: z.string().trim().min(1) });
 
 // Liste des catégories de recettes
 router.get("/", async (req: Request, res: Response) => {
@@ -20,8 +24,14 @@ router.get("/", async (req: Request, res: Response) => {
 
 // Création d'une catégorie de recette
 router.post("/", async (req: Request, res: Response) => {
+  const parsed = schemaEcriture.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Catégorie de recette invalide", details: parsed.error.flatten() });
+    return;
+  }
+
   try {
-    const { nom } = req.body;
+    const { nom } = parsed.data;
     // Jamais depuis req.body : la société d'écriture est celle du compte connecté, jamais une
     // valeur transmise par le client (voir F02 de l'audit forensique).
     const societeId = req.utilisateur!.societeId;
@@ -35,17 +45,21 @@ router.post("/", async (req: Request, res: Response) => {
 
     res.status(201).json(categorie);
   } catch (error) {
-    console.error(error);
-    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
-    res.status(500).json({ error: "Impossible de créer la catégorie de recette" });
+    await repondreErreurEcriture(error, res, "Impossible de créer la catégorie de recette", req);
   }
 });
 
 // Renommage d'une catégorie de recette
 router.put("/:id", async (req: Request, res: Response) => {
+  const parsed = schemaEcriture.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Catégorie de recette invalide", details: parsed.error.flatten() });
+    return;
+  }
+
   try {
     const id = Number(req.params.id);
-    const { nom } = req.body;
+    const { nom } = parsed.data;
 
     // Scopé par société : jamais permettre à un compte de modifier une catégorie d'une autre
     // société en devinant/énumérant simplement un id (voir F11 de l'audit forensique).
@@ -61,9 +75,7 @@ router.put("/:id", async (req: Request, res: Response) => {
 
     res.json(categorie);
   } catch (error) {
-    console.error(error);
-    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
-    res.status(500).json({ error: "Impossible de modifier la catégorie de recette" });
+    await repondreErreurEcriture(error, res, "Impossible de modifier la catégorie de recette", req);
   }
 });
 
