@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import { z } from "zod";
 
 import prisma from "../prisma.js";
 import {
@@ -20,6 +21,26 @@ import { resoudreOuCreerProduitFournisseur } from "../utils/produitFournisseur.j
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
+
+// PR E de l'audit F09/F10 : valide UNIQUEMENT la structure qui fait aujourd'hui crasher
+// creerLignesDocument en 500 (élément non-objet/null, reference/conditionnement de type
+// non-string) — jamais le métier de designation/prix, qui reste un JAUNE non arbitré (voir le
+// rapport d'audit). `designation`/`prix` restent `z.unknown()` : un objet, un nombre, etc. pour
+// designation, ou n'importe quoi pour prix, continuent de traverser ce schéma sans être rejetés,
+// exactement comme avant cette PR — seule la forme de l'élément lui-même (objet, jamais null/
+// primitif) et le type de reference/conditionnement (string ou absent/null) sont vérifiés.
+// Pas de .strict() : une clé surnuméraire sur une ligne doit continuer d'être ignorée, jamais
+// rejetée (cohérent avec le reste de l'API, voir erreursEcritureFK.test.ts).
+const schemaLigneImport = z
+  .object({
+    designation: z.unknown(),
+    reference: z.string().nullable().optional(),
+    conditionnement: z.string().nullable().optional(),
+    prix: z.unknown().optional(),
+  })
+  .passthrough();
+
+const schemaLignesImport = z.array(schemaLigneImport).min(1);
 
 // Étape 1 (facultative, pas de persistance) : extraction par vision IA d'une photo de listing —
 // voir server/utils/importListingPhotoIA.ts. Si l'IA n'est pas configurée (503), le client bascule
@@ -262,6 +283,11 @@ router.post("/:fournisseurId", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Aucune ligne à importer" });
       return;
     }
+    const lignesValidees = schemaLignesImport.safeParse(lignes);
+    if (!lignesValidees.success) {
+      res.status(400).json({ error: "Structure de lignes invalide", details: lignesValidees.error.flatten() });
+      return;
+    }
 
     // Stockage sur le volume AVANT toute création en base : si l'écriture du fichier échoue
     // (DocumentInvalideError : type/taille invalide), aucun DocumentFournisseur orphelin n'est créé.
@@ -420,6 +446,11 @@ router.post("/factures/:fournisseurId", async (req: Request, res: Response) => {
     }
     if (!Array.isArray(lignes) || lignes.length === 0) {
       res.status(400).json({ error: "Aucune ligne à importer" });
+      return;
+    }
+    const lignesValidees = schemaLignesImport.safeParse(lignes);
+    if (!lignesValidees.success) {
+      res.status(400).json({ error: "Structure de lignes invalide", details: lignesValidees.error.flatten() });
       return;
     }
 
