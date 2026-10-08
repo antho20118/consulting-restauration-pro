@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import { z } from "zod";
 
 import prisma from "../prisma.js";
 import { normaliserTexte } from "../utils/normaliserTexte.js";
@@ -14,6 +15,37 @@ import { calculerCoutsRecettesSansErreur, inclusionsRecette } from "../utils/cou
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
+
+// PR F de l'audit F09/F10 : valide UNIQUEMENT la structure qui fait aujourd'hui crasher
+// POST /import en 500 (élément non-objet/null dans lignes, periodeDebut/periodeFin non
+// parsable) — jamais le métier de decision/quantite/prixUnitaire/recetteRetenueId, qui reste
+// hors scope (voir le rapport d'audit). Chaque élément de `lignes` n'est validé que comme "objet
+// non-null" (schéma sans aucune clé déclarée, passthrough) : designation, quantite, prixUnitaire,
+// decision, recetteRetenueId continuent de traverser ce schéma sans être typés ni rejetés,
+// exactement comme avant cette PR — seule la forme de l'élément lui-même (objet, jamais null/
+// primitif) est vérifiée. Pas de .strict() sur les lignes ni sur le corps : une clé surnuméraire
+// doit continuer d'être ignorée, jamais rejetée.
+const schemaLigneVenteImport = z.object({}).passthrough();
+
+// periodeDebut/periodeFin : le comportement actuel traite toute valeur falsy (absente, null,
+// chaîne vide) comme "non renseignée" (-> null), et toute valeur truthy est passée telle quelle à
+// `new Date(...)`. On préserve ce comportement à l'identique pour le cas falsy, et on exige
+// seulement qu'une valeur truthy produise une Date valide — jamais de contrainte de type (string
+// vs number) non prouvée par le contrat existant.
+function dateOptionnelleValide(valeur: unknown): boolean {
+  if (!valeur) return true;
+  return !Number.isNaN(new Date(valeur as string).getTime());
+}
+
+const schemaDateOptionnelle = z.unknown().refine(dateOptionnelleValide, { message: "Date invalide" });
+
+const schemaCorpsImportVentes = z
+  .object({
+    periodeDebut: schemaDateOptionnelle.optional(),
+    periodeFin: schemaDateOptionnelle.optional(),
+    lignes: z.array(schemaLigneVenteImport).min(1),
+  })
+  .passthrough();
 
 type LigneEntree = {
   designation?: string;
@@ -154,6 +186,11 @@ router.post("/import", async (req: Request, res: Response) => {
 
     if (!Array.isArray(lignes) || lignes.length === 0) {
       res.status(400).json({ error: "Aucune ligne à importer" });
+      return;
+    }
+    const corpsValide = schemaCorpsImportVentes.safeParse(req.body);
+    if (!corpsValide.success) {
+      res.status(400).json({ error: "Corps d'import invalide", details: corpsValide.error.flatten() });
       return;
     }
 
