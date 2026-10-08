@@ -197,110 +197,119 @@ router.post("/import", async (req: Request, res: Response) => {
     const societeId = req.utilisateur!.societeId;
     const contexte = await construireContexteVentes(societeId);
 
-    const document = await prisma.documentVentes.create({
-      data: {
-        societeId,
-        periodeDebut: periodeDebut ? new Date(periodeDebut) : null,
-        periodeFin: periodeFin ? new Date(periodeFin) : null,
-        nomFichierOriginal: nomFichierOriginal || null,
-        creeParId: req.utilisateur!.id,
-      },
-    });
-
     let validees = 0;
     let rejetees = 0;
     let enAttente = 0;
     const erreurs: string[] = [];
-    // Alias appris à la volée pendant CET import : une même désignation revenant plusieurs fois
-    // dans le même fichier doit profiter de l'alias appris par une ligne précédente, sans attendre
-    // le prochain import (jamais rechargé depuis la base au milieu de la boucle).
-    const aliasAppris = new Map<string, number>();
 
-    for (const ligneEntree of lignes) {
-      const designation = String(ligneEntree.designation ?? "").trim();
-      const quantite = parseQuantite(ligneEntree.quantite);
-      const prixUnitaire = parsePrix(ligneEntree.prixUnitaire);
-
-      if (!designation || quantite === null || quantite <= 0) {
-        erreurs.push(`Ligne "${designation || "(vide)"}" ignorée : désignation ou quantité invalide`);
-        continue;
-      }
-
-      const designationNormalisee = normaliserTexte(designation);
-      const contexteLigne: ContexteRapprochementVente = aliasAppris.has(designationNormalisee)
-        ? { candidats: contexte.candidats, aliasParTexteNormalise: new Map(contexte.aliasParTexteNormalise).set(designationNormalisee, aliasAppris.get(designationNormalisee)!) }
-        : contexte;
-
-      const resultat = rapprocherLigneVente(designation, contexteLigne);
-      const propose = champsProposition(resultat);
-
-      const decisionDemandee = ligneEntree.decision;
-
-      if (decisionDemandee === "REJETEE" || decisionDemandee === undefined) {
-        await prisma.ligneVente.create({
-          data: {
-            documentVentesId: document.id,
-            designationLue: designation,
-            quantiteVendue: quantite,
-            prixVenteUnitaireLu: prixUnitaire,
-            recetteProposeeId: propose.recetteProposeeId,
-            confiance: propose.confiance,
-            motifCorrespondance: propose.motifCorrespondance,
-            candidatsAlternatifs: propose.candidatsAlternatifs,
-            decision: decisionDemandee === "REJETEE" ? "REJETEE" : "EN_ATTENTE",
-          },
-        });
-        if (decisionDemandee === "REJETEE") rejetees++;
-        else enAttente++;
-        continue;
-      }
-
-      // decision === "VALIDEE"
-      const recetteRetenueId = ligneEntree.recetteRetenueId;
-      if (!recetteRetenueId || !choixRecetteValide(resultat, recetteRetenueId)) {
-        erreurs.push(`Ligne "${designation}" : recette retenue non conforme à la proposition, ligne mise en attente`);
-        await prisma.ligneVente.create({
-          data: {
-            documentVentesId: document.id,
-            designationLue: designation,
-            quantiteVendue: quantite,
-            prixVenteUnitaireLu: prixUnitaire,
-            recetteProposeeId: propose.recetteProposeeId,
-            confiance: propose.confiance,
-            motifCorrespondance: propose.motifCorrespondance,
-            candidatsAlternatifs: propose.candidatsAlternatifs,
-            decision: "EN_ATTENTE",
-          },
-        });
-        enAttente++;
-        continue;
-      }
-
-      await prisma.ligneVente.create({
+    // Atomique : le document et toutes ses lignes (+ l'apprentissage d'alias qui en découle) sont
+    // créés dans une seule transaction — si une ligne échoue en cours de boucle (erreur DB/
+    // interne), ni elle, ni les lignes déjà écrites, ni les alias déjà appris, ni le document
+    // lui-même ne doivent survivre (voir le rapport d'audit F09/F10, chantier atomicité).
+    const document = await prisma.$transaction(async (tx) => {
+      const document = await tx.documentVentes.create({
         data: {
-          documentVentesId: document.id,
-          designationLue: designation,
-          quantiteVendue: quantite,
-          prixVenteUnitaireLu: prixUnitaire,
-          recetteProposeeId: propose.recetteProposeeId,
-          confiance: propose.confiance,
-          motifCorrespondance: propose.motifCorrespondance,
-          candidatsAlternatifs: propose.candidatsAlternatifs,
-          decision: "VALIDEE",
-          recetteRetenueId,
+          societeId,
+          periodeDebut: periodeDebut ? new Date(periodeDebut) : null,
+          periodeFin: periodeFin ? new Date(periodeFin) : null,
+          nomFichierOriginal: nomFichierOriginal || null,
+          creeParId: req.utilisateur!.id,
         },
       });
-      validees++;
 
-      // Apprentissage de l'alias : mémorise la correspondance confirmée par un humain pour le
-      // prochain import portant la même désignation — jamais pour une ligne rejetée ou en attente.
-      await prisma.aliasProduitVenduImport.upsert({
-        where: { texteNormalise: designationNormalisee },
-        create: { texteNormalise: designationNormalisee, recetteId: recetteRetenueId },
-        update: { recetteId: recetteRetenueId },
-      });
-      aliasAppris.set(designationNormalisee, recetteRetenueId);
-    }
+      // Alias appris à la volée pendant CET import : une même désignation revenant plusieurs fois
+      // dans le même fichier doit profiter de l'alias appris par une ligne précédente, sans attendre
+      // le prochain import (jamais rechargé depuis la base au milieu de la boucle).
+      const aliasAppris = new Map<string, number>();
+
+      for (const ligneEntree of lignes) {
+        const designation = String(ligneEntree.designation ?? "").trim();
+        const quantite = parseQuantite(ligneEntree.quantite);
+        const prixUnitaire = parsePrix(ligneEntree.prixUnitaire);
+
+        if (!designation || quantite === null || quantite <= 0) {
+          erreurs.push(`Ligne "${designation || "(vide)"}" ignorée : désignation ou quantité invalide`);
+          continue;
+        }
+
+        const designationNormalisee = normaliserTexte(designation);
+        const contexteLigne: ContexteRapprochementVente = aliasAppris.has(designationNormalisee)
+          ? { candidats: contexte.candidats, aliasParTexteNormalise: new Map(contexte.aliasParTexteNormalise).set(designationNormalisee, aliasAppris.get(designationNormalisee)!) }
+          : contexte;
+
+        const resultat = rapprocherLigneVente(designation, contexteLigne);
+        const propose = champsProposition(resultat);
+
+        const decisionDemandee = ligneEntree.decision;
+
+        if (decisionDemandee === "REJETEE" || decisionDemandee === undefined) {
+          await tx.ligneVente.create({
+            data: {
+              documentVentesId: document.id,
+              designationLue: designation,
+              quantiteVendue: quantite,
+              prixVenteUnitaireLu: prixUnitaire,
+              recetteProposeeId: propose.recetteProposeeId,
+              confiance: propose.confiance,
+              motifCorrespondance: propose.motifCorrespondance,
+              candidatsAlternatifs: propose.candidatsAlternatifs,
+              decision: decisionDemandee === "REJETEE" ? "REJETEE" : "EN_ATTENTE",
+            },
+          });
+          if (decisionDemandee === "REJETEE") rejetees++;
+          else enAttente++;
+          continue;
+        }
+
+        // decision === "VALIDEE"
+        const recetteRetenueId = ligneEntree.recetteRetenueId;
+        if (!recetteRetenueId || !choixRecetteValide(resultat, recetteRetenueId)) {
+          erreurs.push(`Ligne "${designation}" : recette retenue non conforme à la proposition, ligne mise en attente`);
+          await tx.ligneVente.create({
+            data: {
+              documentVentesId: document.id,
+              designationLue: designation,
+              quantiteVendue: quantite,
+              prixVenteUnitaireLu: prixUnitaire,
+              recetteProposeeId: propose.recetteProposeeId,
+              confiance: propose.confiance,
+              motifCorrespondance: propose.motifCorrespondance,
+              candidatsAlternatifs: propose.candidatsAlternatifs,
+              decision: "EN_ATTENTE",
+            },
+          });
+          enAttente++;
+          continue;
+        }
+
+        await tx.ligneVente.create({
+          data: {
+            documentVentesId: document.id,
+            designationLue: designation,
+            quantiteVendue: quantite,
+            prixVenteUnitaireLu: prixUnitaire,
+            recetteProposeeId: propose.recetteProposeeId,
+            confiance: propose.confiance,
+            motifCorrespondance: propose.motifCorrespondance,
+            candidatsAlternatifs: propose.candidatsAlternatifs,
+            decision: "VALIDEE",
+            recetteRetenueId,
+          },
+        });
+        validees++;
+
+        // Apprentissage de l'alias : mémorise la correspondance confirmée par un humain pour le
+        // prochain import portant la même désignation — jamais pour une ligne rejetée ou en attente.
+        await tx.aliasProduitVenduImport.upsert({
+          where: { texteNormalise: designationNormalisee },
+          create: { texteNormalise: designationNormalisee, recetteId: recetteRetenueId },
+          update: { recetteId: recetteRetenueId },
+        });
+        aliasAppris.set(designationNormalisee, recetteRetenueId);
+      }
+
+      return document;
+    });
 
     res.status(201).json({ document, validees, rejetees, enAttente, erreurs });
   } catch (error) {
