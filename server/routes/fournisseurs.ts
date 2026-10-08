@@ -1,11 +1,46 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
+import { z } from "zod";
 
 import prisma from "../prisma.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
+
+// Aucun contrôle de format (email/téléphone/URL) : rien dans le schéma Prisma, le frontend
+// (FournisseurForm.tsx n'utilise `type="email"` que pour le clavier mobile, jamais bloquant) ni les
+// tests existants ne l'exige — ne pas en inventer un ici.
+//
+// `null` explicite est déjà accepté aujourd'hui exactement comme une absence de champ ou une
+// chaîne vide (`telephone || null` : `null || null` vaut `null`) — `.nullable()` est donc
+// nécessaire en plus de `.optional()`, sous peine de rejeter à tort un `null` que le contrat actuel
+// tolère.
+const champOptionnelVersNull = z
+  .string()
+  .nullable()
+  .optional()
+  .transform((v) => (v ? v : null));
+
+// nom non vide requis à la création — aucun .strict() : erreursEcritureFK.test.ts (test 2) prouve
+// qu'une clé surnuméraire (ex. societeId) envoyée par le client doit être silencieusement ignorée,
+// jamais provoquer un rejet.
+const schemaCreation = z.object({
+  nom: z.string().trim().min(1),
+  telephone: champOptionnelVersNull,
+  email: champOptionnelVersNull,
+  siteWeb: champOptionnelVersNull,
+});
+
+// nom reste optionnel sur PUT : aujourd'hui, un nom omis devient `undefined` et Prisma `update`
+// l'ignore (jamais écrasé) — comportement réel préservé tel quel, pas de symétrisation artificielle
+// avec POST (voir caractérisation dédiée dans validationFournisseurs.test.ts).
+const schemaModification = z.object({
+  nom: z.string().trim().min(1).optional(),
+  telephone: champOptionnelVersNull,
+  email: champOptionnelVersNull,
+  siteWeb: champOptionnelVersNull,
+});
 
 // Génère atomiquement le prochain codeFournisseur d'une société (format FOU-0001, FOU-0002, ...) —
 // voir cadrage « identité fournisseur + produit fournisseur + historique des tarifs ». Un seul
@@ -158,8 +193,14 @@ router.get("/:id/documents", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
+  const parsed = schemaCreation.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Fournisseur invalide", details: parsed.error.flatten() });
+    return;
+  }
+
   try {
-    const { nom, telephone, email, siteWeb } = req.body;
+    const { nom, telephone, email, siteWeb } = parsed.data;
     // Jamais depuis req.body : la société d'écriture est celle du compte connecté, jamais une
     // valeur transmise par le client (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma).
     const societeId = req.utilisateur!.societeId;
@@ -188,9 +229,15 @@ router.post("/", async (req, res) => {
 });
 
 router.put("/:id", async (req, res) => {
+  const parsed = schemaModification.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Fournisseur invalide", details: parsed.error.flatten() });
+    return;
+  }
+
   try {
     const id = Number(req.params.id);
-    const { nom, telephone, email, siteWeb } = req.body;
+    const { nom, telephone, email, siteWeb } = parsed.data;
 
     // Scopé par société : jamais permettre à un compte de modifier un fournisseur d'une autre
     // société en devinant/énumérant simplement un id (voir la matrice de permissions, server/app.ts).
@@ -214,9 +261,7 @@ router.put("/:id", async (req, res) => {
 
     res.json(fournisseur);
   } catch (error) {
-    console.error(error);
-    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
-    res.status(500).json({ error: "Impossible de modifier le fournisseur" });
+    await repondreErreurEcriture(error, res, "Impossible de modifier le fournisseur", req);
   }
 });
 
