@@ -231,6 +231,14 @@ router.post("/:id/receptionner", async (req: Request, res: Response) => {
 
     const ligneParId = new Map(commande.lignes.map((l) => [l.id, l]));
     const idsSoumis = new Set(parsed.data.lignes.map((l) => l.ligneId));
+    // Un ligneId répété passerait silencieusement le contrôle de couverture ci-dessous (basé sur ce
+    // même Set, qui dédoublonne) alors que la boucle de traitement plus bas itère sur
+    // parsed.data.lignes tel quel : chaque occurrence appliquerait son propre mouvement de stock,
+    // incrémentant Stock.quantite une fois par occurrence au lieu d'une fois par ligne réelle.
+    if (idsSoumis.size !== parsed.data.lignes.length) {
+      res.status(400).json({ error: "La réception contient des lignes dupliquées" });
+      return;
+    }
     if (idsSoumis.size !== commande.lignes.length || commande.lignes.some((l) => !idsSoumis.has(l.id))) {
       res.status(400).json({ error: "La réception doit porter sur toutes les lignes de la commande" });
       return;

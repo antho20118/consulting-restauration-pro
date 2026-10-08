@@ -358,6 +358,182 @@ test("refuse une réception qui ne couvre pas toutes les lignes de la commande",
   assert.equal(ligneRelue.quantiteRecueBase, null, "aucune écriture partielle malgré la requête refusée");
 });
 
+// Constat d'audit statique : le contrôle de couverture (idsSoumis = Set) compare uniquement les
+// IDENTIFIANTS distincts attendus, jamais le nombre d'entrées soumises. Une ligne répétée dans le
+// tableau passe donc ce contrôle (le Set dédoublonne), alors que la boucle de traitement qui suit
+// itère sur `parsed.data.lignes` tel quel (jamais dédoublonné) : chaque occurrence appelle
+// appliquerMouvementStock indépendamment, qui relit puis ré-écrit Stock.quantite — un ligneId répété
+// incrémente donc le stock une fois par occurrence, pas une fois par ligne réelle.
+
+// Capture l'état complet pertinent avant une tentative de réception refusée, pour comparer
+// explicitement avant/après plutôt que de ne vérifier qu'une valeur attendue en dur (ex. `null`) :
+// une comparaison avant/après détecte aussi une régression sur un état qui ne serait plus `null`
+// par ailleurs (ex. une commande déjà partiellement traitée par un autre chantier futur).
+async function capturerEtat(commandeId: number, ligneIds: number[]) {
+  const stock = (await prisma.stock.findUnique({ where: { articleId_depotId: { articleId, depotId } } }))?.quantite ?? 0;
+  const nbMouvements = await prisma.mouvementStock.count({ where: { articleId } });
+  const commande = await prisma.commandeFournisseur.findUniqueOrThrow({ where: { id: commandeId } });
+  const lignes = await Promise.all(
+    ligneIds.map((id) => prisma.ligneCommandeFournisseur.findUniqueOrThrow({ where: { id } }))
+  );
+  return {
+    stock,
+    nbMouvements,
+    statut: commande.statut,
+    dateReception: commande.dateReception,
+    lignes: lignes.map((l) => ({ id: l.id, quantiteRecueBase: l.quantiteRecueBase, mouvementStockId: l.mouvementStockId })),
+  };
+}
+
+function assertEtatIdentique(avant: Awaited<ReturnType<typeof capturerEtat>>, apres: Awaited<ReturnType<typeof capturerEtat>>) {
+  assert.equal(apres.stock, avant.stock, "le stock ne doit pas avoir bougé");
+  assert.equal(apres.nbMouvements, avant.nbMouvements, "aucun mouvement ne doit avoir été créé");
+  assert.equal(apres.statut, avant.statut, "le statut de la commande ne doit pas avoir changé");
+  assert.deepEqual(apres.dateReception, avant.dateReception, "dateReception ne doit pas avoir changé");
+  assert.deepEqual(apres.lignes, avant.lignes, "aucune ligne ne doit avoir été modifiée (quantiteRecueBase, mouvementStockId)");
+}
+
+test("réception : doublon de ligneId avec la même quantité refusé en 400, aucune écriture (aujourd'hui accepté à tort, double mouvement de stock)", async () => {
+  const commande = await prisma.commandeFournisseur.create({
+    data: {
+      fournisseurId,
+      depotId,
+      lignes: {
+        create: [
+          {
+            articleId,
+            conditionnementLibelle: "Unité",
+            conditionnements: 1,
+            quantiteCommandeeBase: 10000,
+            prixUnitaireBase: 10,
+          },
+        ],
+      },
+    },
+    include: { lignes: true },
+  });
+  commandeIds.push(commande.id);
+  const ligneId = commande.lignes[0].id;
+
+  const avant = await capturerEtat(commande.id, [ligneId]);
+  // Avant correctif, le statut EN_ATTENTE et quantiteRecueBase/mouvementStockId à null sont le
+  // point de départ attendu d'une commande fraîchement créée, jamais encore réceptionnée.
+  assert.equal(avant.statut, "EN_ATTENTE");
+  assert.equal(avant.dateReception, null);
+  assert.equal(avant.lignes[0].quantiteRecueBase, null);
+  assert.equal(avant.lignes[0].mouvementStockId, null);
+
+  const reponse = await fetch(`${baseUrl}/api/commandes/${commande.id}/receptionner`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      lignes: [
+        { ligneId, quantiteRecueBase: 10000 },
+        { ligneId, quantiteRecueBase: 10000 },
+      ],
+    }),
+  });
+  assert.equal(reponse.status, 400);
+
+  const apres = await capturerEtat(commande.id, [ligneId]);
+  assertEtatIdentique(avant, apres);
+});
+
+test("réception : doublon de ligneId avec des quantités différentes refusé en 400, aucune écriture (aujourd'hui accepté à tort)", async () => {
+  const commande = await prisma.commandeFournisseur.create({
+    data: {
+      fournisseurId,
+      depotId,
+      lignes: {
+        create: [
+          {
+            articleId,
+            conditionnementLibelle: "Unité",
+            conditionnements: 1,
+            quantiteCommandeeBase: 10000,
+            prixUnitaireBase: 10,
+          },
+        ],
+      },
+    },
+    include: { lignes: true },
+  });
+  commandeIds.push(commande.id);
+  const ligneId = commande.lignes[0].id;
+
+  const avant = await capturerEtat(commande.id, [ligneId]);
+  assert.equal(avant.statut, "EN_ATTENTE");
+  assert.equal(avant.dateReception, null);
+  assert.equal(avant.lignes[0].quantiteRecueBase, null);
+  assert.equal(avant.lignes[0].mouvementStockId, null);
+
+  const reponse = await fetch(`${baseUrl}/api/commandes/${commande.id}/receptionner`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      lignes: [
+        { ligneId, quantiteRecueBase: 10000 },
+        { ligneId, quantiteRecueBase: 4000 },
+      ],
+    }),
+  });
+  assert.equal(reponse.status, 400);
+
+  const apres = await capturerEtat(commande.id, [ligneId]);
+  assertEtatIdentique(avant, apres);
+});
+
+test("réception : commande multiligne entièrement couverte mais avec une ligne répétée refusée en 400 (aujourd'hui accepté à tort, double mouvement sur la ligne répétée)", async () => {
+  const commande = await prisma.commandeFournisseur.create({
+    data: {
+      fournisseurId,
+      depotId,
+      lignes: {
+        create: [
+          {
+            articleId,
+            conditionnementLibelle: "Unité",
+            conditionnements: 1,
+            quantiteCommandeeBase: 10000,
+            prixUnitaireBase: 10,
+          },
+          {
+            articleId,
+            conditionnementLibelle: "Unité",
+            conditionnements: 1,
+            quantiteCommandeeBase: 5000,
+            prixUnitaireBase: 10,
+          },
+        ],
+      },
+    },
+    include: { lignes: true },
+  });
+  commandeIds.push(commande.id);
+  const [ligne1, ligne2] = commande.lignes;
+
+  const avant = await capturerEtat(commande.id, [ligne1.id, ligne2.id]);
+  assert.equal(avant.statut, "EN_ATTENTE");
+  assert.equal(avant.dateReception, null);
+  assert.ok(avant.lignes.every((l) => l.quantiteRecueBase === null && l.mouvementStockId === null));
+
+  const reponse = await fetch(`${baseUrl}/api/commandes/${commande.id}/receptionner`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      lignes: [
+        { ligneId: ligne1.id, quantiteRecueBase: 10000 },
+        { ligneId: ligne1.id, quantiteRecueBase: 10000 },
+        { ligneId: ligne2.id, quantiteRecueBase: 5000 },
+      ],
+    }),
+  });
+  assert.equal(reponse.status, 400);
+
+  const apres = await capturerEtat(commande.id, [ligne1.id, ligne2.id]);
+  assertEtatIdentique(avant, apres);
+});
+
 test("annule une commande EN_ATTENTE, refuse d'annuler une commande déjà reçue", async () => {
   const commande = await prisma.commandeFournisseur.create({
     data: { fournisseurId, depotId, lignes: { create: [] } },
