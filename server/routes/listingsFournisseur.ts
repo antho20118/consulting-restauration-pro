@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import prisma from "../prisma.js";
@@ -162,6 +163,7 @@ async function construireContexteRapprochement(fournisseurId: number, societeId:
 // validé par les tests Phase 4 pour le listing (aucune ligne de cette fonction n'a été modifiée
 // dans sa logique, seulement extraite telle quelle de POST /:fournisseurId).
 async function creerLignesDocument(
+  tx: Prisma.TransactionClient,
   documentId: number,
   lignes: LigneEntree[],
   contexte: ContexteRapprochement,
@@ -182,7 +184,7 @@ async function creerLignesDocument(
     // alimentaire) n'entre jamais dans le rapprochement — voir cadrage §6/§7 : reste visible
     // (niveau A conservé) mais sans proposition B, decision reste EN_ATTENTE par défaut.
     if (natureLigne !== "ARTICLE") {
-      const ligneCreee = await prisma.ligneDocumentFournisseur.create({
+      const ligneCreee = await tx.ligneDocumentFournisseur.create({
         data: {
           documentId,
           designationLue: designation,
@@ -231,7 +233,7 @@ async function creerLignesDocument(
             : {}),
     };
 
-    const ligneCreee = await prisma.ligneDocumentFournisseur.create({ data: donneesLigne });
+    const ligneCreee = await tx.ligneDocumentFournisseur.create({ data: donneesLigne });
     lignesCreees.push(ligneCreee);
   }
   return lignesCreees;
@@ -304,19 +306,27 @@ router.post("/:fournisseurId", async (req: Request, res: Response) => {
 
     const { contexte, uniteKg, uniteL } = await construireContexteRapprochement(fournisseurId, societeId);
 
-    const document = await prisma.documentFournisseur.create({
-      data: {
-        fournisseurId,
-        type: "LISTING",
-        statut: "EN_ATTENTE",
-        cle: documentStocke.cle,
-        typeMime: documentStocke.typeMime,
-        tailleOctets: documentStocke.tailleOctets,
-        nomFichierOriginal: documentStocke.nomFichierOriginal,
-      },
-    });
+    // Atomique : le document et toutes ses lignes sont créés dans une seule transaction — si une
+    // ligne échoue en cours de boucle (erreur DB/interne), ni elle ni les lignes déjà écrites ni
+    // le document lui-même ne doivent survivre (voir le rapport d'audit F09/F10, chantier
+    // atomicité). Le fichier déjà stocké sur le volume reste hors de cette transaction : son
+    // éventuel nettoyage en cas d'échec reste un chantier séparé, hors scope ici.
+    const { document, lignesCreees } = await prisma.$transaction(async (tx) => {
+      const document = await tx.documentFournisseur.create({
+        data: {
+          fournisseurId,
+          type: "LISTING",
+          statut: "EN_ATTENTE",
+          cle: documentStocke.cle,
+          typeMime: documentStocke.typeMime,
+          tailleOctets: documentStocke.tailleOctets,
+          nomFichierOriginal: documentStocke.nomFichierOriginal,
+        },
+      });
 
-    const lignesCreees = await creerLignesDocument(document.id, lignes, contexte, uniteKg, uniteL);
+      const lignesCreees = await creerLignesDocument(tx, document.id, lignes, contexte, uniteKg, uniteL);
+      return { document, lignesCreees };
+    });
 
     res.status(201).json({ document, lignes: lignesCreees });
   } catch (error) {
@@ -482,22 +492,30 @@ router.post("/factures/:fournisseurId", async (req: Request, res: Response) => {
 
     const { contexte, uniteKg, uniteL } = await construireContexteRapprochement(fournisseurId, societeId);
 
-    const document = await prisma.documentFournisseur.create({
-      data: {
-        fournisseurId,
-        type: "FACTURE",
-        statut: "EN_ATTENTE",
-        cle: documentStocke.cle,
-        typeMime: documentStocke.typeMime,
-        tailleOctets: documentStocke.tailleOctets,
-        nomFichierOriginal: documentStocke.nomFichierOriginal,
-        numero: numero?.trim() || null,
-        dateDocument: dateDocumentParsee,
-        montantTotal: montantTotalNombre,
-      },
-    });
+    // Atomique : le document et toutes ses lignes sont créés dans une seule transaction — si une
+    // ligne échoue en cours de boucle (erreur DB/interne), ni elle ni les lignes déjà écrites ni
+    // le document lui-même ne doivent survivre (voir le rapport d'audit F09/F10, chantier
+    // atomicité). Le fichier déjà stocké sur le volume reste hors de cette transaction : son
+    // éventuel nettoyage en cas d'échec reste un chantier séparé, hors scope ici.
+    const { document, lignesCreees } = await prisma.$transaction(async (tx) => {
+      const document = await tx.documentFournisseur.create({
+        data: {
+          fournisseurId,
+          type: "FACTURE",
+          statut: "EN_ATTENTE",
+          cle: documentStocke.cle,
+          typeMime: documentStocke.typeMime,
+          tailleOctets: documentStocke.tailleOctets,
+          nomFichierOriginal: documentStocke.nomFichierOriginal,
+          numero: numero?.trim() || null,
+          dateDocument: dateDocumentParsee,
+          montantTotal: montantTotalNombre,
+        },
+      });
 
-    const lignesCreees = await creerLignesDocument(document.id, lignes, contexte, uniteKg, uniteL);
+      const lignesCreees = await creerLignesDocument(tx, document.id, lignes, contexte, uniteKg, uniteL);
+      return { document, lignesCreees };
+    });
 
     res.status(201).json({ document, lignes: lignesCreees });
   } catch (error) {
