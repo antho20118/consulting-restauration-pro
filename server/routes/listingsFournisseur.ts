@@ -43,6 +43,19 @@ const schemaLigneImport = z
 
 const schemaLignesImport = z.array(schemaLigneImport).min(1);
 
+// PR H de l'audit F09/F10 : valide UNIQUEMENT la structure qui fait aujourd'hui crasher
+// POST /documents/:documentId/valider en 500 (élément non-objet/null dans `decisions`, ou
+// `ligneId` de type non-exploitable par le `findUnique` qui le lit directement) — jamais le
+// métier de `decision`/`articleRetenuId`, qui reste géré exactement comme avant cette PR : une
+// valeur de `decision` autre que "REJETEE" continue de tenter la voie VALIDEE (comportement déjà
+// préservé ailleurs dans cette API, voir le rapport d'audit) et un `articleRetenuId` absent/null/
+// mal typé continue d'aboutir à une ligne "refusée" via les comparaisons strictes déjà en place,
+// jamais un crash — ces deux champs n'ont donc aucun besoin d'être typés ici pour éliminer un
+// risque réel. Pas de `.strict()` : une clé surnuméraire doit continuer d'être ignorée, jamais
+// rejetée (même principe que schemaLigneImport ci-dessus).
+const schemaDecision = z.object({ ligneId: z.number().int().positive() }).passthrough();
+const schemaDecisions = z.array(schemaDecision).min(1);
+
 // Étape 1 (facultative, pas de persistance) : extraction par vision IA d'une photo de listing —
 // voir server/utils/importListingPhotoIA.ts. Si l'IA n'est pas configurée (503), le client bascule
 // sur le repli OCR local existant (extraireTexteDePhoto, déjà utilisé pour les recettes) puis une
@@ -579,11 +592,12 @@ router.post("/documents/:documentId/valider", async (req: Request, res: Response
       return;
     }
 
-    const { decisions } = req.body as { decisions?: Decision[] };
-    if (!Array.isArray(decisions) || decisions.length === 0) {
-      res.status(400).json({ error: "Aucune décision à appliquer" });
+    const analyseDecisions = schemaDecisions.safeParse(req.body.decisions);
+    if (!analyseDecisions.success) {
+      res.status(400).json({ error: "Décisions invalides", details: analyseDecisions.error.flatten() });
       return;
     }
+    const decisions = analyseDecisions.data as Decision[];
 
     // Scopé par société via le fournisseur : jamais permettre de valider le document d'un
     // fournisseur d'une autre société en devinant/énumérant simplement un id.
@@ -606,83 +620,90 @@ router.post("/documents/:documentId/valider", async (req: Request, res: Response
       return;
     }
 
-    let valides = 0;
-    let rejetees = 0;
-    const refusees: string[] = [];
+    // Atomique : toutes les décisions de ce lot et la mise à jour finale du statut du document
+    // sont appliquées dans une seule transaction — si une décision pourtant valide échoue en cours
+    // de boucle (erreur DB/interne), ni elle ni les décisions déjà traitées plus tôt dans ce même
+    // appel ne doivent survivre, et le document ne doit jamais rester EN_ATTENTE alors qu'une de
+    // ses lignes a déjà changé d'état (voir le rapport d'audit F09/F10, chantier validation +
+    // atomicité des décisions). Remplace l'ancien design : une transaction indépendante par
+    // décision VALIDEE, suivie d'une mise à jour du document hors transaction en fin de boucle.
+    const { valides, rejetees, refusees } = await prisma.$transaction(async (tx) => {
+      let valides = 0;
+      let rejetees = 0;
+      const refusees: string[] = [];
 
-    for (const decisionEntree of decisions) {
-      const ligne = await prisma.ligneDocumentFournisseur.findUnique({
-        where: { id: decisionEntree.ligneId },
-      });
-      if (!ligne || ligne.documentId !== documentId) {
-        refusees.push(`Ligne ${decisionEntree.ligneId} introuvable pour ce document`);
-        continue;
-      }
-      // Une ligne déjà traitée (décision précédente non EN_ATTENTE) n'est jamais retraitée en
-      // silence — évite qu'un second appel dupliquerait un TarifArticle déjà créé.
-      if (ligne.decision !== "EN_ATTENTE") {
-        refusees.push(`Ligne ${decisionEntree.ligneId} déjà traitée`);
-        continue;
-      }
-
-      if (decisionEntree.decision === "REJETEE") {
-        await prisma.ligneDocumentFournisseur.update({
-          where: { id: ligne.id },
-          data: { decision: "REJETEE" },
+      for (const decisionEntree of decisions) {
+        const ligne = await tx.ligneDocumentFournisseur.findUnique({
+          where: { id: decisionEntree.ligneId },
         });
-        rejetees++;
-        continue;
-      }
+        if (!ligne || ligne.documentId !== documentId) {
+          refusees.push(`Ligne ${decisionEntree.ligneId} introuvable pour ce document`);
+          continue;
+        }
+        // Une ligne déjà traitée (décision précédente non EN_ATTENTE) n'est jamais retraitée en
+        // silence — évite qu'un second appel dupliquerait un TarifArticle déjà créé.
+        if (ligne.decision !== "EN_ATTENTE") {
+          refusees.push(`Ligne ${decisionEntree.ligneId} déjà traitée`);
+          continue;
+        }
 
-      // decision === "VALIDEE" : l'articleRetenuId doit être exactement celui proposé (cas
-      // "certaine"/"approximative_unique"), ou l'un des candidats alternatifs proposés (cas
-      // "plusieurs_candidats") — jamais un article arbitraire choisi par confiance dans le client.
-      const candidatsAlternatifs = Array.isArray(ligne.candidatsAlternatifs)
-        ? (ligne.candidatsAlternatifs as { articleId: number }[])
-        : [];
-      const choixValide =
-        decisionEntree.articleRetenuId !== undefined &&
-        (decisionEntree.articleRetenuId === ligne.articleProposeId ||
-          candidatsAlternatifs.some((c) => c.articleId === decisionEntree.articleRetenuId));
+        if (decisionEntree.decision === "REJETEE") {
+          await tx.ligneDocumentFournisseur.update({
+            where: { id: ligne.id },
+            data: { decision: "REJETEE" },
+          });
+          rejetees++;
+          continue;
+        }
 
-      if (!choixValide) {
-        refusees.push(`Ligne ${decisionEntree.ligneId} : article retenu non conforme à la proposition`);
-        continue;
-      }
-      const articleRetenuId = decisionEntree.articleRetenuId!;
+        // decision === "VALIDEE" : l'articleRetenuId doit être exactement celui proposé (cas
+        // "certaine"/"approximative_unique"), ou l'un des candidats alternatifs proposés (cas
+        // "plusieurs_candidats") — jamais un article arbitraire choisi par confiance dans le client.
+        const candidatsAlternatifs = Array.isArray(ligne.candidatsAlternatifs)
+          ? (ligne.candidatsAlternatifs as { articleId: number }[])
+          : [];
+        const choixValide =
+          decisionEntree.articleRetenuId !== undefined &&
+          (decisionEntree.articleRetenuId === ligne.articleProposeId ||
+            candidatsAlternatifs.some((c) => c.articleId === decisionEntree.articleRetenuId));
 
-      if (ligne.prixLu === null) {
-        refusees.push(`Ligne ${decisionEntree.ligneId} : prix illisible, aucun tarif ne peut être créé`);
-        continue;
-      }
+        if (!choixValide) {
+          refusees.push(`Ligne ${decisionEntree.ligneId} : article retenu non conforme à la proposition`);
+          continue;
+        }
+        const articleRetenuId = decisionEntree.articleRetenuId!;
 
-      const quantiteDetectee = extraireQuantiteDesignation(ligne.designationLue, ligne.conditionnementLu ?? undefined);
-      const uniteAAppliquer =
-        quantiteDetectee?.unite === "kg" ? uniteKg : quantiteDetectee?.unite === "l" ? uniteL : unitePiece;
-      if (!uniteAAppliquer) {
-        refusees.push(`Ligne ${decisionEntree.ligneId} : aucune unité disponible`);
-        continue;
-      }
-      const prixHT = quantiteDetectee && quantiteDetectee.quantite > 0
-        ? Math.round((ligne.prixLu / quantiteDetectee.quantite) * 10000) / 10000
-        : ligne.prixLu;
+        if (ligne.prixLu === null) {
+          refusees.push(`Ligne ${decisionEntree.ligneId} : prix illisible, aucun tarif ne peut être créé`);
+          continue;
+        }
 
-      // Scopé par (articleId, fournisseurId) — jamais articleId seul (voir cadrage « identité
-      // fournisseur + produit fournisseur + historique des tarifs », correction du bug critique :
-      // la validation d'un document d'un fournisseur B ne doit jamais clôturer le tarif actif d'un
-      // AUTRE fournisseur A pour ce même article).
-      const tarifActif = await prisma.tarifArticle.findFirst({
-        where: { articleId: articleRetenuId, fournisseurId: document.fournisseurId, actif: true },
-      });
+        const quantiteDetectee = extraireQuantiteDesignation(ligne.designationLue, ligne.conditionnementLu ?? undefined);
+        const uniteAAppliquer =
+          quantiteDetectee?.unite === "kg" ? uniteKg : quantiteDetectee?.unite === "l" ? uniteL : unitePiece;
+        if (!uniteAAppliquer) {
+          refusees.push(`Ligne ${decisionEntree.ligneId} : aucune unité disponible`);
+          continue;
+        }
+        const prixHT = quantiteDetectee && quantiteDetectee.quantite > 0
+          ? Math.round((ligne.prixLu / quantiteDetectee.quantite) * 10000) / 10000
+          : ligne.prixLu;
 
-      // Une décision humaine explicite sur cette ligne vaut confirmation du couple (code, article)
-      // pour tous les imports futurs de CE fournisseur (listing ou facture) — voir
-      // server/utils/produitFournisseur.ts. Rien si aucun code n'a été lu sur ce document (jamais de
-      // code inventé) ; ne remplace jamais un lien déjà existant pour ce code (résolution en lecture
-      // seule si déjà connu).
-      const codeProduitLigne = ligne.referenceLue ? normaliserCodeProduitFournisseur(ligne.referenceLue) : null;
+        // Scopé par (articleId, fournisseurId) — jamais articleId seul (voir cadrage « identité
+        // fournisseur + produit fournisseur + historique des tarifs », correction du bug critique :
+        // la validation d'un document d'un fournisseur B ne doit jamais clôturer le tarif actif d'un
+        // AUTRE fournisseur A pour ce même article).
+        const tarifActif = await tx.tarifArticle.findFirst({
+          where: { articleId: articleRetenuId, fournisseurId: document.fournisseurId, actif: true },
+        });
 
-      await prisma.$transaction(async (tx) => {
+        // Une décision humaine explicite sur cette ligne vaut confirmation du couple (code, article)
+        // pour tous les imports futurs de CE fournisseur (listing ou facture) — voir
+        // server/utils/produitFournisseur.ts. Rien si aucun code n'a été lu sur ce document (jamais de
+        // code inventé) ; ne remplace jamais un lien déjà existant pour ce code (résolution en lecture
+        // seule si déjà connu).
+        const codeProduitLigne = ligne.referenceLue ? normaliserCodeProduitFournisseur(ligne.referenceLue) : null;
+
         let produitFournisseurId: number | null = null;
         if (codeProduitLigne) {
           const produitFournisseur = await resoudreOuCreerProduitFournisseur(
@@ -716,12 +737,14 @@ router.post("/documents/:documentId/valider", async (req: Request, res: Response
           where: { id: ligne.id },
           data: { decision: "VALIDEE", articleRetenuId, tarifCreeId: tarifCree.id },
         });
-      });
 
-      valides++;
-    }
+        valides++;
+      }
 
-    await prisma.documentFournisseur.update({ where: { id: documentId }, data: { statut: "VALIDE" } });
+      await tx.documentFournisseur.update({ where: { id: documentId }, data: { statut: "VALIDE" } });
+
+      return { valides, rejetees, refusees };
+    });
 
     res.json({ valides, rejetees, refusees });
   } catch (error) {
