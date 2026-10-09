@@ -561,6 +561,18 @@ router.delete("/:id", async (req: Request, res: Response) => {
   }
 });
 
+// PR I de l'audit F09/F10 : garde-fou structurel minimal pour chaque élément de `lignes` — un
+// élément null/undefined/primitif/tableau fait aujourd'hui planter la boucle en 500 dès le premier
+// accès (`ligne.designation`), alors que les lignes déjà traitées plus haut dans la même boucle
+// sont déjà committées (pas de transaction globale sur tout l'import, voir le commentaire plus bas :
+// un listing peut compter plusieurs milliers de lignes). Aucun champ individuel n'est typé ici :
+// chaque accès (ligne.designation, ligne.prix via parsePrix(unknown), ligne.conditionnement,
+// ligne.confirmationArticleId, etc.) est déjà sûr pour N'IMPORTE QUEL type de valeur tant que `ligne`
+// lui-même est un objet exploitable (confirmé empiriquement : un nombre, une chaîne ou un objet aux
+// propriétés mal typées ne provoquent aucun crash aujourd'hui, seul un élément null/undefined en
+// provoque un) — durcir davantage changerait des comportements métier existants sans nécessité.
+const schemaLigneImportArticles = z.object({}).passthrough();
+
 // Import d'un listing fournisseur (Excel/CSV, déjà parsé côté frontend) : chaque ligne est
 // rapprochée des articles existants (par référence puis par similarité de désignation) ; une
 // correspondance met à jour le tarif (historisé) si le prix/l'unité a changé, sinon crée un
@@ -765,6 +777,13 @@ router.post("/import", async (req: Request, res: Response) => {
     const erreurs: string[] = [];
 
     for (const [indexLigne, ligne] of lignes.entries()) {
+      // Ligne structurellement inexploitable (null/undefined/primitif/tableau) : signalée dans le
+      // récapitulatif comme n'importe quelle autre ligne rejetée ci-dessous, jamais un 500 global
+      // ni une interruption des autres lignes de cet import (voir le garde-fou ci-dessus).
+      if (!schemaLigneImportArticles.safeParse(ligne).success) {
+        erreurs.push(`Ligne ${indexLigne + 1} : donnée invalide, ligne ignorée`);
+        continue;
+      }
       const designation = String(ligne.designation ?? "").trim();
       if (!designation) continue;
 
