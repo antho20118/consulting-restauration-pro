@@ -52,6 +52,17 @@ type PropositionFournisseurAmbigu = {
 
 const router = Router();
 
+// Bornes réelles du stockage Postgres (INT4, colonne `id` de Article/Categorie/TVA/Unite/Allergene
+// — toutes `Int` dans prisma/schema.prisma, jamais `BigInt`) : une valeur numérique entière qui
+// passe la validation de type (Zod .int(), ou le contrôle client Prisma) mais dépasse cette plage
+// atteint directement le driver Postgres et y provoque un ConnectorError/ConversionError — jamais
+// classé P2003/P2025/P2002 par repondreErreurEcriture, donc un 500 (confirmé empiriquement :
+// 2147483648 et 9007199254740991, sur categorieId/tvaId/uniteId/allergeneIds et sur l'id d'URL de
+// PUT /:id). Un id dans ces bornes mais inexistant continue d'emprunter exactement le même chemin
+// (400/404) qu'avant.
+const ID_POSTGRES_MIN = -2147483648;
+const ID_POSTGRES_MAX = 2147483647;
+
 // Validation minimale de la création/modification manuelle d'un article (voir caractérisation
 // dédiée) : seuls les champs dont l'absence de contrôle a un effet réel démontré sont validés ici
 // — nom vide/trop long, prix négatif, rendement hors des bornes acceptées par le moteur de coût
@@ -103,6 +114,31 @@ const champsArticle = {
       sel: z.number().finite().min(0).nullable().optional(),
     })
     .optional(),
+  // Chantier CRUD articles : categorieId/tvaId/uniteId/allergeneIds/reference/fournisseurNom sont
+  // lus directement par le code (prisma.categorie.findFirst, tx.article.create/update,
+  // tx.tarifArticle.create, tx.articleAllergene.createMany, resoudreFournisseurOuLever) sans jamais
+  // être typés jusqu'ici — un mauvais TYPE (jamais un mauvais id REPRÉSENTABLE : un id dans les
+  // bornes INT4 mais inexistant ou d'une autre société est déjà renvoyé en 400/404 par
+  // repondreErreurEcriture via P2003/P2025/le contrôle dédié de categorieId) provoque aujourd'hui
+  // une PrismaClientValidationError, une TypeError (fournisseurNom non-chaîne : (123).trim() n'est
+  // pas une fonction) ou, pour un entier hors des bornes INT4 (voir ID_POSTGRES_MIN/MAX ci-dessus),
+  // un ConnectorError levé par le driver Postgres lui-même — jamais interceptés, donc un 500.
+  // Confirmé empiriquement (voir le rapport RED).
+  categorieId: z.number().int().gte(ID_POSTGRES_MIN).lte(ID_POSTGRES_MAX).optional(), // rendu obligatoire à la création uniquement, voir schemaCreationArticle
+  tvaId: z.number().int().gte(ID_POSTGRES_MIN).lte(ID_POSTGRES_MAX),
+  uniteId: z.number().int().gte(ID_POSTGRES_MIN).lte(ID_POSTGRES_MAX).nullable().optional(),
+  // Historiquement déjà toléré tel quel (conservé) : une référence explicitement null efface le
+  // champ (colonne nullable), omise elle est laissée intacte en modification — seul un type autre
+  // que chaîne/null/absent est nouvellement refusé (provoquait une PrismaClientValidationError).
+  // Jamais .trim() ici : le code base enregistre la référence BRUTE telle que saisie (seule la
+  // recherche de doublons, plus bas, compare une copie normalisée — referenceTrim — sans jamais
+  // modifier la valeur écrite en base) ; un .trim() dans ce schéma altérerait silencieusement ce
+  // qui est enregistré par rapport au comportement historique.
+  reference: z.string().nullable().optional(),
+  // Idem : une valeur null était déjà silencieusement traitée comme "non renseigné"
+  // ((fournisseurNom || "").trim()) — préservé tel quel, seul un type numérique/objet est refusé.
+  fournisseurNom: z.string().nullable().optional(),
+  allergeneIds: z.array(z.number().int().gte(ID_POSTGRES_MIN).lte(ID_POSTGRES_MAX)).optional(),
 };
 
 // Un objet nutrition transmis mais entièrement vide (tous les champs undefined/null — ex. un
@@ -114,12 +150,15 @@ function aDesValeursNutrition(nutrition: NutritionInput): boolean {
   return Object.values(nutrition).some((v) => v !== undefined && v !== null);
 }
 
-// Création : type obligatoire, comme aujourd'hui (toujours fourni par les appelants existants).
-const schemaCreationArticle = z.object(champsArticle);
+// Création : type et categorieId obligatoires, comme aujourd'hui (toujours fournis par les
+// appelants existants) — categorieId est optionnel dans champsArticle uniquement pour permettre à
+// PUT de l'omettre (champ inchangé), voir schemaModificationArticle ci-dessous.
+const schemaCreationArticle = z.object(champsArticle).required({ categorieId: true });
 
 // Modification : type n'a jamais été pris en compte par PUT /:id (jamais dans data ci-dessous) et
-// ce correctif ne change pas ce comportement.
-const schemaModificationArticle = z.object(champsArticle).omit({ type: true });
+// ce correctif ne change pas ce comportement. tvaId non plus : PUT ne permet pas de changer la TVA
+// d'un article existant, inchangé par ce correctif.
+const schemaModificationArticle = z.object(champsArticle).omit({ type: true, tvaId: true });
 
 const inclusionsArticle = {
   categorie: true,
@@ -227,8 +266,8 @@ router.post("/", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Article invalide", details: analyse.error.flatten() });
       return;
     }
-    const { nom, type, rendement, prixHT, stockInitial, nutrition } = analyse.data;
-    const { reference, categorieId, tvaId, uniteId, fournisseurNom, allergeneIds } = req.body;
+    const { nom, type, rendement, prixHT, stockInitial, nutrition, reference, categorieId, tvaId, uniteId, fournisseurNom, allergeneIds } =
+      analyse.data;
     // Jamais depuis req.body : la société d'écriture est celle du compte connecté, jamais une
     // valeur transmise par le client (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma).
     const societeId = req.utilisateur!.societeId;
@@ -345,14 +384,24 @@ router.post("/", async (req: Request, res: Response) => {
 router.put("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    // Un id non numérique (NaN) atteignait directement tx.article.findFirstOrThrow ci-dessous et y
+    // provoquait une PrismaClientValidationError ; un id numérique mais hors des bornes INT4
+    // réellement utilisées par la colonne `id` (voir ID_POSTGRES_MIN/MAX ci-dessus) passait cette
+    // validation de type mais provoquait un ConnectorError levé par le driver Postgres lui-même
+    // (confirmé empiriquement avec 2147483648 et 9007199254740991) — dans les deux cas, jamais
+    // interceptée par repondreErreurEcriture (qui ne traduit que des codes Prisma P2xxx), donc un
+    // 500 au lieu d'un refus propre. Un id dans ces bornes mais inexistant reste 404 (inchangé).
+    if (!Number.isInteger(id) || id < ID_POSTGRES_MIN || id > ID_POSTGRES_MAX) {
+      res.status(400).json({ error: "Identifiant d'article invalide" });
+      return;
+    }
 
     const analyse = schemaModificationArticle.safeParse(req.body);
     if (!analyse.success) {
       res.status(400).json({ error: "Article invalide", details: analyse.error.flatten() });
       return;
     }
-    const { nom, rendement, prixHT, stockInitial, nutrition } = analyse.data;
-    const { reference, categorieId, uniteId, fournisseurNom, allergeneIds } = req.body;
+    const { nom, rendement, prixHT, stockInitial, nutrition, reference, categorieId, uniteId, fournisseurNom, allergeneIds } = analyse.data;
     const confirmationArticleId = req.body.confirmationArticleId;
 
     // Même protection contre un doublon de référence que POST /articles (voir plus haut) : une
@@ -1473,7 +1522,7 @@ export type ResolutionFournisseur =
 // dans son principe sauf l'ajout du blocage sur fournisseur inactif ci-dessous).
 async function trouverOuCreerFournisseur(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
-  fournisseurNom: string | undefined,
+  fournisseurNom: string | null | undefined,
   societeId: number,
   codeFournisseur?: string | null
 ): Promise<ResolutionFournisseur> {
@@ -1527,7 +1576,7 @@ async function trouverOuCreerFournisseur(
 // repondreErreurEcriture.
 async function resoudreFournisseurOuLever(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
-  fournisseurNom: string | undefined,
+  fournisseurNom: string | null | undefined,
   societeId: number,
   codeFournisseur?: string | null
 ): Promise<number> {
