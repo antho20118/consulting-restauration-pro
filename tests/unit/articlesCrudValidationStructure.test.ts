@@ -80,11 +80,11 @@ before(async () => {
   societeId = societe.id;
   const categorie = (await prisma.categorie.findFirst({ where: { societeId }, orderBy: { id: "asc" } })) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test", societeId } }));
   categorieId = categorie.id;
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   tvaId = tva.id;
-  const unite = (await prisma.unite.findFirst()) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
+  const unite = (await prisma.unite.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
   uniteId = unite.id;
-  if (!(await prisma.conditionnement.findFirst())) {
+  if (!(await prisma.conditionnement.findFirst({ orderBy: { id: "asc" } }))) {
     await prisma.conditionnement.create({ data: { nom: "Unité" } });
   }
 });
@@ -644,7 +644,7 @@ test("GREEN — categorieId d'une autre société : PUT sur notre propre article
 
 test("GREEN — régression : POST /articles valide avec tarif et allergène toujours fonctionnel", async () => {
   const allergene =
-    (await prisma.allergene.findFirst()) ?? (await prisma.allergene.create({ data: { nom: "Gluten test", code: `GLUTEN-TEST-${randomUUID()}` } }));
+    (await prisma.allergene.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.allergene.create({ data: { nom: "Gluten test", code: `GLUTEN-TEST-${randomUUID()}` } }));
   const nom = `ARTICLES CRUD VALIDATION TEST REGRESSION POST ${randomUUID()}`;
   const reponse = await fetch(`${baseUrl}/api/articles`, {
     method: "POST",

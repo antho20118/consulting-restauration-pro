@@ -359,7 +359,7 @@ test("[F1] DELETE valide : 204, le dépôt reste présent en base avec actif=fal
 
 test("[F2] DELETE d'un dépôt référencé par un Stock : la ligne Stock reste intacte (aucune violation de clé étrangère possible, la suppression est douce)", async () => {
   const categorie = (await prisma.categorie.findFirst({ where: { societeId } })) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test", societeId } }));
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   const article = await prisma.article.create({
     data: {
       nom: `DEPOTS CARACTERISATION F2 Article ${randomUUID()}`,

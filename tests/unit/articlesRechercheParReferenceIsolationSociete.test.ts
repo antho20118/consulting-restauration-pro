@@ -79,10 +79,10 @@ before(async () => {
     (await prisma.categorie.create({ data: { nom: "Catégorie de test", societeId: societe.id } }));
   categorieIdA = categorie.id;
 
-  const unite = (await prisma.unite.findFirst()) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
+  const unite = (await prisma.unite.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
   uniteId = unite.id;
 
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   tvaId = tva.id;
 });
 
