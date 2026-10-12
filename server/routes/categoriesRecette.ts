@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import prisma from "../prisma.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
+import { idUrlValide } from "../utils/idUrl.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
@@ -51,6 +52,12 @@ router.post("/", async (req: Request, res: Response) => {
 
 // Renommage d'une catégorie de recette
 router.put("/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!idUrlValide(id)) {
+    res.status(400).json({ error: "Identifiant de catégorie de recette invalide" });
+    return;
+  }
+
   const parsed = schemaEcriture.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Catégorie de recette invalide", details: parsed.error.flatten() });
@@ -58,7 +65,6 @@ router.put("/:id", async (req: Request, res: Response) => {
   }
 
   try {
-    const id = Number(req.params.id);
     const { nom } = parsed.data;
 
     // Scopé par société : jamais permettre à un compte de modifier une catégorie d'une autre
@@ -81,9 +87,13 @@ router.put("/:id", async (req: Request, res: Response) => {
 
 // Suppression d'une catégorie de recette : refusée si des recettes l'utilisent encore
 router.delete("/:id", async (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
+  const id = Number(req.params.id);
+  if (!idUrlValide(id)) {
+    res.status(400).json({ error: "Identifiant de catégorie de recette invalide" });
+    return;
+  }
 
+  try {
     // Scopé par société : jamais permettre à un compte de supprimer une catégorie d'une autre
     // société en devinant/énumérant simplement un id (voir F11 de l'audit forensique).
     const existante = await prisma.categorieRecette.findFirst({

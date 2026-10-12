@@ -1,8 +1,10 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import prisma from "../prisma.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
+import { idUrlValide } from "../utils/idUrl.js";
 import { LIBELLE_UNITE_BASE } from "../utils/uniteConversion.js";
 
 const router = Router();
@@ -64,6 +66,12 @@ router.post("/", async (req, res) => {
 
 // Modification d'une unité
 router.put("/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!idUrlValide(id)) {
+    res.status(400).json({ error: "Identifiant d'unité invalide" });
+    return;
+  }
+
   const parsed = schemaModification.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Unité invalide", details: parsed.error.flatten() });
@@ -71,7 +79,6 @@ router.put("/:id", async (req, res) => {
   }
 
   try {
-    const id = Number(req.params.id);
     const { nom, symbole, type, facteurBase } = parsed.data;
 
     const unite = await prisma.unite.update({
@@ -81,6 +88,14 @@ router.put("/:id", async (req, res) => {
 
     res.json(unite);
   } catch (error) {
+    // P2025 : update/delete sur un id bien formé mais inexistant (aucun contrôle d'existence
+    // préalable sur ce référentiel partagé) — erreur du client, jamais une panne : 404, sans
+    // journalisation, comme PUT/DELETE sur les référentiels cloisonnés par société (categories.ts).
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      res.status(404).json({ error: "Unité introuvable" });
+      return;
+    }
+
     console.error(error);
     await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de modifier l'unité" });
@@ -89,9 +104,13 @@ router.put("/:id", async (req, res) => {
 
 // Suppression d'une unité : refusée si des tarifs ou des lignes de recette l'utilisent encore
 router.delete("/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
+  const id = Number(req.params.id);
+  if (!idUrlValide(id)) {
+    res.status(400).json({ error: "Identifiant d'unité invalide" });
+    return;
+  }
 
+  try {
     const [nbTarifs, nbLignes] = await Promise.all([
       prisma.tarifArticle.count({ where: { uniteId: id } }),
       prisma.recetteLigne.count({ where: { uniteId: id } }),
@@ -109,6 +128,14 @@ router.delete("/:id", async (req, res) => {
 
     res.status(204).send();
   } catch (error) {
+    // P2025 : update/delete sur un id bien formé mais inexistant (aucun contrôle d'existence
+    // préalable sur ce référentiel partagé) — erreur du client, jamais une panne : 404, sans
+    // journalisation, comme PUT/DELETE sur les référentiels cloisonnés par société (categories.ts).
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      res.status(404).json({ error: "Unité introuvable" });
+      return;
+    }
+
     console.error(error);
     await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de supprimer l'unité" });
