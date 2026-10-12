@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
@@ -56,7 +57,15 @@ after(async () => {
   // ids explicitement suivis — et ValeurNutritionnelle doit toujours être effacée avant Article
   // (FK), quelle que soit la source de la liste d'ids.
   const articlesASupprimer = await prisma.article.findMany({
-    where: { OR: [{ id: { in: articleIds } }, { nom: { startsWith: "ARTICLES VALIDATION TEST" } }] },
+    // La référence-marqueur couvre aussi un article créé à tort avec un nom vide (non retrouvable
+    // par préfixe de nom) si le refus de la désignation vide venait à régresser.
+    where: {
+      OR: [
+        { id: { in: articleIds } },
+        { nom: { startsWith: "ARTICLES VALIDATION TEST" } },
+        { reference: { startsWith: "ARTICLES-VALIDATION-TEST-" } },
+      ],
+    },
     select: { id: true },
   });
   const idsASupprimer = articlesASupprimer.map((a) => a.id);
@@ -82,17 +91,21 @@ function payloadBase(nom: string) {
 }
 
 test("POST /articles — désignation vide refusée (400), rien créé", async () => {
-  const avant = await prisma.article.count();
+  // Le nom étant vide, l'article éventuellement créé à tort est retrouvé par une référence unique,
+  // jamais par un comptage global de la table (faussé par les autres fichiers de test exécutés en
+  // parallèle, qui créent eux aussi des articles).
+  const referenceMarqueur = `ARTICLES-VALIDATION-TEST-${randomUUID()}`;
   const reponse = await fetch(`${baseUrl}/api/articles`, {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify(payloadBase("")),
+    body: JSON.stringify({ ...payloadBase(""), reference: referenceMarqueur }),
   });
   assert.equal(reponse.status, 400);
   const corps = await reponse.json();
   assert.match(corps.error, /invalide/i);
-  const apres = await prisma.article.count();
-  assert.equal(apres, avant, "aucun article ne doit avoir été créé");
+  assert.ok(corps.details?.fieldErrors?.nom, "le refus doit porter sur la désignation vide, pas sur un autre champ");
+  const cree = await prisma.article.findFirst({ where: { reference: referenceMarqueur } });
+  assert.equal(cree, null, "aucun article ne doit avoir été créé");
 });
 
 test("POST /articles — désignation composée uniquement d'espaces refusée (400)", async () => {
@@ -126,21 +139,22 @@ test("POST /articles — désignation valide toujours acceptée (non-régression
 });
 
 test("POST /articles — prixHT négatif refusé (400), aucun article ni tarif créé", async () => {
-  const avantArticles = await prisma.article.count();
-  const avantTarifs = await prisma.tarifArticle.count();
+  // Recherche par nom unique, jamais par comptage global des tables Article/TarifArticle (faussé
+  // par les autres fichiers de test exécutés en parallèle : observé « attendu 4, obtenu 5 »).
+  const nom = `ARTICLES VALIDATION TEST Prix Negatif ${randomUUID()}`;
   const reponse = await fetch(`${baseUrl}/api/articles`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({
-      ...payloadBase("ARTICLES VALIDATION TEST Prix Negatif"),
+      ...payloadBase(nom),
       uniteId,
       prixHT: -10,
       fournisseurNom: "Fournisseur Test Validation",
     }),
   });
   assert.equal(reponse.status, 400);
-  assert.equal(await prisma.article.count(), avantArticles);
-  assert.equal(await prisma.tarifArticle.count(), avantTarifs);
+  assert.equal(await prisma.article.findFirst({ where: { nom } }), null, "aucun article ne doit avoir été créé");
+  assert.equal(await prisma.tarifArticle.findFirst({ where: { article: { nom } } }), null, "aucun tarif ne doit avoir été créé");
 });
 
 test("POST /articles — prixHT à 0 toujours accepté (choix produit préservé)", async () => {
