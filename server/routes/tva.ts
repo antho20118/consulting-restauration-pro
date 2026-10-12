@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import prisma from "../prisma.js";
@@ -79,6 +80,14 @@ router.put("/:id", async (req, res) => {
 
     res.json(tva);
   } catch (error) {
+    // P2025 : update/delete sur un id bien formé mais inexistant (aucun contrôle d'existence
+    // préalable sur ce référentiel partagé) — erreur du client, jamais une panne : 404, sans
+    // journalisation, comme PUT/DELETE sur les référentiels cloisonnés par société (categories.ts).
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      res.status(404).json({ error: "Taux de TVA introuvable" });
+      return;
+    }
+
     console.error(error);
     await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de modifier la TVA" });
@@ -107,6 +116,14 @@ router.delete("/:id", async (req, res) => {
 
     res.status(204).send();
   } catch (error) {
+    // P2025 : update/delete sur un id bien formé mais inexistant (aucun contrôle d'existence
+    // préalable sur ce référentiel partagé) — erreur du client, jamais une panne : 404, sans
+    // journalisation, comme PUT/DELETE sur les référentiels cloisonnés par société (categories.ts).
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      res.status(404).json({ error: "Taux de TVA introuvable" });
+      return;
+    }
+
     console.error(error);
     await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de supprimer la TVA" });

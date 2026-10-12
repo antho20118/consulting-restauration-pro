@@ -15,8 +15,10 @@ import { connecterSuperAdminDeTest } from "../helpers/auth.js";
 //   - un id DÉCIMAL ("12.5") n'était PAS refusé : Prisma le tronquait et l'opération s'appliquait
 //     réellement à la ligne 12 (renommage, modification de taux/facteurBase, suppression) —
 //     constaté empiriquement sur les 10 routes, c'est le défaut le plus grave de ce lot ;
-// Ces cas sont désormais refusés en 400, sans écriture et sans entrée JournalErreur. Tous les
-// autres comportements sont préservés.
+//   - sur tva.ts et unites.ts (référentiels partagés, sans contrôle d'existence préalable), un id
+//     bien formé mais inexistant ressortait en 500 (P2025 non classé) au lieu de 404.
+// Ces cas sont désormais refusés (400 pour un id mal formé, 404 pour un id inexistant), sans
+// écriture et sans entrée JournalErreur. Tous les autres comportements sont préservés.
 //
 // Toutes les écritures de ce fichier portent exclusivement sur des fixtures créées ici (préfixe
 // REFERENTIELS-IDS-URL + UUID) : jamais sur un id existant « au hasard », y compris pour l'id
@@ -46,10 +48,9 @@ interface Referentiel {
   corpsPutInvalide: Record<string, unknown>;
   messageCorpsInvalide: string;
   messageIdInvalide: string;
-  // Statut/message actuels (préservés) pour un id bien formé mais inexistant ; null : cas non
-  // couvert ici (tva.ts/unites.ts répondent encore 500, défaut distinct de la lecture de l'id).
-  messagePutInexistant: string | null;
-  messageDeleteInexistant: string | null;
+  // Statut/message actuels (préservés) pour un id bien formé mais inexistant.
+  messagePutInexistant: string;
+  messageDeleteInexistant: string;
   // Méthodes Prisma réellement appelées par chaque handler, pour la panne simulée.
   cibleMethodePut: [object, string];
   cibleMethodeDelete: [object, string];
@@ -121,8 +122,8 @@ const referentiels: Referentiel[] = [
     corpsPutInvalide: { taux: 101 },
     messageCorpsInvalide: "Taux de TVA invalide",
     messageIdInvalide: "Identifiant de taux de TVA invalide",
-    messagePutInexistant: null,
-    messageDeleteInexistant: null,
+    messagePutInexistant: "Taux de TVA introuvable",
+    messageDeleteInexistant: "Taux de TVA introuvable",
     cibleMethodePut: [prisma.tVA, "update"],
     cibleMethodeDelete: [prisma.tVA, "delete"],
     messagePanneMettreAJour: "Impossible de modifier la TVA",
@@ -138,8 +139,8 @@ const referentiels: Referentiel[] = [
     corpsPutInvalide: { facteurBase: -1 },
     messageCorpsInvalide: "Unité invalide",
     messageIdInvalide: "Identifiant d'unité invalide",
-    messagePutInexistant: null,
-    messageDeleteInexistant: null,
+    messagePutInexistant: "Unité introuvable",
+    messageDeleteInexistant: "Unité introuvable",
     cibleMethodePut: [prisma.unite, "update"],
     cibleMethodeDelete: [prisma.unite, "delete"],
     messagePanneMettreAJour: "Impossible de modifier l'unité",
@@ -281,7 +282,7 @@ for (const r of referentiels) {
 
   // --- Id bien formé mais inexistant : 404, rien journalisé ---
 
-  if (r.messagePutInexistant !== null) test(`[${r.nom}] PUT id inexistant : 404, rien journalisé`, async () => {
+  test(`[${r.nom}] PUT id inexistant : 404, rien journalisé`, async () => {
     const { resultat, entrees } = await avecInterceptionJournalisation(() =>
       requete("PUT", `${r.chemin}/${ID_INEXISTANT}`, r.corpsPutValide())
     );
@@ -290,7 +291,7 @@ for (const r of referentiels) {
     assert.equal(entrees.length, 0);
   });
 
-  if (r.messageDeleteInexistant !== null) test(`[${r.nom}] DELETE id inexistant : 404, rien journalisé`, async () => {
+  test(`[${r.nom}] DELETE id inexistant : 404, rien journalisé`, async () => {
     const { resultat, entrees } = await avecInterceptionJournalisation(() =>
       requete("DELETE", `${r.chemin}/${ID_INEXISTANT}`)
     );
