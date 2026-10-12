@@ -93,7 +93,7 @@ after(async () => {
 
 async function creerArticleAvecTarif(nom: string, prixHT: number) {
   const unite = await prisma.unite.findFirstOrThrow({ where: { symbole: { equals: "kg", mode: "insensitive" } } });
-  const conditionnement = await prisma.conditionnement.findFirstOrThrow();
+  const conditionnement = await prisma.conditionnement.findFirstOrThrow({ orderBy: { id: "asc" } });
   const article = await prisma.article.create({
     data: { type: "MATIERE_PREMIERE", nom, categorieId, tvaId, societeId },
   });

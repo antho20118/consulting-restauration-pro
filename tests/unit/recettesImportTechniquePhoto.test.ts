@@ -134,8 +134,6 @@ test("Import photo → technique : ajout d'étapes préserve intégralement une 
   assert.equal(creation.status, 201);
   const recetteId: number = creation.corps.id;
 
-  const avantNombreRecettes = await prisma.recette.count();
-
   // 2. Simule le patch produit par la prévisualisation d'un import photo (voir
   // PrevisualisationImportRecette.tsx::valider, mode complétion) : seules des étapes sont
   // AJOUTÉES à celles déjà existantes, avec une étape corrigée manuellement par l'utilisateur
@@ -176,8 +174,8 @@ test("Import photo → technique : ajout d'étapes préserve intégralement une 
 
   // 3. Même recetteId, jamais une seconde recette créée.
   assert.equal(miseAJour.corps.id, recetteId);
-  const apresNombreRecettes = await prisma.recette.count();
-  assert.equal(apresNombreRecettes, avantNombreRecettes, "aucun doublon : le nombre total de recettes ne doit pas changer");
+  // Comptage ciblé sur le nom, jamais global : un `prisma.recette.count()` sans filtre était exposé
+  // aux recettes créées/supprimées au même moment par les autres fichiers exécutés en parallèle.
   const recettesAvecCeNom = await prisma.recette.count({ where: { nom: "IMPORT PHOTO TEST Recette" } });
   assert.equal(recettesAvecCeNom, 1, "une seule recette ne doit porter ce nom");
 

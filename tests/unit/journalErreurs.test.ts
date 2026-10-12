@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -47,30 +48,47 @@ test("journaliserErreur accepte une valeur qui n'est pas une vraie instance d'Er
 });
 
 test("le journal reste plafonné : les entrées les plus anciennes sont purgées au-delà de 500 lignes", async () => {
-  // Isolation : ce test raisonne sur le total exact de lignes en base, donc repart d'une table vide
-  // plutôt que de composer avec un total imprévisible laissé par d'autres tests/l'usage réel.
-  await prisma.journalErreur.deleteMany({});
-
-  const base = Date.now() - 1000 * 60 * 60 * 24; // hier, pour ne jamais chevaucher l'entrée créée après
+  // Jamais de deleteMany({}) sur toute la table : `npm test` exécute les autres fichiers en
+  // parallèle sur la même base, et beaucoup lisent/suppriment leurs propres entrées JournalErreur —
+  // vider la table effaçait aussi les leurs (et tout le journal de diagnostic d'une base locale).
+  // À la place, 550 entrées marquées et datées de l'an 2000 : toujours les plus anciennes, ce sont
+  // donc elles, et elles seules, que la purge supprime en premier.
+  const marqueur = `plafond-${randomUUID()}`;
+  const base = new Date("2000-01-01T00:00:00Z").getTime();
   const donnees = Array.from({ length: 550 }, (_, i) => ({
     origine: "SERVEUR" as const,
-    message: `ancienne-${i}`,
+    message: `${marqueur}-ancienne-${i}`,
     moment: new Date(base + i * 1000),
   }));
   await prisma.journalErreur.createMany({ data: donnees });
 
-  await journaliserErreur(new Error("la plus récente"), "SERVEUR", {});
+  const messageRecent = `${marqueur}-la-plus-recente`;
+  try {
+    await journaliserErreur(new Error(messageRecent), "SERVEUR", {});
 
-  const total = await prisma.journalErreur.count();
-  assert.ok(total <= 500, `attendu au plus 500 lignes après purge, obtenu ${total}`);
+    const recente = await prisma.journalErreur.findFirst({ where: { message: messageRecent } });
+    assert.ok(recente, "l'entrée qui vient d'être journalisée n'est jamais purgée");
 
-  const ancienneEncorePresente = await prisma.journalErreur.findFirst({
-    where: { message: "ancienne-0" },
-  });
-  assert.equal(ancienneEncorePresente, null);
+    // Plafond vérifié sans dépendre des écritures concurrentes : seules les entrées créées APRÈS la
+    // nôtre (id supérieur, donc par d'autres fichiers après notre purge) peuvent légitimement faire
+    // dépasser 500 au moment de ce comptage ; les suppressions concurrentes ne font que le réduire.
+    const total = await prisma.journalErreur.count();
+    const creeesApres = await prisma.journalErreur.count({ where: { id: { gt: recente!.id } } });
+    assert.ok(total - creeesApres <= 500, `attendu au plus 500 lignes après purge, obtenu ${total - creeesApres}`);
 
-  const recente = await prisma.journalErreur.findFirst({ where: { message: "la plus récente" } });
-  assert.ok(recente);
-
-  await prisma.journalErreur.deleteMany({});
+    // Les plus anciennes sont purgées les premières : la toute première a disparu, et celles qui
+    // restent forment bien la fin de la série (jamais un « trou » au milieu).
+    const restantes = await prisma.journalErreur.findMany({
+      where: { message: { startsWith: `${marqueur}-ancienne-` } },
+      select: { message: true },
+    });
+    const indices = restantes.map((e) => Number(e.message.slice(`${marqueur}-ancienne-`.length))).sort((a, b) => a - b);
+    assert.ok(indices.length < 550, "au moins une entrée ancienne doit avoir été purgée");
+    assert.ok(!indices.includes(0), "la plus ancienne entrée doit avoir été purgée");
+    if (indices.length > 0) {
+      assert.deepEqual(indices, Array.from({ length: indices.length }, (_, k) => 550 - indices.length + k));
+    }
+  } finally {
+    await prisma.journalErreur.deleteMany({ where: { message: { startsWith: marqueur } } });
+  }
 });
