@@ -66,14 +66,14 @@ before(async () => {
     (await prisma.categorieRecette.create({ data: { nom: "Catégorie recette de test", societeId } }));
   categorieRecetteId = categorieRecette.id;
 
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   tvaId = tva.id;
 
   const fournisseur = await prisma.fournisseur.create({ data: { nom: "Fournisseur test consulting", societeId } });
   fournisseurId = fournisseur.id;
 
   const conditionnement =
-    (await prisma.conditionnement.findFirst()) ?? (await prisma.conditionnement.create({ data: { nom: "Unité" } }));
+    (await prisma.conditionnement.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.conditionnement.create({ data: { nom: "Unité" } }));
   conditionnementId = conditionnement.id;
 
   const uniteKg =

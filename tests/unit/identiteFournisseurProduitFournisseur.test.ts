@@ -61,7 +61,7 @@ before(async () => {
   societeId = societe.id;
   const categorie = (await prisma.categorie.findFirst({ where: { societeId }, orderBy: { id: "asc" } })) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test", societeId } }));
   categorieId = categorie.id;
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   tvaId = tva.id;
 
   // Unités/conditionnement de référence — jamais inventées : mêmes valeurs exactes que
@@ -78,7 +78,7 @@ before(async () => {
     const existante = await prisma.unite.findFirst({ where: { symbole: u.symbole } });
     if (!existante) await prisma.unite.create({ data: u });
   }
-  const conditionnementExistant = await prisma.conditionnement.findFirst();
+  const conditionnementExistant = await prisma.conditionnement.findFirst({ orderBy: { id: "asc" } });
   if (!conditionnementExistant) await prisma.conditionnement.create({ data: { nom: "Carton" } });
 
   const societeAutre = await prisma.societe.create({ data: { nom: "PFI TEST Société B" } });

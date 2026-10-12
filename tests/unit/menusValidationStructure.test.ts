@@ -359,8 +359,8 @@ test("RED/GREEN E3 : POST /api/menus avec lignes[0].recetteId chaîne (\"abc\") 
 });
 
 test("RED/GREEN E4 : POST /api/menus avec lignes[0].quantite chaîne (\"abc\") -> 400, rien créé", async () => {
-  const unite = (await prisma.unite.findFirst()) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const unite = (await prisma.unite.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   const article = await creerArticleTarifeDeTest(`MENUS VALIDATION TEST E4 Article ${randomUUID()}`, unite, tva);
   const recetteId = await creerRecetteDeTest(`MENUS VALIDATION TEST E4 Recette ${randomUUID()}`, article.id, unite.id);
 
@@ -414,8 +414,8 @@ test("GREEN E9 : régression — POST /api/menus avec lignes: null -> accepté, 
 });
 
 test("GREEN E10 : régression — PUT /api/menus/:id avec lignes: null sur un menu ayant des lignes existantes -> lignes vidées (remplacement intégral confirmé empiriquement sur la base non modifiée)", async () => {
-  const unite = (await prisma.unite.findFirst()) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const unite = (await prisma.unite.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   const article = await creerArticleTarifeDeTest(`MENUS VALIDATION TEST E10 Article ${randomUUID()}`, unite, tva);
   const recetteId = await creerRecetteDeTest(`MENUS VALIDATION TEST E10 Recette ${randomUUID()}`, article.id, unite.id);
 
@@ -433,8 +433,8 @@ test("GREEN E10 : régression — PUT /api/menus/:id avec lignes: null sur un me
 });
 
 test("RED/GREEN E11 : POST /api/menus avec lignes[0].quantite explicitement null -> 400, aucun menu créé (distinct de quantite:0, qui ne crashait jamais)", async () => {
-  const unite = (await prisma.unite.findFirst()) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const unite = (await prisma.unite.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   const article = await creerArticleTarifeDeTest(`MENUS VALIDATION TEST E11 Article ${randomUUID()}`, unite, tva);
   const recetteId = await creerRecetteDeTest(`MENUS VALIDATION TEST E11 Recette ${randomUUID()}`, article.id, unite.id);
 
@@ -446,8 +446,8 @@ test("RED/GREEN E11 : POST /api/menus avec lignes[0].quantite explicitement null
 });
 
 test("GREEN E12 : régression — POST /api/menus avec lignes[0].quantite = 0 (valeur numérique valide, distincte de null) -> accepté, jamais un refus", async () => {
-  const unite = (await prisma.unite.findFirst()) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const unite = (await prisma.unite.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   const article = await creerArticleTarifeDeTest(`MENUS VALIDATION TEST E12 Article ${randomUUID()}`, unite, tva);
   const recetteId = await creerRecetteDeTest(`MENUS VALIDATION TEST E12 Recette ${randomUUID()}`, article.id, unite.id);
 
@@ -501,8 +501,8 @@ test("GREEN G1 : PUT sur un menu d'une autre société -> 404, jamais modifié",
 
 test("GREEN K1 : régression — PUT /api/menus/:id sans la clé nom -> nom conservé (comportement réel confirmé empiriquement, distinct de description/categorieId/prixVenteHT)", async () => {
   const nomInitial = `MENUS VALIDATION TEST K1 ${randomUUID()}`;
-  const unite = (await prisma.unite.findFirst()) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const unite = (await prisma.unite.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   const article = await creerArticleTarifeDeTest(`MENUS VALIDATION TEST K1 Article ${randomUUID()}`, unite, tva);
   const recetteId = await creerRecetteDeTest(`MENUS VALIDATION TEST K1 Recette ${randomUUID()}`, article.id, unite.id);
 
@@ -532,8 +532,8 @@ test("GREEN K1 : régression — PUT /api/menus/:id sans la clé nom -> nom cons
 // métier atteignable via l'API elle-même : rendement est borné ]0,1000] par Zod sur articles.ts) ---
 
 test("RED/GREEN H1 : POST /api/menus référençant une recette dont l'article a un rendement corrompu (0, via Prisma direct) -> 500, aucun menu créé", async () => {
-  const unite = (await prisma.unite.findFirst()) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const unite = (await prisma.unite.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   const article = await creerArticleTarifeDeTest(`MENUS VALIDATION TEST H1 Article ${randomUUID()}`, unite, tva);
   const recetteId = await creerRecetteDeTest(`MENUS VALIDATION TEST H1 Recette ${randomUUID()}`, article.id, unite.id);
 
@@ -550,8 +550,8 @@ test("RED/GREEN H1 : POST /api/menus référençant une recette dont l'article a
 });
 
 test("RED/GREEN H2 : PUT /api/menus/:id — renommage ET remplacement d'une ligne valide par une recette corrompue -> 500, nom et ancienne ligne intégralement restaurés", async () => {
-  const unite = (await prisma.unite.findFirst()) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const unite = (await prisma.unite.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.unite.create({ data: { nom: "Kilogramme", symbole: "kg", type: "poids", facteurBase: 1000 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
 
   // Deux recettes distinctes : la première reste valide tout du long (c'est elle qui compose la
   // ligne initiale du menu, et qui doit être restaurée après le rollback) ; la seconde n'est

@@ -231,14 +231,14 @@ before(async () => {
   // même catégorie d'ingrédients) — sert à prouver que la catégorie n'a plus aucune influence.
   const categorie = (await prisma.categorie.findFirst({ where: { societeId }, orderBy: { id: "asc" } })) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test", societeId } }));
   categorieId = categorie.id;
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   tvaId = tva.id;
   const fournisseurA = await prisma.fournisseur.create({ data: { nom: "SUGGECO TEST Fournisseur A", societeId } });
   fournisseurAId = fournisseurA.id;
   const fournisseurB = await prisma.fournisseur.create({ data: { nom: "SUGGECO TEST Fournisseur B", societeId } });
   fournisseurBId = fournisseurB.id;
   const conditionnement =
-    (await prisma.conditionnement.findFirst()) ?? (await prisma.conditionnement.create({ data: { nom: "Unité" } }));
+    (await prisma.conditionnement.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.conditionnement.create({ data: { nom: "Unité" } }));
   conditionnementId = conditionnement.id;
   const uniteKg =
     (await prisma.unite.findFirst({ where: { symbole: "kg" } })) ??

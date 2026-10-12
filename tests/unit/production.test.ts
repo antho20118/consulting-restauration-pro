@@ -75,16 +75,16 @@ before(async () => {
     (await prisma.categorie.findFirst({ where: { societeId }, orderBy: { id: "asc" } })) ?? (await prisma.categorie.create({ data: { nom: "Catégorie de test", societeId } }));
   categorieId = categorie.id;
 
-  const tva = (await prisma.tVA.findFirst()) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
+  const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   tvaId = tva.id;
 
   const fournisseur =
-    (await prisma.fournisseur.findFirst()) ??
+    (await prisma.fournisseur.findFirst({ orderBy: { id: "asc" } })) ??
     (await prisma.fournisseur.create({ data: { nom: "Fournisseur de test", societeId } }));
   fournisseurId = fournisseur.id;
 
   const conditionnement =
-    (await prisma.conditionnement.findFirst()) ?? (await prisma.conditionnement.create({ data: { nom: "Unité" } }));
+    (await prisma.conditionnement.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.conditionnement.create({ data: { nom: "Unité" } }));
 
   // Quatre unités à facteurBase distincts (voir prisma/seed.ts pour les valeurs de référence du
   // projet) : gramme (base du poids, facteurBase=1), kilogramme (facteurBase=1000), litre (base du
