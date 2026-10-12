@@ -3,6 +3,7 @@ import { Router } from "express";
 import prisma from "../prisma.js";
 import { DocumentInvalideError, lireDocument } from "../utils/storageDocumentsFournisseur.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
+import { idUrlValide } from "../utils/idUrl.js";
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.get("/:fournisseurId/:cle", async (req, res) => {
   const fournisseurId = Number(req.params.fournisseurId);
   const { cle } = req.params;
 
-  if (!Number.isInteger(fournisseurId) || fournisseurId <= 0) {
+  if (!idUrlValide(fournisseurId) || fournisseurId <= 0) {
     res.status(400).json({ error: "Identifiant fournisseur invalide" });
     return;
   }

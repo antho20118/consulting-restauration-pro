@@ -20,6 +20,7 @@ import {
 import { extraireQuantiteDesignation, parsePrix, normaliserCodeProduitFournisseur } from "../utils/importListing.js";
 import { resoudreOuCreerProduitFournisseur } from "../utils/produitFournisseur.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
+import { idUrlValide } from "../utils/idUrl.js";
 
 const router = Router();
 
@@ -258,7 +259,7 @@ async function creerLignesDocument(
 router.post("/:fournisseurId", async (req: Request, res: Response) => {
   try {
     const fournisseurId = Number(req.params.fournisseurId);
-    if (!Number.isInteger(fournisseurId) || fournisseurId <= 0) {
+    if (!idUrlValide(fournisseurId) || fournisseurId <= 0) {
       res.status(400).json({ error: "Identifiant fournisseur invalide" });
       return;
     }
@@ -426,7 +427,7 @@ export async function detecterDoublonFacture(
 router.post("/factures/:fournisseurId", async (req: Request, res: Response) => {
   try {
     const fournisseurId = Number(req.params.fournisseurId);
-    if (!Number.isInteger(fournisseurId) || fournisseurId <= 0) {
+    if (!idUrlValide(fournisseurId) || fournisseurId <= 0) {
       res.status(400).json({ error: "Identifiant fournisseur invalide" });
       return;
     }
@@ -545,7 +546,7 @@ router.post("/factures/:fournisseurId", async (req: Request, res: Response) => {
 router.get("/documents/:documentId", async (req: Request, res: Response) => {
   try {
     const documentId = Number(req.params.documentId);
-    if (!Number.isInteger(documentId) || documentId <= 0) {
+    if (!idUrlValide(documentId) || documentId <= 0) {
       res.status(400).json({ error: "Identifiant de document invalide" });
       return;
     }
@@ -587,7 +588,7 @@ type Decision = { ligneId: number; decision: "VALIDEE" | "REJETEE"; articleReten
 router.post("/documents/:documentId/valider", async (req: Request, res: Response) => {
   try {
     const documentId = Number(req.params.documentId);
-    if (!Number.isInteger(documentId) || documentId <= 0) {
+    if (!idUrlValide(documentId) || documentId <= 0) {
       res.status(400).json({ error: "Identifiant de document invalide" });
       return;
     }

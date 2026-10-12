@@ -7,6 +7,7 @@ import { calculerPropositionAchat, type LigneAchat } from "../utils/propositionA
 import { appliquerMouvementStock, StockInsuffisantError } from "../utils/mouvementStock.js";
 import { libelleUniteBase } from "../utils/uniteConversion.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
+import { idUrlValide } from "../utils/idUrl.js";
 
 const router = Router();
 
@@ -101,7 +102,7 @@ router.get("/", async (req: Request, res: Response) => {
 
 router.get("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) {
+  if (!idUrlValide(id) || id <= 0) {
     res.status(400).json({ error: "Identifiant de commande invalide" });
     return;
   }
@@ -204,7 +205,7 @@ router.post("/", async (req: Request, res: Response) => {
 // des quantités réellement soumises, jamais déclaré par le client.
 router.post("/:id/receptionner", async (req: Request, res: Response) => {
   const commandeId = Number(req.params.id);
-  if (!Number.isInteger(commandeId) || commandeId <= 0) {
+  if (!idUrlValide(commandeId) || commandeId <= 0) {
     res.status(400).json({ error: "Identifiant de commande invalide" });
     return;
   }
@@ -301,7 +302,7 @@ router.post("/:id/receptionner", async (req: Request, res: Response) => {
 // mouvement de stock déjà appliqué.
 router.post("/:id/annuler", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) {
+  if (!idUrlValide(id) || id <= 0) {
     res.status(400).json({ error: "Identifiant de commande invalide" });
     return;
   }
