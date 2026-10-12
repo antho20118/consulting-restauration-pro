@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import prisma from "../prisma.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
+import { idUrlValide } from "../utils/idUrl.js";
 
 const router = Router();
 
@@ -59,6 +60,12 @@ router.post("/", async (req, res) => {
 
 // Modification d'un taux de TVA
 router.put("/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!idUrlValide(id)) {
+    res.status(400).json({ error: "Identifiant de taux de TVA invalide" });
+    return;
+  }
+
   const parsed = schemaModification.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Taux de TVA invalide", details: parsed.error.flatten() });
@@ -66,7 +73,6 @@ router.put("/:id", async (req, res) => {
   }
 
   try {
-    const id = Number(req.params.id);
     const { nom, taux } = parsed.data;
 
     const tva = await prisma.tVA.update({ where: { id }, data: { nom, taux } });
@@ -81,9 +87,13 @@ router.put("/:id", async (req, res) => {
 
 // Suppression d'un taux de TVA : refusée si des articles l'utilisent encore
 router.delete("/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
+  const id = Number(req.params.id);
+  if (!idUrlValide(id)) {
+    res.status(400).json({ error: "Identifiant de taux de TVA invalide" });
+    return;
+  }
 
+  try {
     const nbArticles = await prisma.article.count({ where: { tvaId: id } });
 
     if (nbArticles > 0) {

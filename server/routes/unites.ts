@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import prisma from "../prisma.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
+import { idUrlValide } from "../utils/idUrl.js";
 import { LIBELLE_UNITE_BASE } from "../utils/uniteConversion.js";
 
 const router = Router();
@@ -64,6 +65,12 @@ router.post("/", async (req, res) => {
 
 // Modification d'une unité
 router.put("/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!idUrlValide(id)) {
+    res.status(400).json({ error: "Identifiant d'unité invalide" });
+    return;
+  }
+
   const parsed = schemaModification.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Unité invalide", details: parsed.error.flatten() });
@@ -71,7 +78,6 @@ router.put("/:id", async (req, res) => {
   }
 
   try {
-    const id = Number(req.params.id);
     const { nom, symbole, type, facteurBase } = parsed.data;
 
     const unite = await prisma.unite.update({
@@ -89,9 +95,13 @@ router.put("/:id", async (req, res) => {
 
 // Suppression d'une unité : refusée si des tarifs ou des lignes de recette l'utilisent encore
 router.delete("/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
+  const id = Number(req.params.id);
+  if (!idUrlValide(id)) {
+    res.status(400).json({ error: "Identifiant d'unité invalide" });
+    return;
+  }
 
+  try {
     const [nbTarifs, nbLignes] = await Promise.all([
       prisma.tarifArticle.count({ where: { uniteId: id } }),
       prisma.recetteLigne.count({ where: { uniteId: id } }),
