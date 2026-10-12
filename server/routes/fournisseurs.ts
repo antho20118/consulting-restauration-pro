@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import prisma from "../prisma.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
+import { idUrlValide } from "../utils/idUrl.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
@@ -92,7 +93,7 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!idUrlValide(id) || id <= 0) {
       res.status(400).json({ error: "Identifiant fournisseur invalide" });
       return;
     }
@@ -120,7 +121,7 @@ router.get("/:id", async (req, res) => {
 router.get("/:id/tarifs", async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!idUrlValide(id) || id <= 0) {
       res.status(400).json({ error: "Identifiant fournisseur invalide" });
       return;
     }
@@ -165,7 +166,7 @@ router.get("/:id/tarifs", async (req, res) => {
 router.get("/:id/documents", async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!idUrlValide(id) || id <= 0) {
       res.status(400).json({ error: "Identifiant fournisseur invalide" });
       return;
     }
@@ -229,6 +230,12 @@ router.post("/", async (req, res) => {
 });
 
 router.put("/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!idUrlValide(id)) {
+    res.status(400).json({ error: "Identifiant fournisseur invalide" });
+    return;
+  }
+
   const parsed = schemaModification.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Fournisseur invalide", details: parsed.error.flatten() });
@@ -236,7 +243,6 @@ router.put("/:id", async (req, res) => {
   }
 
   try {
-    const id = Number(req.params.id);
     const { nom, telephone, email, siteWeb } = parsed.data;
 
     // Scopé par société : jamais permettre à un compte de modifier un fournisseur d'une autre
@@ -269,6 +275,10 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
+    if (!idUrlValide(id)) {
+      res.status(400).json({ error: "Identifiant fournisseur invalide" });
+      return;
+    }
 
     const { count } = await prisma.fournisseur.updateMany({
       where: { id, societeId: req.utilisateur!.societeId },
@@ -295,7 +305,7 @@ router.delete("/:id", async (req, res) => {
 router.post("/:id/reactiver", async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!idUrlValide(id) || id <= 0) {
       res.status(400).json({ error: "Identifiant fournisseur invalide" });
       return;
     }

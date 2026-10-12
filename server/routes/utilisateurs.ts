@@ -6,6 +6,7 @@ import { Prisma, RoleUtilisateur } from "@prisma/client";
 import prisma from "../prisma.js";
 import { hacherCode } from "../utils/auth.js";
 import { requireRole } from "../middleware/requireRole.js";
+import { idUrlValide } from "../utils/idUrl.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
@@ -83,6 +84,10 @@ router.post("/", async (req: Request, res: Response) => {
 router.put("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    if (!idUrlValide(id)) {
+      res.status(400).json({ error: "Identifiant de compte invalide" });
+      return;
+    }
     const analyse = schemaModification.safeParse(req.body);
     if (!analyse.success) {
       res.status(400).json({ error: "Rôle ou statut actif invalide" });
@@ -138,6 +143,10 @@ router.put("/:id", async (req: Request, res: Response) => {
 router.post("/:id/reinitialiser-code", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    if (!idUrlValide(id)) {
+      res.status(400).json({ error: "Identifiant de compte invalide" });
+      return;
+    }
     const analyse = schemaReinitialisationCode.safeParse(req.body);
     if (!analyse.success) {
       res.status(400).json({ error: "Le nouveau code doit faire au moins 6 caractères" });

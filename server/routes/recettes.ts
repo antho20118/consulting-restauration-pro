@@ -8,6 +8,7 @@ import { suggestionsEconomieRecette } from "../utils/suggestionsEconomie.js";
 import { extraireRecette, ImportIANonConfigureError, PhotoInvalideError } from "../utils/importRecetteIA.js";
 import { genererFicheRecettePdf } from "../utils/pdf/ficheRecettePdf.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
+import { idUrlValide } from "../utils/idUrl.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
@@ -89,6 +90,10 @@ router.get("/toutes-pour-correspondance", async (req: Request, res: Response) =>
 router.get("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    if (!idUrlValide(id)) {
+      res.status(400).json({ error: "Identifiant de recette invalide" });
+      return;
+    }
 
     // Scopé par société : jamais permettre de deviner/énumérer une recette d'une autre société en
     // devinant simplement un id (voir la matrice de permissions, server/app.ts).
@@ -115,6 +120,10 @@ router.get("/:id", async (req: Request, res: Response) => {
 router.get("/:id/export-pdf", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    if (!idUrlValide(id)) {
+      res.status(400).json({ error: "Identifiant de recette invalide" });
+      return;
+    }
 
     const recette = await prisma.recette.findFirst({
       where: { id, societeId: req.utilisateur!.societeId },
@@ -172,6 +181,10 @@ router.get("/:id/export-pdf", async (req: Request, res: Response) => {
 router.get("/:id/suggestions-economie", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    if (!idUrlValide(id)) {
+      res.status(400).json({ error: "Identifiant de recette invalide" });
+      return;
+    }
 
     const suggestions = await suggestionsEconomieRecette(id, req.utilisateur!.societeId);
 
@@ -625,6 +638,10 @@ router.post("/", async (req: Request, res: Response) => {
 router.put("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    if (!idUrlValide(id)) {
+      res.status(400).json({ error: "Identifiant de recette invalide" });
+      return;
+    }
 
     const analyse = schemaRecette.safeParse(req.body);
     if (!analyse.success) {
@@ -784,6 +801,10 @@ router.delete("/", async (req: Request, res: Response) => {
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    if (!idUrlValide(id)) {
+      res.status(400).json({ error: "Identifiant de recette invalide" });
+      return;
+    }
 
     const { count } = await prisma.recette.updateMany({
       where: { id, societeId: req.utilisateur!.societeId },

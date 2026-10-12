@@ -94,6 +94,10 @@ router.get("/", async (req: Request, res: Response) => {
 router.get("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < ID_POSTGRES_MIN || id > ID_POSTGRES_MAX) {
+      res.status(400).json({ error: "Identifiant de menu invalide" });
+      return;
+    }
 
     // Scopé par société : jamais permettre de deviner/énumérer un menu d'une autre société en
     // devinant simplement un id (voir la matrice de permissions, server/app.ts).
@@ -263,6 +267,10 @@ router.put("/:id", async (req: Request, res: Response) => {
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < ID_POSTGRES_MIN || id > ID_POSTGRES_MAX) {
+      res.status(400).json({ error: "Identifiant de menu invalide" });
+      return;
+    }
 
     const { count } = await prisma.menu.updateMany({
       where: { id, societeId: req.utilisateur!.societeId },

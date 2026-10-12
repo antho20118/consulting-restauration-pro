@@ -592,6 +592,10 @@ router.delete("/", async (req: Request, res: Response) => {
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < ID_POSTGRES_MIN || id > ID_POSTGRES_MAX) {
+      res.status(400).json({ error: "Identifiant d'article invalide" });
+      return;
+    }
 
     const { count } = await prisma.article.updateMany({
       where: { id, societeId: req.utilisateur!.societeId },
