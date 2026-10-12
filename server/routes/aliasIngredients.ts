@@ -1,12 +1,30 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
+import { z } from "zod";
 
 import prisma from "../prisma.js";
 import { normaliserTexte } from "../utils/normaliserTexte.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
+import { ID_POSTGRES_MIN, ID_POSTGRES_MAX } from "../utils/idUrl.js";
 
 const router = Router();
+
+// Structure seule (F09/F10) : un `correspondances` non tableau, un élément non objet, un texte non
+// chaîne ou un articleId non entier/hors bornes INT4 faisaient planter le filtre ou la requête
+// Prisma ci-dessous en 500. Le contrat permissif de POST est préservé : `correspondances` absent ou
+// null, un texte vide/absent ou un articleId nul/absent restent acceptés puis silencieusement
+// ignorés (voir le commentaire de la route).
+const schemaCorrespondances = z.object({
+  correspondances: z
+    .array(
+      z.object({
+        texte: z.string().nullish(),
+        articleId: z.number().int().gte(ID_POSTGRES_MIN).lte(ID_POSTGRES_MAX).nullish(),
+      })
+    )
+    .nullish(),
+});
 
 // Liste complète des correspondances mémorisées (texte d'ingrédient -> article), utilisée côté
 // client pour pré-remplir automatiquement l'import d'une recette (voir ImporterRecetteModal.tsx).
@@ -37,12 +55,16 @@ router.get("/", async (req: Request, res: Response) => {
 // l'article existe encore) : une correspondance obsolète sera simplement ignorée si l'article a
 // depuis été désactivé, sans faire échouer l'enregistrement de la recette qui l'a déclenchée.
 router.post("/", async (req: Request, res: Response) => {
-  try {
-    const { correspondances } = req.body as {
-      correspondances: { texte: string; articleId: number }[];
-    };
+  const analyse = schemaCorrespondances.safeParse(req.body);
+  if (!analyse.success) {
+    res.status(400).json({ error: "Correspondances invalides", details: analyse.error.flatten() });
+    return;
+  }
 
-    const candidates = (correspondances ?? []).filter((c) => c.texte?.trim() && c.articleId);
+  try {
+    const candidates = (analyse.data.correspondances ?? []).flatMap((c) =>
+      c.texte?.trim() && c.articleId ? [{ texte: c.texte, articleId: c.articleId }] : []
+    );
 
     // texteNormalise est une clé globale (voir GET ci-dessus) : jamais rediriger cet alias partagé
     // vers l'articleId d'une AUTRE société en devinant/énumérant simplement un id — silencieusement
