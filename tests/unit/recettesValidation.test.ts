@@ -52,6 +52,14 @@ async function modifierRecette(id: number, payload: Record<string, unknown>) {
   return { status: reponse.status, corps };
 }
 
+// Comptage CIBLÉ, jamais global : `prisma.recette.count()` sans filtre était exposé aux recettes
+// créées ou supprimées au même moment par les autres fichiers de test que `npm test` exécute en
+// parallèle sur la même base. Le nom envoyé (et sa version retaillée, celle qu'enregistrerait la
+// route) suffit à détecter une création indue, dans la société du test.
+async function compterRecettesNommees(nom: string) {
+  return prisma.recette.count({ where: { societeId, nom: { in: [...new Set([nom, nom.trim()])] } } });
+}
+
 before(async () => {
   server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve, reject) => {
@@ -70,7 +78,7 @@ before(async () => {
   categorieId = categorie.id;
   const tva = (await prisma.tVA.findFirst({ orderBy: { id: "asc" } })) ?? (await prisma.tVA.create({ data: { nom: "TVA test", taux: 5.5 } }));
   tvaId = tva.id;
-  const unite = await prisma.unite.findFirstOrThrow();
+  const unite = await prisma.unite.findFirstOrThrow({ orderBy: { id: "asc" } });
   uniteId = unite.id;
 
   const article = await prisma.article.create({
@@ -101,18 +109,18 @@ after(async () => {
 });
 
 test("1. POST nom='' : refus (400), aucune écriture", async () => {
-  const avant = await prisma.recette.count();
+  const avant = await compterRecettesNommees("");
   const { status } = await creerRecette(payloadBase(""));
   assert.equal(status, 400);
-  const apres = await prisma.recette.count();
+  const apres = await compterRecettesNommees("");
   assert.equal(apres, avant, "aucune recette ne doit avoir été créée");
 });
 
 test("2. POST nom='   ' : refus (400), aucune écriture", async () => {
-  const avant = await prisma.recette.count();
+  const avant = await compterRecettesNommees("   ");
   const { status } = await creerRecette(payloadBase("   "));
   assert.equal(status, 400);
-  const apres = await prisma.recette.count();
+  const apres = await compterRecettesNommees("   ");
   assert.equal(apres, avant, "aucune recette ne doit avoir été créée");
 });
 
@@ -149,10 +157,10 @@ test("5. POST nom avec espaces superflus : accepté, nom trimé en base (non-ré
 });
 
 test("6. POST prixVenteHT=-20 : refus (400), aucune écriture", async () => {
-  const avant = await prisma.recette.count();
+  const avant = await compterRecettesNommees("RECETTE VALIDATION TEST PrixVente Negatif POST");
   const { status } = await creerRecette(payloadBase("RECETTE VALIDATION TEST PrixVente Negatif POST", { prixVenteHT: -20 }));
   assert.equal(status, 400);
-  const apres = await prisma.recette.count();
+  const apres = await compterRecettesNommees("RECETTE VALIDATION TEST PrixVente Negatif POST");
   assert.equal(apres, avant, "aucune recette ne doit avoir été créée");
 });
 
@@ -185,14 +193,14 @@ test("9. POST prixVenteHT=null : accepté, foodCostPct=null (non-régression)", 
 });
 
 test("10. POST gainCuissonPct=-1 sur une ligne : refus (400), aucune écriture", async () => {
-  const avant = await prisma.recette.count();
+  const avant = await compterRecettesNommees("RECETTE VALIDATION TEST GainCuisson Negatif POST");
   const { status } = await creerRecette(
     payloadBase("RECETTE VALIDATION TEST GainCuisson Negatif POST", {
       lignes: [{ articleId, quantite: 5, uniteId, gainCuissonPct: -1 }],
     })
   );
   assert.equal(status, 400);
-  const apres = await prisma.recette.count();
+  const apres = await compterRecettesNommees("RECETTE VALIDATION TEST GainCuisson Negatif POST");
   assert.equal(apres, avant, "aucune recette ne doit avoir été créée");
 });
 
@@ -238,10 +246,10 @@ test("13. POST gainCuissonPct=500 sur une ligne : accepté, aucune borne supéri
 });
 
 test("14. Non-régression : portions <= 0 toujours rejeté, transaction intégralement annulée", async () => {
-  const avant = await prisma.recette.count();
+  const avant = await compterRecettesNommees("RECETTE VALIDATION TEST Portions Invalide");
   const { status } = await creerRecette(payloadBase("RECETTE VALIDATION TEST Portions Invalide", { portions: 0 }));
   assert.equal(status, 500, "comportement déjà correct et inchangé (voir calculerCoutRecette)");
-  const apres = await prisma.recette.count();
+  const apres = await compterRecettesNommees("RECETTE VALIDATION TEST Portions Invalide");
   assert.equal(apres, avant, "aucune recette ne doit avoir été créée");
 });
 
@@ -262,13 +270,13 @@ test("16. [F03] POST avec un nom déjà utilisé par une recette active : refus 
   assert.equal(premiere.status, 201);
   recetteIds.push(premiere.corps.id);
 
-  const avant = await prisma.recette.count();
+  const avant = await compterRecettesNommees("RECETTE VALIDATION TEST Doublon");
   const { status, corps } = await creerRecette(payloadBase("RECETTE VALIDATION TEST Doublon"));
   assert.equal(status, 409);
   assert.equal(corps.error, "Une recette portant ce nom existe déjà");
   assert.equal(corps.doublons.length, 1);
   assert.equal(corps.doublons[0].id, premiere.corps.id);
-  const apres = await prisma.recette.count();
+  const apres = await compterRecettesNommees("RECETTE VALIDATION TEST Doublon");
   assert.equal(apres, avant, "aucune seconde recette ne doit avoir été créée");
 });
 

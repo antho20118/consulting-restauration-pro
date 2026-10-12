@@ -156,7 +156,7 @@ test("3. un import VIBEL de contexte ne clôture jamais le tarif actif de SUPER 
   // Tarif préexistant chez SUPER U pour cet article (créé directement en base, hors import, pour
   // isoler la garantie testée).
   const unitePiece = await prisma.unite.findFirstOrThrow({ where: { symbole: { equals: "pièce", mode: "insensitive" } } });
-  const conditionnement = await prisma.conditionnement.findFirstOrThrow();
+  const conditionnement = await prisma.conditionnement.findFirstOrThrow({ orderBy: { id: "asc" } });
   const tarifSuperU = await prisma.tarifArticle.create({
     data: {
       articleId: article.id,
