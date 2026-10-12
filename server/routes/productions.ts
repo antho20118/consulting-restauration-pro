@@ -7,6 +7,7 @@ import { planifierProduction, type CibleProduction } from "../utils/planifierPro
 import { evaluerEtapesHACCP } from "../utils/haccp.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 import { appliquerMouvementStock, StockInsuffisantError } from "../utils/mouvementStock.js";
+import { idUrlValide } from "../utils/idUrl.js";
 
 const router = Router();
 
@@ -87,7 +88,7 @@ router.get("/", async (req: Request, res: Response) => {
 
 router.get("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) {
+  if (!idUrlValide(id) || id <= 0) {
     res.status(400).json({ error: "Identifiant de production invalide" });
     return;
   }
@@ -200,7 +201,7 @@ router.post("/", async (req: Request, res: Response) => {
 // client (un horodatage falsifiable viderait la traçabilité de son sens).
 router.post("/:id/controles", async (req: Request, res: Response) => {
   const productionId = Number(req.params.id);
-  if (!Number.isInteger(productionId) || productionId <= 0) {
+  if (!idUrlValide(productionId) || productionId <= 0) {
     res.status(400).json({ error: "Identifiant de production invalide" });
     return;
   }

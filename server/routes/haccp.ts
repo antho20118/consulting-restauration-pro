@@ -4,9 +4,10 @@ import { z } from "zod";
 import prisma from "../prisma.js";
 import { evaluerEtapesHACCP, reglesHACCP } from "../utils/haccp.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
+import { ID_POSTGRES_MAX } from "../utils/idUrl.js";
 
 const router = Router();
-const idSchema = z.coerce.number().int().positive();
+const idSchema = z.coerce.number().int().positive().lte(ID_POSTGRES_MAX);
 
 router.get("/regles", (_req, res) => {
   res.json(reglesHACCP);
