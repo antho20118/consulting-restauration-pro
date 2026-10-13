@@ -26,6 +26,7 @@ import {
 } from "../utils/quantiteAProduire";
 import { trouverUniteParDefaut } from "../utils/uniteParDefaut";
 import { calculerAllergenesAvecStatut, ligneIncomplete } from "../utils/validationLignes";
+import { correspondancesAMemoriser } from "../utils/correspondancesIngredients";
 import ImporterRecetteModal from "./ImporterRecetteModal";
 import RechercheArticle from "./RechercheArticle";
 import type {
@@ -367,13 +368,10 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
         await creerRecette(payload);
       }
 
-      // Mémorise les choix d'article faits sur des lignes issues d'un import texte/photo (voir
+      // Mémorise les choix d'article CONFIRMÉS sur des lignes issues d'un import texte/photo (voir
       // ImporterRecetteModal.tsx), pour que le prochain import retrouve directement le bon
       // article. Ne bloque jamais l'enregistrement de la recette, déjà acquis à ce stade.
-      const correspondances = lignes
-        .filter((ligne) => ligne.texteIngredientImporte && ligne.articleId)
-        .map((ligne) => ({ texte: ligne.texteIngredientImporte!, articleId: ligne.articleId }));
-      enregistrerAliasIngredients(correspondances);
+      enregistrerAliasIngredients(correspondancesAMemoriser(lignes));
 
       onSave();
       onClose();

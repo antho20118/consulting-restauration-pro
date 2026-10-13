@@ -82,9 +82,9 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await prisma.recette.deleteMany({ where: { nom: NOM_RECETTE } });
-  // L'enregistrement mémorise un alias ingrédient → article (voir enregistrerAliasIngredients dans
-  // RecetteForm.tsx, comportement normal de l'appli, pas spécifique à ce test) : à retirer avant de
-  // pouvoir supprimer les articles de test eux-mêmes.
+  // L'enregistrement mémorise les correspondances CONFIRMÉES ingrédient → article (voir
+  // correspondancesAMemoriser, appelée par RecetteForm.tsx) : à retirer avant de pouvoir supprimer
+  // les articles de test eux-mêmes.
   await prisma.aliasIngredientImport.deleteMany({
     where: { articleId: { in: [articleSucreId, articleBeurreId] } },
   });
@@ -140,9 +140,36 @@ test("Import photo → normalisation : ingrédients multiples séparés, aucune 
   await page.locator('button:has-text("Créer la recette à partir de cet import")').click();
   await expect(page.locator('button:has-text("Enregistrer")')).toBeVisible({ timeout: 10_000 });
 
-  // 6. Enregistrer.
+  // 5 bis. Confirmation d'UN SEUL des deux rapprochements automatiques (« sucre »), en
+  // choisissant à nouveau l'article comme l'indique le bandeau : « beurre » reste volontairement
+  // non confirmé, pour vérifier ci-dessous que seule une correspondance confirmée est mémorisée.
+  const bandeaux = page.getByText(/Article rapproché automatiquement à l'import/);
+  await expect(bandeaux).toHaveCount(2);
+  const champsArticle = page.getByPlaceholder("Rechercher un article (nom ou code)…");
+  let champSucre = null;
+  for (let i = 0; i < (await champsArticle.count()); i++) {
+    if ((await champsArticle.nth(i).inputValue()) === "E2E NORMALISATION sucre") champSucre = champsArticle.nth(i);
+  }
+  expect(champSucre, "la ligne « sucre » doit être pré-remplie avec l'article rapproché").not.toBeNull();
+  await champSucre!.fill("E2ENORM-SUCRE");
+  await page.locator("div", { hasText: /^E2E NORMALISATION sucre \(code E2ENORM-SUCRE-001\)$/ }).last().click();
+  await expect(bandeaux).toHaveCount(1);
+
+  // 6. Enregistrer (la ligne « beurre » reste non confirmée : simple avertissement, jamais bloquant).
   await page.locator('button:has-text("Enregistrer")').click();
   await expect(page.locator('button:has-text("Enregistrer")')).toHaveCount(0, { timeout: 10_000 });
+
+  // 6 bis. Mémoire de correspondances : seul le rapprochement CONFIRMÉ (« sucre ») est mémorisé ;
+  // le rapprochement automatique laissé non confirmé (« beurre ») ne l'est jamais — sinon un
+  // rattachement faux serait reproduit à chaque import suivant (voir correspondancesAMemoriser).
+  // L'enregistrement des correspondances n'est pas attendu par le formulaire : sondage court.
+  await expect
+    .poll(async () => (await prisma.aliasIngredientImport.findUnique({ where: { texteNormalise: "sucre" } }))?.articleId)
+    .toBe(articleSucreId);
+  const aliasBeurre = await prisma.aliasIngredientImport.findFirst({
+    where: { texteNormalise: "beurre", articleId: articleBeurreId },
+  });
+  expect(aliasBeurre, "un rapprochement non confirmé ne doit jamais être mémorisé").toBeNull();
 
   // 7. Vérification directe en base : structure propre, coût calculé depuis les tarifs réels.
   const recette = await prisma.recette.findFirst({
