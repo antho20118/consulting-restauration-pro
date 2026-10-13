@@ -41,6 +41,13 @@ test.beforeAll(async () => {
   });
   articleId = article.id;
 
+  // Depuis F04 (audit forensique de sécurité), enregistrer une production rattachée à un dépôt
+  // déduit réellement le stock consommé, et un stock insuffisant bloque tout l'enregistrement (voir
+  // POST /productions, server/routes/productions.ts). Ce test portant sur la traçabilité HACCP, et
+  // non sur le stock, il approvisionne largement son propre dépôt (en unité de base, le gramme :
+  // 100 kg, bien au-delà des 10 kg nécessaires pour 40 portions d'une recette de 4 portions à 1 kg).
+  await prisma.stock.create({ data: { articleId, depotId, quantite: 100_000 } });
+
   const recette = await prisma.recette.create({
     data: {
       nom: "E2E HACCP Recette",
@@ -66,11 +73,15 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (productionId) {
     await prisma.controleHACCPProduction.deleteMany({ where: { productionId } });
+    // Sortie de stock tracée par la production (voir F04 ci-dessus), à retirer avant elle.
+    await prisma.mouvementStock.deleteMany({ where: { productionId } });
     await prisma.production.deleteMany({ where: { id: productionId } });
   }
   await prisma.recetteLigne.deleteMany({ where: { recetteId } });
   await prisma.recetteEtape.deleteMany({ where: { recetteId } });
   await prisma.recette.delete({ where: { id: recetteId } });
+  await prisma.mouvementStock.deleteMany({ where: { depotId } });
+  await prisma.stock.deleteMany({ where: { depotId } });
   await prisma.article.delete({ where: { id: articleId } });
   await prisma.depot.delete({ where: { id: depotId } });
 });

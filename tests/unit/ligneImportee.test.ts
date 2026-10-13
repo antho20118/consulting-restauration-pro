@@ -68,6 +68,22 @@ test("trouverArticle : un alias mémorisé prime sur la recherche approximative"
   assert.equal(trouve?.id, 2);
 });
 
+// Un nom d'article vide ou composé uniquement d'espaces se normalise en "" : or "".includes() est
+// vrai pour n'importe quel texte, et ce nom (longueur 0) était ensuite préféré comme « le plus
+// proche en longueur » — un seul article de ce genre captait TOUS les ingrédients importés
+// (constaté en e2e, importPhotoNormalisation.spec.ts : « sucre » rattaché à un article au nom vide,
+// puis mémorisé comme alias à l'enregistrement de la recette).
+test("trouverArticle : un article au nom vide ou blanc n'est jamais retenu, même seul candidat", () => {
+  const articles = [article(90, ""), article(91, "   "), article(92, "E2E sucre")];
+  assert.equal(trouverArticle("sucre", articles, new Map())?.id, 92);
+  assert.equal(trouverArticle("beurre", articles, new Map()), null, "aucun article réel ne correspond");
+  assert.equal(trouverArticle("sucre", [article(90, ""), article(91, "   ")], new Map()), null);
+});
+
+test("trouverArticle : non-régression, un nom court réel reste rapproché normalement", () => {
+  assert.equal(trouverArticle("sucre en poudre", [article(93, "Sucre"), article(90, "")], new Map())?.id, 93);
+});
+
 test("trouverUnite : correspondance exacte de symbole uniquement (pas d'approximation)", () => {
   assert.equal(trouverUnite("kg", UNITES)?.id, 10);
   assert.equal(trouverUnite("Kg", UNITES)?.id, 10); // insensible à la casse, comme trouverArticle

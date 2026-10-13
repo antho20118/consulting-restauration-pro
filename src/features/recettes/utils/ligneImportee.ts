@@ -28,9 +28,13 @@ export function trouverArticle(
   const exact = articles.find((a) => normaliser(a.nom) === cible);
   if (exact) return exact;
 
-  const correspondances = articles.filter(
-    (a) => normaliser(a.nom).includes(cible) || cible.includes(normaliser(a.nom))
-  );
+  // Un nom vide ou blanc se normalise en "", et "".includes() est vrai pour tout texte : sans ce
+  // filtre, un tel article (longueur 0, donc « le plus proche » ci-dessous) captait n'importe quel
+  // ingrédient importé.
+  const correspondances = articles.filter((a) => {
+    const nom = normaliser(a.nom);
+    return nom !== "" && (nom.includes(cible) || cible.includes(nom));
+  });
   if (correspondances.length === 0) return null;
 
   // À correspondance approximative égale, le nom le plus proche en longueur de celui recherché
