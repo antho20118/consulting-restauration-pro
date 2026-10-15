@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "db:seed": "tsx prisma/seed.ts",
+    "compte:creer": "tsx prisma/creerPremierCompte.ts",
     "db:backfill-code-fournisseur": "tsx prisma/backfillCodeFournisseur.ts",
     "db:fusionner-doublons-fournisseurs": "tsx prisma/fusionnerDoublonsFournisseurs.ts",
     "db:sauvegarder": "tsx prisma/sauvegarder.ts",
