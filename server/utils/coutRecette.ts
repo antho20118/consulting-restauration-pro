@@ -45,11 +45,54 @@ export type ChampNutrition = (typeof CHAMPS_NUTRITION)[number];
 export type ValeursNutritionnelles = Record<ChampNutrition, number>;
 type NutritionArticle = Partial<Record<ChampNutrition, number | null>> | null;
 
+// type/symbole facultatifs : seuls servent à vérifier la famille d'unité (voir
+// verifierFamilleUnite), jamais au calcul du prix.
+type UniteCout = { facteurBase: number; type?: string; symbole?: string };
+
 type TarifCout = {
   prixHT: number;
   quantiteConditionnement: number;
-  unite: { facteurBase: number };
+  unite: UniteCout;
 };
+
+// Unité d'une ligne de recette d'une autre famille (poids, volume, pièce) que le tarif de son
+// ingrédient : ex. 100 g d'œufs vendus à la pièce. Le prix et le stock étant tenus dans la famille
+// du tarif, le coût (100 « pièces ») et la déduction de stock seraient faux : refusé (constat de
+// l'audit du 15/10, point 3). Erreur dédiée : les routes d'écriture et de production la renvoient
+// en 400 avec son message, à corriger par l'utilisateur.
+export class UniteIncompatibleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UniteIncompatibleError";
+  }
+}
+
+// Famille d'une unité (Unite.type) : « piece » et « unite » désignent la même famille (pièces,
+// boîtes...) selon l'origine des données ; null si inconnue (rien à comparer).
+function familleUnite(type: string | undefined): string | null {
+  if (!type) return null;
+  const t = type.trim().toLowerCase();
+  if (t === "piece" || t === "pièce" || t === "unite" || t === "unité") return "unite";
+  return t;
+}
+
+const LIBELLES_FAMILLE: Record<string, { achat: string; choix: string }> = {
+  poids: { achat: "au poids", choix: "de poids (g, kg…)" },
+  volume: { achat: "au volume", choix: "de volume (mL, L…)" },
+  unite: { achat: "à la pièce", choix: "en pièces" },
+};
+
+function verifierFamilleUnite(nomArticle: string | undefined, uniteLigne: UniteCout, uniteTarif: UniteCout): void {
+  const familleLigne = familleUnite(uniteLigne.type);
+  const familleTarif = familleUnite(uniteTarif.type);
+  if (!familleLigne || !familleTarif || familleLigne === familleTarif) return;
+  const libelle = LIBELLES_FAMILLE[familleTarif];
+  throw new UniteIncompatibleError(
+    `Unité incompatible pour « ${nomArticle ?? "un ingrédient"} » : saisi en ${uniteLigne.symbole ?? familleLigne} ` +
+      `dans la recette, alors qu'il est acheté ${libelle?.achat ?? `en ${uniteTarif.symbole ?? familleTarif}`}. ` +
+      `Choisis une unité ${libelle?.choix ?? "de la même famille"}.`
+  );
+}
 
 /**
  * Prix du tarif ramené à une unité de base.
@@ -110,9 +153,10 @@ export function calculerCoutRecette<
     prixVenteHT: number | null;
     lignes: {
       quantite: number;
-      unite: { facteurBase: number };
+      unite: UniteCout;
       gainCuissonPct: number;
       article: {
+        nom?: string;
         rendement: number;
         tarifs: TarifCout[];
         allergenes: { allergene: { id: number; nom: string } }[];
@@ -161,6 +205,7 @@ export function calculerCoutRecette<
 
     let coutLigne = 0;
     if (tarif) {
+      verifierFamilleUnite(ligne.article.nom, ligne.unite, tarif.unite);
       const prixUnitaireBase = prixParUniteBase(tarif);
       coutLigne = quantiteBase * prixUnitaireBase;
     }

@@ -8,6 +8,7 @@ import { evaluerEtapesHACCP } from "../utils/haccp.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 import { appliquerMouvementStock, StockInsuffisantError } from "../utils/mouvementStock.js";
 import { idUrlValide } from "../utils/idUrl.js";
+import { UniteIncompatibleError } from "../utils/coutRecette.js";
 
 const router = Router();
 
@@ -182,6 +183,13 @@ router.post("/", async (req: Request, res: Response) => {
   } catch (error) {
     if (error instanceof StockInsuffisantError) {
       res.status(400).json({ error: "Stock insuffisant pour enregistrer cette production" });
+      return;
+    }
+    // Unité d'une ligne incompatible avec le tarif de son ingrédient (voir
+    // UniteIncompatibleError) : aucune production ni déduction de stock tant que la recette n'est
+    // pas corrigée.
+    if (error instanceof UniteIncompatibleError) {
+      res.status(400).json({ error: error.message });
       return;
     }
     const message = error instanceof Error ? error.message : "Impossible d'enregistrer la production";

@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { planifierProduction } from "../utils/planifierProduction.js";
+import { UniteIncompatibleError } from "../utils/coutRecette.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
@@ -37,6 +38,13 @@ router.post("/planifier", async (req: Request, res: Response) => {
     // POST /achats/proposition, structurellement identique à celui-ci) : jamais le message brut
     // de l'exception au client, toujours journalisée via le même mécanisme central que le reste
     // de l'application (voir server/utils/journalErreurs.ts).
+    // Unité d'une ligne incompatible avec le tarif de son ingrédient : production refusée tant
+    // que la recette n'est pas corrigée (voir UniteIncompatibleError), message destiné à
+    // l'utilisateur.
+    if (error instanceof UniteIncompatibleError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
     if (error instanceof Error && error.message === "Recette introuvable") {
       res.status(404).json({ error: error.message });
       return;
