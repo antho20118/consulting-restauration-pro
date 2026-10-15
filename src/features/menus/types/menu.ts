@@ -24,6 +24,9 @@ export interface Menu {
   coutTotal: number;
   foodCostPct: number | null;
   margeHT: number | null;
+  // Présent seulement quand une recette du menu a un coût incalculable : la recette en cause et le
+  // motif (voir calculerCoutMenuOuSignaler, server/utils/coutMenu.ts).
+  calculImpossible?: string;
 }
 
 export type LigneMenuInput = {

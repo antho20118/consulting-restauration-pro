@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 
 import prisma from "../prisma.js";
-import { calculerCoutsRecettesSansErreur, inclusionsRecette, prixParUniteBase } from "../utils/coutRecette.js";
+import { calculerCoutRecetteOuSignaler, inclusionsRecette, prixParUniteBase } from "../utils/coutRecette.js";
 import { SEUIL_BON } from "../utils/seuilsFoodCost.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
@@ -27,7 +27,9 @@ router.get("/", async (req: Request, res: Response) => {
       }),
     ]);
 
-    const recettes = calculerCoutsRecettesSansErreur(recettesBrutes);
+    // Une recette au coût incalculable reste comptée (nombre, répartition) ; son food cost est null,
+    // donc exclu de la moyenne et des alertes (voir calculerCoutRecetteOuSignaler).
+    const recettes = recettesBrutes.map(calculerCoutRecetteOuSignaler);
 
     // Stock.quantite est en unité de base (g, mL, pièce) : jamais multipliée par prixHT, qui est le
     // prix d'un conditionnement dans l'unité du tarif (ex. 10 € le kg) — même conversion que le coût

@@ -186,15 +186,7 @@ export function calculerCoutRecette<
       : null;
   const margeHT = recette.prixVenteHT != null ? recette.prixVenteHT - coutParPortion : null;
 
-  const allergenesParId = new Map<number, string>();
-  for (const ligne of recette.lignes) {
-    for (const { allergene } of ligne.article.allergenes) {
-      allergenesParId.set(allergene.id, allergene.nom);
-    }
-  }
-  const allergenes = Array.from(allergenesParId, ([id, nom]) => ({ id, nom })).sort((a, b) =>
-    a.nom.localeCompare(b.nom)
-  );
+  const allergenes = allergenesDeLaRecette(recette.lignes);
 
   // recette.portions est garanti > 0 par la validation ci-dessus.
   const valeursNutritionnelles: ValeursNutritionnelles = Object.fromEntries(
@@ -215,10 +207,53 @@ export function calculerCoutRecette<
   };
 }
 
-// Pour une LISTE de recettes (tableau de bord, liste des fiches) : une donnée invalide sur une
-// seule recette (rendement à 0, conditionnement mal renseigné...) ne doit pas faire échouer
-// l'affichage de toutes les autres. calculerCoutRecette reste strict (throw) pour une recette
-// individuelle (détail, création, modification), où l'erreur doit être visible immédiatement.
+// Union des allergènes des ingrédients, triée par nom — indépendante du coût : reste calculable
+// même quand le coût ne l'est pas (voir calculerCoutRecetteOuSignaler).
+function allergenesDeLaRecette(
+  lignes: { article: { allergenes: { allergene: { id: number; nom: string } }[] } }[]
+): { id: number; nom: string }[] {
+  const allergenesParId = new Map<number, string>();
+  for (const ligne of lignes) {
+    for (const { allergene } of ligne.article.allergenes) {
+      allergenesParId.set(allergene.id, allergene.nom);
+    }
+  }
+  return Array.from(allergenesParId, ([id, nom]) => ({ id, nom })).sort((a, b) => a.nom.localeCompare(b.nom));
+}
+
+// Pour l'AFFICHAGE d'une recette déjà enregistrée (liste, fiche, tableau de bord) : une recette dont
+// le coût ne peut pas être calculé (ex. 0 portion, enregistrée avant que la création ne le
+// vérifie) n'est jamais retirée silencieusement ni remplacée par une erreur 500 — elle est renvoyée
+// signalée par calculImpossible (le motif), coûts à 0 et food cost/marge à null (exclus des
+// moyennes), pour que l'utilisateur la voie et puisse la corriger. Ses allergènes restent calculés :
+// information de sécurité, jamais masquée faute de prix. La création et la modification gardent
+// calculerCoutRecette, strict (une recette incalculable y est refusée).
+export function calculerCoutRecetteOuSignaler<T extends Parameters<typeof calculerCoutRecette>[0]>(
+  recette: T
+): ReturnType<typeof calculerCoutRecette<T>> & { calculImpossible?: string } {
+  try {
+    return calculerCoutRecette(recette);
+  } catch (error) {
+    return {
+      ...recette,
+      lignes: recette.lignes.map((ligne) => ({ ...ligne, coutLigne: 0, poidsFiniLigneG: 0 })),
+      coutTotal: 0,
+      coutParPortion: 0,
+      foodCostPct: null,
+      margeHT: null,
+      allergenes: allergenesDeLaRecette(recette.lignes),
+      poidsFiniTotalG: 0,
+      valeursNutritionnelles: Object.fromEntries(CHAMPS_NUTRITION.map((c) => [c, 0])) as ValeursNutritionnelles,
+      nutritionIncomplete: true,
+      calculImpossible: error instanceof Error ? error.message : "Calcul impossible",
+    };
+  }
+}
+
+// Pour une LISTE de recettes servant à une ANALYSE de coûts (ventes, questions-réponses) : une
+// recette au coût incalculable en est écartée (elle fausserait marges et moyennes), sans faire
+// échouer l'analyse des autres. Pour l'AFFICHAGE des recettes, voir calculerCoutRecetteOuSignaler,
+// qui ne retire jamais une recette.
 export function calculerCoutsRecettesSansErreur<T extends Parameters<typeof calculerCoutRecette>[0]>(
   recettes: T[]
 ): ReturnType<typeof calculerCoutRecette<T>>[] {

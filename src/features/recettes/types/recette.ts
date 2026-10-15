@@ -95,6 +95,11 @@ export interface Recette {
   // un champ resté vide) — les valeurs affichées restent alors une approximation par défaut,
   // jamais silencieusement traitées comme complètes (voir calculerCoutRecette).
   nutritionIncomplete: boolean;
+  // Présent seulement quand le coût de cette recette déjà enregistrée ne peut pas être calculé (ex.
+  // 0 portion, enregistrée avant que la création ne le vérifie) : le motif. Coûts alors à 0 et food
+  // cost/marge à null — à afficher comme un avertissement, jamais comme un coût réel (voir
+  // calculerCoutRecetteOuSignaler, server/utils/coutRecette.ts).
+  calculImpossible?: string;
 }
 
 export type LigneRecetteInput = {

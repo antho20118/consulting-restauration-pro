@@ -184,8 +184,9 @@ export default function RecettesPage() {
           Catégorie: recette.categorie?.nom ?? "",
           "Sous-catégorie": recette.sousCategorie?.nom ?? "",
           Portions: recette.portions,
-          "Coût total (€)": Number(recette.coutTotal.toFixed(2)),
-          "Coût / portion (€)": Number(recette.coutParPortion.toFixed(2)),
+          // Coût incalculable : cellule vide, jamais un faux 0 € (voir Recette.calculImpossible).
+          "Coût total (€)": recette.calculImpossible ? "" : Number(recette.coutTotal.toFixed(2)),
+          "Coût / portion (€)": recette.calculImpossible ? "" : Number(recette.coutParPortion.toFixed(2)),
           "Prix de vente HT (€)": recette.prixVenteHT ?? "",
           "Food cost (%)": recette.foodCostPct != null ? Number(recette.foodCostPct.toFixed(1)) : "",
           "Marge HT (€)": recette.margeHT != null ? Number(recette.margeHT.toFixed(2)) : "",

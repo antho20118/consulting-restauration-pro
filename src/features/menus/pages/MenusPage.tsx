@@ -52,7 +52,7 @@ export default function MenusPage() {
         lignes: menusFiltres.map((menu) => ({
           Nom: menu.nom,
           Catégorie: menu.categorie?.nom ?? "",
-          "Coût par personne (€)": Number(menu.coutTotal.toFixed(2)),
+          "Coût par personne (€)": menu.calculImpossible ? "" : Number(menu.coutTotal.toFixed(2)),
           "Prix de vente HT (€)": menu.prixVenteHT ?? "",
           "Food cost (%)": menu.foodCostPct != null ? Number(menu.foodCostPct.toFixed(1)) : "",
           "Marge HT (€)": menu.margeHT != null ? Number(menu.margeHT.toFixed(2)) : "",
