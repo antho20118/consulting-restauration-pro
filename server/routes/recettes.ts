@@ -158,6 +158,7 @@ router.get("/:id/export-pdf", async (req: Request, res: Response) => {
       })),
       etapes: calculee.etapes,
       coutParPortion: calculee.coutParPortion,
+      coutParKgFini: calculee.coutParKgFini,
       prixVenteHT: calculee.prixVenteHT,
       foodCostPct: calculee.foodCostPct,
     });

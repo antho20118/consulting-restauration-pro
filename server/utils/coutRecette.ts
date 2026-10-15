@@ -83,13 +83,20 @@ function rendementValide(rendement: number): number {
 
 // Calcule le coût matière d'une recette à partir du dernier tarif actif de chaque ingrédient,
 // en normalisant explicitement le prix du conditionnement, puis en convertissant la quantité
-// de recette vers la même unité de base et en tenant compte du rendement de l'article.
-// Déduit aussi la liste des allergènes de la recette par union de ceux de ses ingrédients.
+// de recette vers la même unité de base. Déduit aussi la liste des allergènes de la recette par
+// union de ceux de ses ingrédients.
+//
+// Convention métier (décision du 15/10) : la quantité saisie est le poids BRUT, tel qu'acheté
+// (ex. 1 kg de pommes de terre non épluchées). Le rendement de l'article (part utilisable après
+// épluchage/parage) ne réduit donc QUE le poids fini et la part consommée (nutrition), jamais le
+// coût — il n'est ainsi compté qu'une fois dans le prix de revient au kilo fini (avant, il l'était
+// deux fois : coût divisé par le rendement ET poids fini réduit).
 //
 // Le coût d'un ingrédient suit donc :
-// quantité recette en unité de base × prix du conditionnement / quantité du conditionnement /
-// facteur de l'unité tarifaire / rendement.
-// Exemple : 1 kg utilisé, carton 10 kg à 65 €, rendement 100 % => 6,50 €.
+// quantité brute en unité de base × prix du conditionnement / quantité du conditionnement /
+// facteur de l'unité tarifaire.
+// Exemple : 1 kg de pommes de terre à 10 €/kg, rendement 80 % => 10 €, 800 g finis, soit
+// 12,50 €/kg fini (coutParKgFini).
 //
 // Type de retour annoté explicitement (plutôt que laissé à l'inférence) : sans cette annotation,
 // TypeScript n'arrive pas à faire remonter coutLigne/poidsFiniLigneG (ajoutés dans le corps de la
@@ -123,15 +130,17 @@ export function calculerCoutRecette<
   margeHT: number | null;
   allergenes: { id: number; nom: string }[];
   poidsFiniTotalG: number;
+  coutParKgFini: number | null;
   valeursNutritionnelles: ValeursNutritionnelles;
   nutritionIncomplete: boolean;
 } {
   let coutTotal = 0;
   let poidsFiniTotalG = 0;
-  // Toujours calculées à partir de quantiteBase (la quantité réellement incorporée dans la
-  // recette), jamais divisées par le rendement contrairement au coût : les pertes de préparation
-  // (épluchures, parures) déduites par le rendement ne sont jamais consommées, donc jamais
-  // comptées dans les valeurs nutritionnelles du plat fini — voir la discussion de cadrage.
+  // Calculées sur la part réellement consommée (quantité brute × rendement) : les pertes de
+  // préparation (épluchures, parures) ne sont jamais mangées, donc jamais comptées dans les
+  // valeurs nutritionnelles du plat fini. Un rendement supérieur à 100 % (ex. riz sec qui absorbe
+  // de l'eau) ou le gain de cuisson n'apportent aucune valeur nutritionnelle : facteur plafonné à
+  // 100 %.
   const nutritionTotal: ValeursNutritionnelles = Object.fromEntries(
     CHAMPS_NUTRITION.map((c) => [c, 0])
   ) as ValeursNutritionnelles;
@@ -153,7 +162,7 @@ export function calculerCoutRecette<
     let coutLigne = 0;
     if (tarif) {
       const prixUnitaireBase = prixParUniteBase(tarif);
-      coutLigne = (quantiteBase * prixUnitaireBase) / (rendement / 100);
+      coutLigne = quantiteBase * prixUnitaireBase;
     }
 
     const poidsFiniLigneG =
@@ -171,7 +180,7 @@ export function calculerCoutRecette<
           nutritionIncomplete = true;
           continue;
         }
-        nutritionTotal[champ] += quantiteBase * (valeur / 100);
+        nutritionTotal[champ] += quantiteBase * (Math.min(rendement, 100) / 100) * (valeur / 100);
       }
     }
 
@@ -202,6 +211,8 @@ export function calculerCoutRecette<
     margeHT,
     allergenes,
     poidsFiniTotalG,
+    // Prix de revient au kilo de recette finie : null sans poids fini (aucune ligne).
+    coutParKgFini: poidsFiniTotalG > 0 ? coutTotal / (poidsFiniTotalG / 1000) : null,
     valeursNutritionnelles,
     nutritionIncomplete,
   };
@@ -243,6 +254,7 @@ export function calculerCoutRecetteOuSignaler<T extends Parameters<typeof calcul
       margeHT: null,
       allergenes: allergenesDeLaRecette(recette.lignes),
       poidsFiniTotalG: 0,
+      coutParKgFini: null,
       valeursNutritionnelles: Object.fromEntries(CHAMPS_NUTRITION.map((c) => [c, 0])) as ValeursNutritionnelles,
       nutritionIncomplete: true,
       calculImpossible: error instanceof Error ? error.message : "Calcul impossible",

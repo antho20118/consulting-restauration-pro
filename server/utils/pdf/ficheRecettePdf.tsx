@@ -53,6 +53,7 @@ type RecetteFichePdf = {
     controleHACCP: string | null;
   }[];
   coutParPortion: number;
+  coutParKgFini: number | null;
   prixVenteHT: number | null;
   foodCostPct: number | null;
 };
@@ -226,6 +227,7 @@ export async function genererFicheRecettePdf(recette: RecetteFichePdf): Promise<
 
         <View style={styles.piedPage}>
           <Text>Coût / portion : {formaterEuros(recette.coutParPortion)}</Text>
+          {recette.coutParKgFini != null && <Text>Coût / kg fini : {formaterEuros(recette.coutParKgFini)}</Text>}
           <Text>Prix de vente HT : {recette.prixVenteHT != null ? formaterEuros(recette.prixVenteHT) : "—"}</Text>
           <Text>Food cost : {recette.foodCostPct != null ? `${recette.foodCostPct.toFixed(1)} %` : "—"}</Text>
         </View>

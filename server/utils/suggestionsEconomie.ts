@@ -140,9 +140,10 @@ export async function suggestionsEconomieRecette(
     if (!meilleur) continue;
 
     const quantiteBase = versUniteBase(ligne.quantite, ligne.unite);
+    // Quantité brute achetée (voir la convention dans calculerCoutRecette) : jamais divisée par
+    // le rendement, qui ne change pas la quantité à acheter.
     const economieEuros =
-      (quantiteBase * (meilleur.prixActuelParUniteBase - meilleur.prixAlternatifParUniteBase)) /
-      (ligne.article.rendement / 100);
+      quantiteBase * (meilleur.prixActuelParUniteBase - meilleur.prixAlternatifParUniteBase);
 
     const nouveauCoutTotal = recetteCalculee.coutTotal - economieEuros;
     const nouveauCoutParPortion = nouveauCoutTotal / recette.portions;

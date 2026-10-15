@@ -90,6 +90,8 @@ export interface Recette {
   foodCostPct: number | null;
   margeHT: number | null;
   poidsFiniTotalG: number;
+  // Prix de revient au kilo de recette finie (coût total / poids fini) ; null sans poids fini.
+  coutParKgFini: number | null;
   valeursNutritionnelles: ValeursNutritionnelles;
   // true dès qu'au moins un ingrédient de la recette n'a aucune valeur nutritionnelle saisie (ou
   // un champ resté vide) — les valeurs affichées restent alors une approximation par défaut,

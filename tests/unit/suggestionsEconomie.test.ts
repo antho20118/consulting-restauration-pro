@@ -370,6 +370,32 @@ test("[11] même article réel, deux fournisseurs actifs : suggestion complète 
   assert.notEqual(suggestion.nouveauFoodCostPct, null);
 });
 
+test("[11b] rendement : l'économie porte sur la quantité brute achetée, jamais divisée par le rendement", async () => {
+  const pommesId = await creerArticle("SUGGECO TEST Pommes de terre", "SUGGECO-PDT");
+  await prisma.article.update({ where: { id: pommesId }, data: { rendement: 80 } });
+  await creerTarif(pommesId, fournisseurAId, 20, 10, new Date("2024-01-01")); // 0,002 €/g (actuel)
+  await creerTarif(pommesId, fournisseurBId, 12, 10, new Date("2023-01-01")); // 0,0012 €/g
+
+  const recette = await creerRecette({
+    societeId,
+    nom: "SUGGECO TEST Recette pommes de terre",
+    categorieId: null,
+    sousCategorieId: null,
+    portions: 2,
+    prixVenteHT: 10,
+    lignes: [{ articleId: pommesId, quantite: 2, uniteId: uniteKgId, gainCuissonPct: 0 }],
+    etapes: [],
+  });
+
+  const reponse = await fetch(`${baseUrl}/api/recettes/${recette.id}/suggestions-economie`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(reponse.status, 200);
+  const [suggestion] = await reponse.json();
+  // 2000 g bruts × (0,002 − 0,0012) €/g = 1,60 €, quel que soit le rendement.
+  assert.ok(Math.abs(suggestion.economieEuros - 1.6) < 1e-9, `économie obtenue : ${suggestion.economieEuros}`);
+});
+
 test("[12] plusieurs lignes de recette référençant des articles différents : chaque ligne évaluée indépendamment, aucune contamination entre lignes", async () => {
   const article1Id = await creerArticle("SUGGECO TEST Ligne1", "SUGGECO-L1");
   const article2Id = await creerArticle("SUGGECO TEST Ligne2 (un seul tarif)", "SUGGECO-L2");

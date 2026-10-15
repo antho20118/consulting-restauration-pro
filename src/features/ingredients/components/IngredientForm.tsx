@@ -360,6 +360,10 @@ export default function IngredientForm({ ingredient, onClose, onSave }: Props) {
       />
 
       <label>Rendement (%)</label>
+      <p style={{ fontSize: 12, color: "var(--couleur-texte-attenue)", margin: "2px 0 6px" }}>
+        Part utilisable de ce qui est acheté (après épluchage, parage…). Dans une recette, saisis la
+        quantité achetée : 1 kg à 80 % donne 800 g, et le coût au kilo fini en tient compte.
+      </p>
       <input
         type="number"
         value={rendement}
