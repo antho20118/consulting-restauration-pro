@@ -8,10 +8,14 @@ import type {
 } from "../types/recette";
 import { normaliserTexte as normaliser } from "./normaliserTexte";
 
+// `articlesTous` : liste complète (tous fournisseurs), où retrouver un article mémorisé quand
+// `articles` est restreint par le filtre fournisseur (voir filtreFournisseur.ts) — un choix
+// confirmé par l'utilisateur prime sur cette préférence. Omis quand `articles` est déjà complète.
 export function trouverArticle(
   nomExtrait: string,
   articles: ArticleRecette[],
-  aliasParTexte: Map<string, number>
+  aliasParTexte: Map<string, number>,
+  articlesTous: ArticleRecette[] = articles
 ): ArticleRecette | null {
   const cible = normaliser(nomExtrait);
   if (!cible) return null;
@@ -21,7 +25,7 @@ export function trouverArticle(
   // justement pour corriger les cas où celle-ci se trompait ou ne trouvait rien.
   const articleIdMemorise = aliasParTexte.get(cible);
   if (articleIdMemorise) {
-    const article = articles.find((a) => a.id === articleIdMemorise);
+    const article = articlesTous.find((a) => a.id === articleIdMemorise);
     if (article) return article;
   }
 
@@ -74,9 +78,10 @@ export function construireLigneImportee(
   ingredient: IngredientExtrait,
   articles: ArticleRecette[],
   unites: UniteRecette[],
-  aliasParTexte: Map<string, number>
+  aliasParTexte: Map<string, number>,
+  articlesTous: ArticleRecette[] = articles
 ): LigneRecetteInput {
-  const article = trouverArticle(ingredient.nomExtrait, articles, aliasParTexte);
+  const article = trouverArticle(ingredient.nomExtrait, articles, aliasParTexte, articlesTous);
   const unite = trouverUnite(ingredient.unite, unites);
   return {
     // 0 : pas de présélection, cohérent avec une ligne ajoutée manuellement — l'utilisateur

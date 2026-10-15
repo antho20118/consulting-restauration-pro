@@ -84,6 +84,39 @@ test("trouverArticle : non-régression, un nom court réel reste rapproché norm
   assert.equal(trouverArticle("sucre en poudre", [article(93, "Sucre"), article(90, "")], new Map())?.id, 93);
 });
 
+// Le filtre « Super U uniquement » (actif par défaut, voir filtreFournisseur.ts) restreint la liste
+// de recherche passée à l'import. Un rattachement que l'utilisateur a lui-même confirmé et fait
+// mémoriser vers un article d'un AUTRE fournisseur était alors introuvable dans cette liste : il
+// était ignoré au profit d'une recherche approximative parmi les seuls articles Super U.
+test("trouverArticle : un alias mémorisé vers un article hors liste filtrée est retrouvé dans la liste complète", () => {
+  const sucreSuperU = article(20, "Sucre Super U");
+  const sucreRouxAutreFournisseur = article(21, "Sucre roux");
+  const alias = new Map([["sucre", 21]]);
+  const trouve = trouverArticle("sucre", [sucreSuperU], alias, [sucreSuperU, sucreRouxAutreFournisseur]);
+  assert.equal(trouve?.id, 21);
+});
+
+test("trouverArticle : la liste complète ne sert qu'aux alias, jamais à la recherche approximative", () => {
+  const sucreSuperU = article(20, "Sucre Super U");
+  const sucreAutreFournisseur = article(22, "Sucre");
+  const trouve = trouverArticle("sucre", [sucreSuperU], new Map(), [sucreSuperU, sucreAutreFournisseur]);
+  assert.equal(trouve?.id, 20, "sans alias, le filtre fournisseur reste respecté");
+});
+
+test("construireLigneImportee : alias mémorisé hors liste filtrée → article mémorisé, toujours à confirmer", () => {
+  const sucreSuperU = article(20, "Sucre Super U");
+  const sucreRoux = article(21, "Sucre roux");
+  const ligne = construireLigneImportee(
+    ingredient({ nomExtrait: "sucre", quantite: 100, unite: "kg" }),
+    [sucreSuperU],
+    UNITES,
+    new Map([["sucre", 21]]),
+    [sucreSuperU, sucreRoux]
+  );
+  assert.equal(ligne.articleId, 21);
+  assert.equal(ligne.articleConfirme, false);
+});
+
 test("trouverUnite : correspondance exacte de symbole uniquement (pas d'approximation)", () => {
   assert.equal(trouverUnite("kg", UNITES)?.id, 10);
   assert.equal(trouverUnite("Kg", UNITES)?.id, 10); // insensible à la casse, comme trouverArticle
