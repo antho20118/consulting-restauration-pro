@@ -25,6 +25,15 @@ npx prisma migrate dev
 npm run db:seed
 ```
 
+Sur une base neuve, aucun compte de connexion n'existe encore : crée le premier (propriétaire) avec
+
+```bash
+npm run compte:creer -- <identifiant> --super-admin
+```
+
+Le code est demandé au clavier (deux fois, sans être affiché). La commande refuse de s'exécuter dès
+qu'un compte existe : les comptes suivants se créent depuis l'application (Paramètres → Comptes).
+
 Enfin, dans deux terminaux séparés :
 
 ```bash
