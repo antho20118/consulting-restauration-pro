@@ -43,6 +43,12 @@ model Utilisateur {
   // vérifie, et prisma/definirSuperAdmin.ts pour l'activer sur un compte.
   superAdmin Boolean @default(false)
 
+  // Toute connexion (jeton) ouverte AVANT cette date est refusée — voir requireAuth.ts. Renseigné à
+  // chaque changement de code (réinitialisation par un PROPRIETAIRE, ou PUT /api/auth/moi), pour
+  // qu'un code changé parce qu'il a fuité ferme réellement les sessions déjà ouvertes, au lieu de
+  // les laisser valables jusqu'à leur expiration (12 h). Null : aucune invalidation.
+  sessionsInvalideesLe DateTime?
+
   societeId Int
   societe   Societe @relation(fields: [societeId], references: [id])
 

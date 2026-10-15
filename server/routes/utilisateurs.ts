@@ -163,7 +163,8 @@ router.post("/:id/reinitialiser-code", async (req: Request, res: Response) => {
 
     await prisma.utilisateur.update({
       where: { id },
-      data: { codeHache: hacherCode(analyse.data.nouveauCode) },
+      // Ferme aussi les connexions déjà ouvertes avec l'ancien code (voir requireAuth.ts).
+      data: { codeHache: hacherCode(analyse.data.nouveauCode), sessionsInvalideesLe: new Date() },
     });
 
     res.status(204).send();

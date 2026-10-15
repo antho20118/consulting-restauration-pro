@@ -9,13 +9,13 @@ import { hacherCode } from "../../server/utils/auth.js";
 // (server/routes/utilisateurs.ts) et le middleware requireAuth (app Express réelle, Postgres réel).
 // Voir tests/unit/production.test.ts pour le même principe appliqué à un autre endpoint.
 //
-// IMPORTANT sur l'ordre des tests dans ce fichier : le limiteur de tentatives de connexion
-// (server/routes/auth.ts, tentativesParIp) est un état en mémoire PARTAGÉ par toutes les requêtes de
-// ce process pour une même IP, pas remis à zéro entre les tests. Comme tous les appels fetch() de ce
-// fichier viennent du même 127.0.0.1, chaque appel à /api/auth/login (qu'il réussisse ou échoue)
-// consomme une des 10 tentatives autorisées sur 15 minutes. Les tests sont donc volontairement
-// ordonnés pour que celui qui vérifie le blocage (429) soit le dernier à utiliser cet identifiant,
-// et budgétisent explicitement le nombre d'appels de connexion utilisés avant lui.
+// IMPORTANT sur l'ordre des tests dans ce fichier : le limiteur des échecs de connexion
+// (server/routes/auth.ts, echecsParIp) est un état en mémoire PARTAGÉ par toutes les requêtes de ce
+// process pour une même IP, pas remis à zéro entre les tests. Tous les appels fetch() de ce fichier
+// viennent du même 127.0.0.1 ; chaque ÉCHEC de connexion (identifiant/code faux, compte désactivé)
+// consomme un des 10 échecs autorisés sur 15 minutes. Le test qui vérifie le blocage (429) est donc
+// le dernier à appeler /api/auth/login. Le décompte exact (réussites jamais comptées, adresse réelle
+// du client derrière le proxy) est vérifié dans tests/unit/limiteConnexion.test.ts.
 //
 // IMPORTANT (sécurité) : le mot de passe "1234" utilisé ci-dessous est la valeur de test standard de
 // toute la suite (voir tests/unit/production.test.ts, achats.test.ts, consulting.test.ts), jamais un
@@ -251,35 +251,25 @@ test("PUT /api/auth/moi refuse un code actuel incorrect (403, sans modifier le c
   assert.equal(utilisateur.identifiant, identifiantOriginal);
 });
 
-test("le limiteur de connexion bloque après 10 tentatives sur 15 min, y compris un identifiant/code ensuite correct", async () => {
-  // Le limiteur (tentativesParIp) compte TOUTE requête POST /api/auth/login venue de cette IP,
-  // quel que soit l'identifiant tenté ou même la validité du corps envoyé (vérifié avant le schéma
-  // Zod, voir server/routes/auth.ts) — jamais par identifiant. Budget consommé par les 9 tests
-  // précédents de ce fichier qui appellent /api/auth/login (un seul appel chacun : corps invalide,
-  // mauvais identifiant/code, bon identifiant/code, compte désactivé, révocation immédiate, rôle
-  // insuffisant, CONSULTANT, PUT /moi ×2) : il ne reste donc qu'UNE seule tentative autorisée avant
-  // blocage (10 au total). On la consomme ici avec une tentative volontairement incorrecte, puis on
-  // vérifie que la suivante (quel que soit son contenu) est bloquée.
-  const reponse = await fetch(`${baseUrl}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ identifiant: identifiantOriginal, code: "code-incorrect" }),
-  });
-  assert.equal(
-    reponse.status,
-    401,
-    `Attendu 401 (dernière tentative avant blocage), obtenu ${reponse.status}. Le budget de tentatives suppose qu'aucun autre test de ce fichier n'appelle /api/auth/login en dehors de ceux déjà comptés ci-dessus.`
-  );
+test("le limiteur de connexion bloque après 10 échecs sur 15 min, y compris un identifiant/code ensuite correct", async () => {
+  // Les tests précédents ont déjà consommé quelques échecs (mauvais code, compte désactivé) : on
+  // échoue jusqu'au blocage, qui doit survenir au plus tard au 11e essai de ce test.
+  let statut = 0;
+  let essais = 0;
+  while (essais < 11) {
+    const reponse = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifiant: identifiantOriginal, code: "code-incorrect" }),
+    });
+    statut = reponse.status;
+    essais += 1;
+    if (statut === 429) break;
+    assert.equal(statut, 401, `essai ${essais} : 401 attendu avant le blocage, obtenu ${statut}`);
+  }
+  assert.equal(statut, 429, "blocage attendu après 10 échecs au plus");
 
-  const reponseBloquee = await fetch(`${baseUrl}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ identifiant: identifiantOriginal, code: "code-incorrect" }),
-  });
-  assert.equal(reponseBloquee.status, 429);
-
-  // Même un identifiant/code correct est bloqué une fois le quota atteint : le limiteur ne
-  // distingue pas les tentatives valides des invalides une fois déclenché.
+  // Même un identifiant/code correct est bloqué une fois le quota d'échecs atteint.
   const reponseCorrecteMaisBloquee = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

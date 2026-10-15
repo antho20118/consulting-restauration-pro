@@ -39,9 +39,9 @@ export function creerToken(payload: PayloadUtilisateur): string {
 
 // null si le jeton est absent/invalide/expiré — jamais un simple booléen (voir requireAuth.ts, qui
 // a besoin du payload décodé, pas seulement de savoir s'il est valide).
-export function verifierToken(token: string): PayloadUtilisateur | null {
+export function verifierToken(token: string): (PayloadUtilisateur & { iat?: number }) | null {
   try {
-    return jwt.verify(token, SECRET_EFFECTIF) as PayloadUtilisateur;
+    return jwt.verify(token, SECRET_EFFECTIF) as PayloadUtilisateur & { iat?: number };
   } catch {
     return null;
   }

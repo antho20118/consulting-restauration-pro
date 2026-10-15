@@ -23,22 +23,30 @@ export async function appliquerMouvementStock(
     productionId?: number | null;
   }
 ): Promise<{ id: number }> {
-  const delta = params.type === "ENTREE" ? params.quantite : -params.quantite;
-
-  const stockActuel = await tx.stock.findUnique({
-    where: { articleId_depotId: { articleId: params.articleId, depotId: params.depotId } },
-  });
-
-  const nouvelleQuantite = (stockActuel?.quantite ?? 0) + delta;
-  if (nouvelleQuantite < 0) {
-    throw new StockInsuffisantError();
+  // Mise à jour ATOMIQUE en base, jamais « lire le stock puis réécrire la nouvelle valeur » : deux
+  // mouvements simultanés sur le même article/dépôt (deux saisies, une réception pendant une
+  // production...) lisaient la même valeur et l'un écrasait l'autre — mise à jour perdue, stock
+  // différent de la somme des mouvements (constat de l'audit du 15/10). Ici, Postgres verrouille la
+  // ligne et applique les mouvements l'un après l'autre.
+  if (params.type === "ENTREE") {
+    // INSERT ... ON CONFLICT : crée la ligne de stock à la première entrée, sans risque qu'une
+    // seconde entrée simultanée échoue sur la contrainte unique (articleId, depotId).
+    await tx.$executeRaw`
+      INSERT INTO "Stock" ("articleId", "depotId", "quantite")
+      VALUES (${params.articleId}, ${params.depotId}, ${params.quantite})
+      ON CONFLICT ("articleId", "depotId") DO UPDATE SET "quantite" = "Stock"."quantite" + EXCLUDED."quantite"
+    `;
+  } else {
+    // Ne décrémente que si le stock suffit, en une seule instruction : le stock ne descend jamais
+    // sous zéro, même avec des sorties simultanées.
+    const { count } = await tx.stock.updateMany({
+      where: { articleId: params.articleId, depotId: params.depotId, quantite: { gte: params.quantite } },
+      data: { quantite: { decrement: params.quantite } },
+    });
+    if (count === 0) {
+      throw new StockInsuffisantError();
+    }
   }
-
-  await tx.stock.upsert({
-    where: { articleId_depotId: { articleId: params.articleId, depotId: params.depotId } },
-    update: { quantite: nouvelleQuantite },
-    create: { articleId: params.articleId, depotId: params.depotId, quantite: nouvelleQuantite },
-  });
 
   return tx.mouvementStock.create({
     data: {
