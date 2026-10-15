@@ -43,6 +43,21 @@ import { journaliserErreur, contexteDepuisRequete } from "./utils/journalErreurs
 
 const app = express();
 
+// Nombre de proxys de confiance devant le serveur (hébergeur) : sans ce réglage, req.ip est
+// l'adresse du proxy de Railway, la même pour tous les clients — la limite de connexion
+// (routes/auth.ts) et celle des rapports d'erreur (routes/journalErreursClient.ts) étaient alors
+// partagées par toute l'équipe. En production, un seul proxy (celui de Railway) par défaut ;
+// TRUST_PROXY permet d'ajuster ce nombre si l'hébergement change. Jamais activé par défaut hors
+// production : sans proxy réel, l'en-tête X-Forwarded-For serait fourni librement par le client.
+const proxysDeConfiance = process.env.TRUST_PROXY ?? (process.env.NODE_ENV === "production" ? "1" : undefined);
+if (proxysDeConfiance !== undefined) {
+  const nombre = Number(proxysDeConfiance);
+  if (!Number.isInteger(nombre) || nombre < 0) {
+    throw new Error(`TRUST_PROXY invalide (${proxysDeConfiance}) : nombre entier de proxys attendu.`);
+  }
+  app.set("trust proxy", nombre);
+}
+
 // Sans CORS_ORIGIN, comportement inchangé (toutes origines acceptées) : ne restreint que si
 // l'opérateur choisit explicitement de le faire (liste d'origines séparées par des virgules).
 const corsOrigin = process.env.CORS_ORIGIN;

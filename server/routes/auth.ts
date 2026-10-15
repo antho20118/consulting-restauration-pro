@@ -19,23 +19,32 @@ const schemaChangementCompte = z.object({
   nouveauCode: z.string().min(6).max(200),
 });
 
-// Limitation simple des tentatives de connexion par IP : un compte nominatif reste une cible
-// d'essai automatisé exhaustif comme avant. Volontairement en mémoire (pas de dépendance ajoutée) :
-// suffisant pour une seule instance de serveur, se réinitialise à un redémarrage.
-const tentativesParIp = new Map<string, { compte: number; expire: number }>();
+// Limitation simple des ÉCHECS de connexion par adresse IP : un compte nominatif reste une cible
+// d'essai automatisé exhaustif comme avant. Seuls les échecs (identifiant ou code faux) comptent :
+// une connexion réussie ne consomme jamais la limite — sinon une équipe qui prend son service (10
+// connexions en 15 minutes) se bloquait elle-même — et ne la remet pas à zéro non plus (un compte
+// valable ne doit pas permettre de relancer des essais sur un autre compte depuis la même adresse).
+// L'adresse est celle du client réel derrière le proxy de l'hébergeur (voir "trust proxy",
+// server/app.ts), jamais celle du proxy, partagée par tous. Volontairement en mémoire (pas de
+// dépendance ajoutée) : suffisant pour une seule instance de serveur, se réinitialise à un
+// redémarrage.
+const echecsParIp = new Map<string, { compte: number; expire: number }>();
 const FENETRE_MS = 15 * 60_000;
-const MAX_TENTATIVES = 10;
+const MAX_ECHECS = 10;
 
-function autoriseTentative(ip: string): boolean {
+function estBloquee(ip: string): boolean {
+  const entree = echecsParIp.get(ip);
+  return !!entree && entree.expire > Date.now() && entree.compte >= MAX_ECHECS;
+}
+
+function enregistrerEchec(ip: string): void {
   const maintenant = Date.now();
-  const entree = tentativesParIp.get(ip);
+  const entree = echecsParIp.get(ip);
   if (!entree || entree.expire <= maintenant) {
-    tentativesParIp.set(ip, { compte: 1, expire: maintenant + FENETRE_MS });
-    return true;
+    echecsParIp.set(ip, { compte: 1, expire: maintenant + FENETRE_MS });
+    return;
   }
-  if (entree.compte >= MAX_TENTATIVES) return false;
   entree.compte += 1;
-  return true;
 }
 
 // Connexion : un compte nominatif par personne (voir Utilisateur, prisma/schema.prisma), remplace
@@ -43,7 +52,8 @@ function autoriseTentative(ip: string): boolean {
 // plus se connecter, sans devoir changer le code pour toute l'équipe.
 router.post("/login", async (req: Request, res: Response) => {
   try {
-    if (!autoriseTentative(req.ip ?? "inconnu")) {
+    const ip = req.ip ?? "inconnu";
+    if (estBloquee(ip)) {
       res.status(429).json({ error: "Trop de tentatives. Réessaie dans quelques minutes." });
       return;
     }
@@ -60,6 +70,7 @@ router.post("/login", async (req: Request, res: Response) => {
     // Même message d'erreur qu'un compte inexistant, désactivé ou un mauvais code : jamais
     // distinguer "ce compte existe mais est désactivé" à quelqu'un qui ne s'est pas authentifié.
     if (!utilisateur || !utilisateur.actif || !verifierCode(code, utilisateur.codeHache)) {
+      enregistrerEchec(ip);
       res.status(401).json({ error: "Identifiant ou code incorrect" });
       return;
     }
