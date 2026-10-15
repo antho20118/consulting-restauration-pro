@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 
 import prisma from "../prisma.js";
-import { calculerCoutsRecettesSansErreur, inclusionsRecette } from "../utils/coutRecette.js";
+import { calculerCoutsRecettesSansErreur, inclusionsRecette, prixParUniteBase } from "../utils/coutRecette.js";
 import { SEUIL_BON } from "../utils/seuilsFoodCost.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
@@ -20,7 +20,7 @@ router.get("/", async (req: Request, res: Response) => {
         include: {
           article: {
             include: {
-              tarifs: { where: { actif: true }, orderBy: { dateDebut: "desc" }, take: 1 },
+              tarifs: { where: { actif: true }, orderBy: { dateDebut: "desc" }, take: 1, include: { unite: true } },
             },
           },
         },
@@ -29,9 +29,18 @@ router.get("/", async (req: Request, res: Response) => {
 
     const recettes = calculerCoutsRecettesSansErreur(recettesBrutes);
 
+    // Stock.quantite est en unité de base (g, mL, pièce) : jamais multipliée par prixHT, qui est le
+    // prix d'un conditionnement dans l'unité du tarif (ex. 10 € le kg) — même conversion que le coût
+    // des recettes (prixParUniteBase). Un tarif inexploitable (conditionnement nul...) est ignoré
+    // plutôt que de fausser le total ou de faire échouer tout le tableau de bord.
     const valeurStock = stocks.reduce((total, stock) => {
       const tarif = stock.article.tarifs[0];
-      return total + (tarif ? stock.quantite * tarif.prixHT : 0);
+      if (!tarif) return total;
+      try {
+        return total + stock.quantite * prixParUniteBase(tarif);
+      } catch {
+        return total;
+      }
     }, 0);
 
     const foodCostValues = recettes
