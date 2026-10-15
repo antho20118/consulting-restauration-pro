@@ -3,6 +3,7 @@ export interface UniteRecette {
   nom: string;
   symbole: string;
   facteurBase: number;
+  type?: string;
 }
 
 export interface AllergeneRecette {
@@ -31,7 +32,7 @@ export interface ArticleRecette {
   tarifs: {
     prixHT: number;
     quantiteConditionnement: number;
-    unite: { symbole: string; facteurBase: number };
+    unite: { symbole: string; facteurBase: number; type?: string };
     fournisseur: { id: number; nom: string };
   }[];
   allergenes: { allergene: AllergeneRecette }[];

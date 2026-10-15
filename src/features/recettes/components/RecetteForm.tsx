@@ -11,7 +11,7 @@ import {
   getUnitesDisponibles,
   modifierRecette,
 } from "../services/recetteService";
-import { estimerCoutLigne } from "../utils/cout";
+import { estimerCoutLigne, uniteIncompatible } from "../utils/cout";
 import {
   trouverToutesCorrespondances,
   type RecetteExistantePourCorrespondance,
@@ -618,6 +618,7 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
         const article = articles.find((a) => a.id === ligne.articleId);
         const unite = unites.find((u) => u.id === ligne.uniteId);
         const cout = estimerCoutLigne(article, ligne.quantite, unite);
+        const incompatible = uniteIncompatible(article, unite);
         // L'article déjà sélectionné pour cette ligne reste toujours proposé même s'il ne
         // correspond pas au filtre, pour ne pas faire disparaître le nom déjà choisi (voir
         // RechercheArticle.tsx, qui résout l'affichage depuis la liste reçue).
@@ -631,6 +632,12 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
               <div style={{ fontSize: 12, color: "#b3261e", marginBottom: 2 }}>
                 ⚠ Article rapproché automatiquement à l'import — à vérifier puis confirmer (choisis-le
                 à nouveau dans le champ ci-dessous, même si c'est le bon).
+              </div>
+            )}
+            {incompatible && (
+              <div style={{ fontSize: 12, color: "#b3261e", marginBottom: 2 }}>
+                ⚠ Unité incompatible : « {article?.nom} » est acheté en {article?.tarifs[0]?.unite.symbole}.
+                Choisis une unité de la même famille, sinon la recette ne pourra pas être enregistrée.
               </div>
             )}
             {ligne.articleId !== 0 && !ligne.uniteId && (
@@ -681,8 +688,8 @@ export default function RecetteForm({ recette, brouillon, onClose, onSave }: Pro
                 placeholder="Gain %"
               />
 
-              <span style={{ width: 70, textAlign: "right", color: "#555" }}>
-                {cout.toFixed(2)} €
+              <span style={{ width: 70, textAlign: "right", color: incompatible ? "#b3261e" : "#555" }}>
+                {incompatible ? "—" : `${cout.toFixed(2)} €`}
               </span>
 
               <button onClick={() => retirerLigne(index)}>✕</button>
