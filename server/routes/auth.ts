@@ -118,7 +118,13 @@ router.put("/moi", requireAuth, async (req: Request, res: Response) => {
 
     const misAJour = await prisma.utilisateur.update({
       where: { id: utilisateur.id },
-      data: { identifiant: nouvelIdentifiant, codeHache: hacherCode(nouveauCode) },
+      // Ferme les autres connexions ouvertes avec l'ancien code (voir requireAuth.ts) ; le jeton
+      // renvoyé ci-dessous, émis juste après, reste valable.
+      data: {
+        identifiant: nouvelIdentifiant,
+        codeHache: hacherCode(nouveauCode),
+        sessionsInvalideesLe: new Date(),
+      },
     });
 
     const token = creerToken({
