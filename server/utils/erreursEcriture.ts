@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { Request, Response } from "express";
 import { journaliserErreur, contexteDepuisRequete } from "./journalErreurs.js";
+import { UniteIncompatibleError } from "./coutRecette.js";
 
 // Levée quand un nom de fournisseur (saisi librement — création manuelle d'article ou import de
 // listing) correspond, après normalisation, à PLUSIEURS fournisseurs déjà existants : jamais un
@@ -58,6 +59,12 @@ export async function repondreErreurEcriture(
   messageParDefaut: string,
   req?: Request
 ): Promise<void> {
+  // Ligne de recette dans une unité d'une autre famille que le tarif de son ingrédient (voir
+  // UniteIncompatibleError) : erreur de saisie à corriger, jamais une panne serveur.
+  if (error instanceof UniteIncompatibleError) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
   if (error instanceof FournisseurAmbiguError) {
     res.status(409).json({
       error:

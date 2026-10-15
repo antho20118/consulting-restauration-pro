@@ -3,7 +3,12 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 
 import prisma from "../prisma.js";
-import { calculerCoutRecette, calculerCoutRecetteOuSignaler, inclusionsRecette } from "../utils/coutRecette.js";
+import {
+  calculerCoutRecette,
+  calculerCoutRecetteOuSignaler,
+  inclusionsRecette,
+  UniteIncompatibleError,
+} from "../utils/coutRecette.js";
 import { suggestionsEconomieRecette } from "../utils/suggestionsEconomie.js";
 import { extraireRecette, ImportIANonConfigureError, PhotoInvalideError } from "../utils/importRecetteIA.js";
 import { genererFicheRecettePdf } from "../utils/pdf/ficheRecettePdf.js";
@@ -158,6 +163,7 @@ router.get("/:id/export-pdf", async (req: Request, res: Response) => {
       })),
       etapes: calculee.etapes,
       coutParPortion: calculee.coutParPortion,
+      coutParKgFini: calculee.coutParKgFini,
       prixVenteHT: calculee.prixVenteHT,
       foodCostPct: calculee.foodCostPct,
     });
@@ -169,6 +175,11 @@ router.get("/:id/export-pdf", async (req: Request, res: Response) => {
     );
     res.send(pdf);
   } catch (error) {
+    // Unité incompatible avec le tarif d'un ingrédient : fiche à corriger d'abord (message clair).
+    if (error instanceof UniteIncompatibleError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
     console.error(error);
     await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de générer la fiche PDF" });
@@ -484,6 +495,10 @@ router.post("/import-excel", async (req: Request, res: Response) => {
       // Transaction annulée volontairement (voir plus haut) : la requête a bien atteint la base
       // pour calculer un coût réel via calculerCoutRecette, mais rien n'a été conservé.
       res.status(200).json({ simulate: true, resultats: error.resultats });
+      return;
+    }
+    if (error instanceof UniteIncompatibleError) {
+      res.status(400).json({ error: `${error.message} Aucune modification conservée.` });
       return;
     }
     console.error(error);

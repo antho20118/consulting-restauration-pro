@@ -304,7 +304,12 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
             cette donnée.
           </span>
         ) : (
-          <span>Coût / portion : <strong>{recette.coutParPortion.toFixed(2)} €</strong></span>
+          <>
+            <span>Coût / portion : <strong>{recette.coutParPortion.toFixed(2)} €</strong></span>
+            {recette.coutParKgFini != null && (
+              <span>Coût / kg fini : <strong>{recette.coutParKgFini.toFixed(2)} €</strong></span>
+            )}
+          </>
         )}
         <span>
           Prix de vente HT :{" "}
