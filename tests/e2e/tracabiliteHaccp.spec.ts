@@ -134,8 +134,14 @@ test("traçabilité HACCP datée : Production -> production enregistrée -> cont
     "Légumes triés, lavés et désinfectés selon le protocole"
   );
   await cadreLegumes.getByRole("button", { name: "Enregistrer le contrôle" }).click();
-  await expect(cadreLegumes.getByText("Légumes triés, lavés et désinfectés selon le protocole")).toBeVisible();
-  await expect(cadreLegumes.getByText("✓ Conforme")).toBeVisible();
+  // Vise la ligne du contrôle enregistré, jamais le simple texte : le bouton de suggestion
+  // « ✓ Légumes triés… » reste affiché et porte le même texte (2 correspondances une fois le
+  // contrôle enregistré, une seule avant : la vérification passait sans rien vérifier).
+  const controleLegumes = cadreLegumes
+    .getByRole("listitem")
+    .filter({ hasText: "Légumes triés, lavés et désinfectés selon le protocole" });
+  await expect(controleLegumes).toBeVisible();
+  await expect(controleLegumes.getByText("✓ Conforme")).toBeVisible();
 
   await page.goto("/productions");
   await expect(page.getByRole("heading", { name: "📋 Traçabilité HACCP" })).toBeVisible();
