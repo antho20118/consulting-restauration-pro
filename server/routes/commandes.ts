@@ -11,6 +11,10 @@ import { idUrlValide } from "../utils/idUrl.js";
 
 const router = Router();
 
+// Levée dans la transaction d'une réception quand la commande n'est plus en attente (déjà reçue ou
+// annulée entre-temps par une requête simultanée) : annule toute la transaction, rien n'est écrit.
+class CommandeDejaTraiteeError extends Error {}
+
 const schemaCreation = z.object({
   depotId: z.number().int().positive(),
   besoins: z
@@ -251,8 +255,23 @@ router.post("/:id/receptionner", async (req: Request, res: Response) => {
       }
     }
 
+    const toutRecu = parsed.data.lignes.every(
+      (entree) => entree.quantiteRecueBase >= ligneParId.get(entree.ligneId)!.quantiteCommandeeBase
+    );
+
     const resultat = await prisma.$transaction(async (tx) => {
-      let toutRecu = true;
+      // Prend la commande AVANT tout mouvement de stock, en une seule instruction conditionnelle :
+      // le contrôle « en attente » ci-dessus, fait hors transaction, laissait passer deux réceptions
+      // simultanées (double clic, réseau lent) qui ajoutaient chacune le stock reçu. Ici, Postgres
+      // verrouille la ligne : la seconde attend, ne trouve plus la commande en attente et abandonne.
+      const prise = await tx.commandeFournisseur.updateMany({
+        where: { id: commandeId, statut: "EN_ATTENTE" },
+        data: { statut: toutRecu ? "RECUE" : "RECUE_PARTIELLEMENT", dateReception: new Date() },
+      });
+      if (prise.count === 0) {
+        throw new CommandeDejaTraiteeError();
+      }
+
       for (const entree of parsed.data.lignes) {
         const ligne = ligneParId.get(entree.ligneId)!;
         let mouvementStockId: number | null = null;
@@ -267,7 +286,6 @@ router.post("/:id/receptionner", async (req: Request, res: Response) => {
           });
           mouvementStockId = mouvement.id;
         }
-        if (entree.quantiteRecueBase < ligne.quantiteCommandeeBase) toutRecu = false;
 
         await tx.ligneCommandeFournisseur.update({
           where: { id: ligne.id },
@@ -275,15 +293,15 @@ router.post("/:id/receptionner", async (req: Request, res: Response) => {
         });
       }
 
-      return tx.commandeFournisseur.update({
-        where: { id: commandeId },
-        data: { statut: toutRecu ? "RECUE" : "RECUE_PARTIELLEMENT", dateReception: new Date() },
-        ...inclusionCommande,
-      });
+      return tx.commandeFournisseur.findUniqueOrThrow({ where: { id: commandeId }, ...inclusionCommande });
     });
 
     res.json(commandeAvecUniteBase(resultat));
   } catch (error) {
+    if (error instanceof CommandeDejaTraiteeError) {
+      res.status(409).json({ error: "Cette commande a déjà été traitée" });
+      return;
+    }
     if (error instanceof StockInsuffisantError) {
       // Ne peut structurellement pas se produire sur une ENTREE (le stock ne peut que monter),
       // mais gardé pour ne jamais faire dépendre la sécurité de ce chemin d'une hypothèse
@@ -320,11 +338,17 @@ router.post("/:id/annuler", async (req: Request, res: Response) => {
       return;
     }
 
-    const misAJour = await prisma.commandeFournisseur.update({
-      where: { id },
+    // Conditionnelle, comme la prise de commande d'une réception : une réception validée au même
+    // instant ne doit jamais se retrouver « annulée » avec son stock déjà entré.
+    const annulation = await prisma.commandeFournisseur.updateMany({
+      where: { id, statut: "EN_ATTENTE" },
       data: { statut: "ANNULEE" },
-      ...inclusionCommande,
     });
+    if (annulation.count === 0) {
+      res.status(409).json({ error: "Seule une commande en attente peut être annulée" });
+      return;
+    }
+    const misAJour = await prisma.commandeFournisseur.findUniqueOrThrow({ where: { id }, ...inclusionCommande });
     res.json(commandeAvecUniteBase(misAJour));
   } catch (error) {
     console.error(error);
