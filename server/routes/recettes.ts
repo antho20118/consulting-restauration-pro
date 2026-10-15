@@ -3,7 +3,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 
 import prisma from "../prisma.js";
-import { calculerCoutRecette, calculerCoutsRecettesSansErreur, inclusionsRecette } from "../utils/coutRecette.js";
+import { calculerCoutRecette, calculerCoutRecetteOuSignaler, inclusionsRecette } from "../utils/coutRecette.js";
 import { suggestionsEconomieRecette } from "../utils/suggestionsEconomie.js";
 import { extraireRecette, ImportIANonConfigureError, PhotoInvalideError } from "../utils/importRecetteIA.js";
 import { genererFicheRecettePdf } from "../utils/pdf/ficheRecettePdf.js";
@@ -56,7 +56,7 @@ router.get("/", async (req: Request, res: Response) => {
       orderBy: { nom: "asc" },
     });
 
-    res.json(calculerCoutsRecettesSansErreur(recettes));
+    res.json(recettes.map(calculerCoutRecetteOuSignaler));
   } catch (error) {
     console.error(error);
     await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
@@ -107,7 +107,7 @@ router.get("/:id", async (req: Request, res: Response) => {
       return;
     }
 
-    res.json(calculerCoutRecette(recette));
+    res.json(calculerCoutRecetteOuSignaler(recette));
   } catch (error) {
     console.error(error);
     await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));

@@ -1,4 +1,4 @@
-import { calculerCoutRecette, inclusionsRecette } from "./coutRecette.js";
+import { calculerCoutRecette, calculerCoutRecetteOuSignaler, inclusionsRecette } from "./coutRecette.js";
 import type { ChampNutrition } from "./coutRecette.js";
 
 export const inclusionsMenu = {
@@ -67,17 +67,33 @@ export function calculerCoutMenu<
   };
 }
 
-// Pour une LISTE de menus : une recette invalide dans un seul menu ne doit pas faire échouer
-// l'affichage de tous les autres (même raisonnement que calculerCoutsRecettesSansErreur).
-export function calculerCoutsMenusSansErreur<T extends Parameters<typeof calculerCoutMenu>[0]>(
-  menus: T[]
-): ReturnType<typeof calculerCoutMenu<T>>[] {
-  return menus.flatMap((menu) => {
-    try {
-      return [calculerCoutMenu(menu)];
-    } catch (error) {
-      console.error(`Menu invalide ignoré dans la liste (id ${(menu as { id?: unknown }).id})`, error);
-      return [];
-    }
-  });
+// Pour l'AFFICHAGE d'un menu déjà enregistré (liste, détail) : un menu contenant une recette au
+// coût incalculable n'est jamais retiré silencieusement de la liste (ni remplacé par une erreur
+// 500) — il est renvoyé signalé par calculImpossible (la recette en cause et le motif), coût à 0 et
+// food cost/marge à null. La création et la modification gardent calculerCoutMenu, strict.
+export function calculerCoutMenuOuSignaler<T extends Parameters<typeof calculerCoutMenu>[0]>(
+  menu: T
+): ReturnType<typeof calculerCoutMenu<T>> & { calculImpossible?: string } {
+  try {
+    return calculerCoutMenu(menu);
+  } catch (error) {
+    const lignes = menu.lignes.map((ligne) => {
+      const recette = calculerCoutRecetteOuSignaler(ligne.recette);
+      return { ...ligne, recette, coutLigne: recette.calculImpossible ? 0 : recette.coutParPortion * ligne.quantite };
+    });
+    const enCause = lignes.find((ligne) => ligne.recette.calculImpossible);
+    const nomEnCause = (enCause?.recette as { nom?: string } | undefined)?.nom;
+    return {
+      ...menu,
+      lignes,
+      coutTotal: 0,
+      foodCostPct: null,
+      margeHT: null,
+      calculImpossible: enCause
+        ? `Recette${nomEnCause ? ` « ${nomEnCause} »` : ""} : ${enCause.recette.calculImpossible}`
+        : error instanceof Error
+          ? error.message
+          : "Calcul impossible",
+    };
+  }
 }

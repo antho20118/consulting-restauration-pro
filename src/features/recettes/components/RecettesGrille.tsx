@@ -61,6 +61,9 @@ export default function RecettesGrille({ recettes, onOuvrir }: Props) {
                 {recette.sousCategorie.nom}
               </div>
             )}
+            {recette.calculImpossible && (
+              <div style={{ fontSize: 12, color: "#b3261e", marginTop: 4 }}>⚠ Coût incalculable — à corriger</div>
+            )}
           </div>
         </button>
       ))}

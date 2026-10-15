@@ -157,33 +157,41 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
       )}
 
       <h3>Valeurs nutritionnelles (par portion)</h3>
-      {recette.nutritionIncomplete && (
-        <p style={{ color: "#b3261e", fontSize: 13, marginTop: -8 }}>
-          ⚠ Approximation — au moins un ingrédient n'a pas (ou pas entièrement) de valeurs
-          nutritionnelles saisies.
+      {recette.calculImpossible ? (
+        <p style={{ color: "#b3261e", fontSize: 13, marginTop: -8, marginBottom: 20 }}>
+          ⚠ Non calculables tant que la recette n'est pas corrigée (voir le coût ci-dessous).
         </p>
+      ) : (
+        <>
+          {recette.nutritionIncomplete && (
+            <p style={{ color: "#b3261e", fontSize: 13, marginTop: -8 }}>
+              ⚠ Approximation — au moins un ingrédient n'a pas (ou pas entièrement) de valeurs
+              nutritionnelles saisies.
+            </p>
+          )}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+              gap: "6px 16px",
+              marginBottom: 20,
+              fontSize: 14,
+            }}
+          >
+            <span>Énergie : <strong>{recette.valeursNutritionnelles.energie.toFixed(0)} kcal</strong></span>
+            <span>Protéines : <strong>{recette.valeursNutritionnelles.proteines.toFixed(1)} g</strong></span>
+            <span>Glucides : <strong>{recette.valeursNutritionnelles.glucides.toFixed(1)} g</strong></span>
+            <span>dont sucres : <strong>{recette.valeursNutritionnelles.sucres.toFixed(1)} g</strong></span>
+            <span>Lipides : <strong>{recette.valeursNutritionnelles.lipides.toFixed(1)} g</strong></span>
+            <span>
+              dont acides gras saturés :{" "}
+              <strong>{recette.valeursNutritionnelles.acidesGrasSatures.toFixed(1)} g</strong>
+            </span>
+            <span>Fibres : <strong>{recette.valeursNutritionnelles.fibres.toFixed(1)} g</strong></span>
+            <span>Sel : <strong>{recette.valeursNutritionnelles.sel.toFixed(2)} g</strong></span>
+          </div>
+        </>
       )}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-          gap: "6px 16px",
-          marginBottom: 20,
-          fontSize: 14,
-        }}
-      >
-        <span>Énergie : <strong>{recette.valeursNutritionnelles.energie.toFixed(0)} kcal</strong></span>
-        <span>Protéines : <strong>{recette.valeursNutritionnelles.proteines.toFixed(1)} g</strong></span>
-        <span>Glucides : <strong>{recette.valeursNutritionnelles.glucides.toFixed(1)} g</strong></span>
-        <span>dont sucres : <strong>{recette.valeursNutritionnelles.sucres.toFixed(1)} g</strong></span>
-        <span>Lipides : <strong>{recette.valeursNutritionnelles.lipides.toFixed(1)} g</strong></span>
-        <span>
-          dont acides gras saturés :{" "}
-          <strong>{recette.valeursNutritionnelles.acidesGrasSatures.toFixed(1)} g</strong>
-        </span>
-        <span>Fibres : <strong>{recette.valeursNutritionnelles.fibres.toFixed(1)} g</strong></span>
-        <span>Sel : <strong>{recette.valeursNutritionnelles.sel.toFixed(2)} g</strong></span>
-      </div>
 
       <h3>Ingrédients</h3>
       <div style={{ overflowX: "auto" }}>
@@ -203,7 +211,7 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
                   {ligne.quantite} {ligne.unite.symbole}
                 </td>
                 <td style={{ padding: "6px 0", textAlign: "right" }}>
-                  {ligne.coutLigne.toFixed(2)} €
+                  {recette.calculImpossible ? "—" : `${ligne.coutLigne.toFixed(2)} €`}
                 </td>
               </tr>
             ))}
@@ -290,7 +298,14 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
           gap: 10,
         }}
       >
-        <span>Coût / portion : <strong>{recette.coutParPortion.toFixed(2)} €</strong></span>
+        {recette.calculImpossible ? (
+          <span style={{ color: "#b3261e" }}>
+            ⚠ Coût impossible à calculer : {recette.calculImpossible}. Modifie la recette pour corriger
+            cette donnée.
+          </span>
+        ) : (
+          <span>Coût / portion : <strong>{recette.coutParPortion.toFixed(2)} €</strong></span>
+        )}
         <span>
           Prix de vente HT :{" "}
           <strong>{recette.prixVenteHT != null ? `${recette.prixVenteHT.toFixed(2)} €` : "—"}</strong>

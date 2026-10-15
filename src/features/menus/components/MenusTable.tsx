@@ -30,7 +30,8 @@ export default function MenusTable({ menus, onEdit, onDelete }: Props) {
       field: "coutTotal",
       headerName: "Coût / pers.",
       width: 130,
-      valueFormatter: (value) => `${Number(value).toFixed(2)} €`,
+      // Coût incalculable (une recette du menu en cause) : avertissement, jamais un faux 0,00 €.
+      valueFormatter: (value, row) => (row.calculImpossible ? "⚠ incalculable" : `${Number(value).toFixed(2)} €`),
     },
     {
       field: "prixVenteHT",
