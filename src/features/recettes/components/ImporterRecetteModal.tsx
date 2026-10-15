@@ -145,7 +145,7 @@ export default function ImporterRecetteModal({ onClose, recetteActuelle, onCree,
         : articlesTous;
 
       const lignesIngr = extractionRecue.ingredients.map((ingredient) =>
-        construireLigneImportee(ingredient, articlesFiltres, unitesData, aliasParTexte)
+        construireLigneImportee(ingredient, articlesFiltres, unitesData, aliasParTexte, articlesTous)
       );
       const lignesMat = extractionRecue.materiel.map((materiel) =>
         materielVersLigne(construireMaterielImporte(materiel, articlesTous, aliasParTexte), unitesData)

@@ -229,7 +229,7 @@ export default function ImporterTechniquesFichierModal({ onClose, onImporte }: P
         : articlesTous;
 
       const lignesIngr = extractionRecue.ingredients.map((ingredient) =>
-        construireLigneImportee(ingredient, articlesFiltres, unitesData, aliasParTexte)
+        construireLigneImportee(ingredient, articlesFiltres, unitesData, aliasParTexte, articlesTous)
       );
       const lignesMat = extractionRecue.materiel.map((materiel) =>
         materielVersLigne(construireMaterielImporte(materiel, articlesTous, aliasParTexte), unitesData)

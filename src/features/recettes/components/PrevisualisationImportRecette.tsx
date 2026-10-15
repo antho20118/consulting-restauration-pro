@@ -74,6 +74,11 @@ const LABELS_SECTION: Record<SectionEtape, string> = {
 };
 const ORDRE_SECTIONS: SectionEtape[] = ["preparation", "cuisson", "dressage", "autre"];
 
+// Conteneur du champ de recherche d'article dans une ligne qui passe à la ligne (flexWrap) : la
+// racine de RechercheArticle (flex: 2, base 0) y était écrasée à une vingtaine de pixels sur
+// téléphone. Avec une base et une largeur minimales, le champ passe plutôt sur sa propre ligne.
+const STYLE_CHAMP_ARTICLE = { flex: "1 1 180px", minWidth: 180, display: "flex" } as const;
+
 // Résout un nom détecté (catégorie/sous-catégorie) vers son id réel dans l'application — jamais de
 // création à la volée ni d'approximation floue : si le nom exact (accents/casse ignorés) n'existe
 // pas parmi les options réelles, la détection est considérée non applicable (l'utilisateur choisira
@@ -388,11 +393,13 @@ export default function PrevisualisationImportRecette({
                   <span style={{ fontSize: 13, minWidth: 140 }}>
                     Nom extrait : <strong>{ingredient.nomExtrait}</strong>
                   </span>
-                  <RechercheArticle
-                    articles={articles}
-                    articleId={ligne.articleId}
-                    onChange={(articleId) => modifierLigneIngredient(index, { articleId, articleConfirme: false })}
-                  />
+                  <div style={STYLE_CHAMP_ARTICLE}>
+                    <RechercheArticle
+                      articles={articles}
+                      articleId={ligne.articleId}
+                      onChange={(articleId) => modifierLigneIngredient(index, { articleId, articleConfirme: true })}
+                    />
+                  </div>
                   <ChampNombre
                     valeur={ligne.quantite}
                     onChanger={(n) => modifierLigneIngredient(index, { quantite: n ?? 0 })}
@@ -411,7 +418,9 @@ export default function PrevisualisationImportRecette({
                 </div>
                 <div style={{ fontSize: 12, color: ligne.articleId ? "#1a7a3c" : "#b3261e", marginTop: 4 }}>
                   {ligne.articleId
-                    ? `Article proposé : ${articles.find((a) => a.id === ligne.articleId)?.nom ?? "—"} — à confirmer`
+                    ? ligne.articleConfirme
+                      ? `Article choisi : ${articles.find((a) => a.id === ligne.articleId)?.nom ?? "—"}`
+                      : `Article proposé : ${articles.find((a) => a.id === ligne.articleId)?.nom ?? "—"} — à confirmer (choisis-le dans la liste)`
                     : "Aucun article correspondant trouvé — à résoudre dans le formulaire"}
                   {!unite && ligne.articleId !== 0 && " · unité non déterminée"}
                 </div>
@@ -445,18 +454,24 @@ export default function PrevisualisationImportRecette({
                     <BadgeConfiance confiance={materiel.confiance} />
                   </span>
                 </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 13, minWidth: 140 }}>
                     Nom extrait : <strong>{materiel.nomExtrait}</strong>
                   </span>
-                  <RechercheArticle
-                    articles={articlesMateriel}
-                    articleId={ligne.articleId}
-                    onChange={(articleId) => modifierLigneMateriel(index, { articleId, articleConfirme: false })}
-                  />
+                  <div style={STYLE_CHAMP_ARTICLE}>
+                    <RechercheArticle
+                      articles={articlesMateriel}
+                      articleId={ligne.articleId}
+                      onChange={(articleId) => modifierLigneMateriel(index, { articleId, articleConfirme: true })}
+                    />
+                  </div>
                 </div>
                 <div style={{ fontSize: 12, color: ligne.articleId ? "#1a7a3c" : "#b3261e", marginTop: 4 }}>
-                  {ligne.articleId ? "Article proposé — à confirmer" : "Aucun matériel correspondant trouvé — à résoudre dans le formulaire"}
+                  {ligne.articleId
+                    ? ligne.articleConfirme
+                      ? "Matériel choisi"
+                      : "Article proposé — à confirmer (choisis-le dans la liste)"
+                    : "Aucun matériel correspondant trouvé — à résoudre dans le formulaire"}
                 </div>
               </div>
             </div>
