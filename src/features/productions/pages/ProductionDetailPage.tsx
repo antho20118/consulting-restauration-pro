@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { getProduction } from "../services/productionService";
 import type { ProductionDetail } from "../types/production";
 import { suggestionsPourEtape } from "../utils/suggestionsControleHACCP";
+import { mentionReceptionDifferee } from "../utils/receptionDifferee";
 import { ajouterControleResilient } from "../../../offline/actionsProduction";
 import { busFileAttente, listerElements } from "../../../offline/fileAttenteDb";
 
@@ -14,6 +15,11 @@ const BROUILLON_VIDE: BrouillonControle = { valeur: "", conforme: true, commenta
 // Un contrôle mis en file hors ligne (voir actionsProduction.ts) n'a pas encore d'id ni de
 // dateHeure serveur — affiché séparément des contrôles réels (production.controles) avec un
 // badge dédié, jamais mélangé à l'historique confirmé tant qu'il n'est pas synchronisé.
+function MentionReception({ momentDeclare, recuLe }: { momentDeclare: string; recuLe?: string }) {
+  const mention = mentionReceptionDifferee(momentDeclare, recuLe);
+  return mention ? <> ({mention})</> : null;
+}
+
 type ControleEnAttente = {
   idLocal: string;
   etapeId: number;
@@ -38,10 +44,20 @@ export default function ProductionDetailPage() {
   const [enCours, setEnCours] = useState<number | null>(null);
   const [controlesEnAttente, setControlesEnAttente] = useState<ControleEnAttente[]>([]);
 
+  const dejaAffichee = useRef(false);
+
+  // Un rechargement en arrière-plan qui échoue (sans réseau, juste après une saisie mise en file)
+  // garde l'affichage actuel : seule l'impossibilité du tout premier chargement est une erreur à
+  // montrer (point 9 de l'audit du 15/10 — l'écran disparaissait au moment même de la saisie).
   function charger() {
     getProduction(productionId)
-      .then(setProduction)
-      .catch((e) => setErreur(e instanceof Error ? e.message : "Erreur inconnue"));
+      .then((chargee) => {
+        dejaAffichee.current = true;
+        setProduction(chargee);
+      })
+      .catch((e) => {
+        if (!dejaAffichee.current) setErreur(e instanceof Error ? e.message : "Erreur inconnue");
+      });
   }
 
   useEffect(() => {
@@ -124,6 +140,7 @@ export default function ProductionDetailPage() {
       <h1>📋 {production.recette.nom}</h1>
       <p style={{ color: "var(--couleur-texte-attenue)" }}>
         Produit le {new Date(production.dateProduction).toLocaleString("fr-FR")}
+        <MentionReception momentDeclare={production.dateProduction} recuLe={production.createdAt} />
         {" · "}
         {production.portionsProduites.toFixed(0)} portion(s) · {(production.poidsFiniProduitG / 1000).toFixed(2)} kg
         {production.depot && <> · dépôt {production.depot.nom}</>}
@@ -177,6 +194,7 @@ export default function ProductionDetailPage() {
                       {controle.commentaire && <span style={{ color: "var(--couleur-texte-attenue)" }}>— {controle.commentaire}</span>}
                       <span style={{ color: "var(--couleur-texte-attenue)", marginLeft: "auto" }}>
                         {new Date(controle.dateHeure).toLocaleString("fr-FR")}
+                        <MentionReception momentDeclare={controle.dateHeure} recuLe={controle.createdAt} />
                       </span>
                     </li>
                   ))}

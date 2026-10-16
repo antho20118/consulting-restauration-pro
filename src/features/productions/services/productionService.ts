@@ -2,15 +2,20 @@ import { API_URL, apiFetch } from "../../../config/api";
 import type { CibleProduction } from "../../production/types/production";
 import type { Production, ProductionDetail } from "../types/production";
 
+// Clé unique et moment réel d'une saisie faite (ou commencée) hors connexion — voir
+// src/offline/actionsProduction.ts et server/routes/productions.ts.
+export type SaisieHorsLigne = { cleIdempotence?: string; realiseeLe?: string };
+
 export async function enregistrerProduction(
   recetteId: number,
   cible: CibleProduction,
-  depotId?: number
+  depotId?: number,
+  saisie: SaisieHorsLigne = {}
 ): Promise<ProductionDetail> {
   const response = await apiFetch(`${API_URL}/productions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ recetteId, cible, depotId }),
+    body: JSON.stringify({ recetteId, cible, depotId, ...saisie }),
   });
   if (!response.ok) {
     const corps = await response.json().catch(() => null);
@@ -39,7 +44,14 @@ export async function getProduction(id: number): Promise<ProductionDetail> {
 
 export async function ajouterControle(
   productionId: number,
-  controle: { recetteEtapeId: number; valeur: string; conforme: boolean; commentaire?: string }
+  controle: {
+    recetteEtapeId: number;
+    valeur: string;
+    conforme: boolean;
+    commentaire?: string;
+    cleIdempotence?: string;
+    constateLe?: string;
+  }
 ): Promise<ProductionDetail> {
   const response = await apiFetch(`${API_URL}/productions/${productionId}/controles`, {
     method: "POST",

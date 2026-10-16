@@ -43,6 +43,17 @@ export async function listerElements(): Promise<ElementFile[]> {
   return elements.sort((a, b) => a.creeLe - b.creeLe);
 }
 
+export async function mettreAJourElements(elements: ElementFile[]): Promise<void> {
+  if (elements.length === 0) return;
+  const db = await ouvrirDb();
+  const tx = db.transaction(STORE, "readwrite");
+  for (const element of elements) {
+    await tx.store.put(element);
+  }
+  await tx.done;
+  signalerChangement();
+}
+
 export async function appliquerResultatTraitement(resultat: {
   traites: string[];
   echecs: { idLocal: string; erreur: string }[];
