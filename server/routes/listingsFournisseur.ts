@@ -134,7 +134,8 @@ async function construireContexteRapprochement(fournisseurId: number, societeId:
       where: { societeId, actif: true },
       select: { id: true, nom: true, reference: true },
     }),
-    prisma.aliasIngredientImport.findMany({ select: { texteNormalise: true, articleId: true } }),
+    // Correspondances propres à la société (point 10 de l'audit du 15/10, voir le modèle).
+    prisma.aliasIngredientImport.findMany({ where: { societeId }, select: { texteNormalise: true, articleId: true } }),
     prisma.produitFournisseur.findMany({
       where: { fournisseurId },
       select: { codeProduitFournisseur: true, articleId: true, designationConnue: true },

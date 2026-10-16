@@ -201,8 +201,8 @@ test("ATOMICITÉ : POST /listings-fournisseur/factures/:fournisseurId — une pa
 
 test("ATOMICITÉ : POST /ventes/import — une panne sur la 2e ligne ne laisse ni document, ni ligne, ni alias appris par la 1ère ligne", async () => {
   const avantDocs = await prisma.documentVentes.count({ where: { societeId } });
-  const aliasAvant = await prisma.aliasProduitVenduImport.findUnique({
-    where: { texteNormalise: recetteAtomiciteNom.toLowerCase() },
+  const aliasAvant = await prisma.aliasProduitVenduImport.findFirst({
+    where: { societeId, texteNormalise: recetteAtomiciteNom.toLowerCase() },
   });
   assert.equal(aliasAvant, null, "pré-condition : aucun alias ne doit déjà exister pour cette recette de test");
 
@@ -236,8 +236,8 @@ test("ATOMICITÉ : POST /ventes/import — une panne sur la 2e ligne ne laisse n
   });
   assert.equal(lignesOrphelines, 0, "aucune LigneVente ne doit survivre, y compris celle écrite avant la panne");
 
-  const aliasApres = await prisma.aliasProduitVenduImport.findUnique({
-    where: { texteNormalise: recetteAtomiciteNom.toLowerCase() },
+  const aliasApres = await prisma.aliasProduitVenduImport.findFirst({
+    where: { societeId, texteNormalise: recetteAtomiciteNom.toLowerCase() },
   });
   assert.equal(aliasApres, null, "l'alias appris par la 1ère ligne (avant la panne) ne doit pas non plus survivre");
 });

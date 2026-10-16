@@ -78,17 +78,19 @@ model Societe {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  depots                Depot[]
-  fournisseurs          Fournisseur[]
-  articles              Article[]
-  recettes              Recette[]
-  menus                 Menu[]
-  productions           Production[]
-  utilisateurs          Utilisateur[]
-  documentsVentes       DocumentVentes[]
-  categories            Categorie[]
-  categoriesRecette     CategorieRecette[]
-  sousCategoriesRecette SousCategorieRecette[]
+  depots                    Depot[]
+  fournisseurs              Fournisseur[]
+  articles                  Article[]
+  recettes                  Recette[]
+  menus                     Menu[]
+  productions               Production[]
+  utilisateurs              Utilisateur[]
+  documentsVentes           DocumentVentes[]
+  categories                Categorie[]
+  categoriesRecette         CategorieRecette[]
+  sousCategoriesRecette     SousCategorieRecette[]
+  aliasIngredientsImport    AliasIngredientImport[]
+  aliasProduitsVendusImport AliasProduitVenduImport[]
 }
 
 model Depot {
@@ -254,7 +256,13 @@ model AliasIngredientImport {
 
   // Texte d'ingrédient normalisé (minuscules, sans accents, espaces compactés) : clé de recherche,
   // volontairement indépendante de la casse/accentuation d'origine pour maximiser les réutilisations.
-  texteNormalise String @unique
+  texteNormalise String
+
+  // Propre à chaque entreprise (point 10 de l'audit du 15/10) : la même formulation (« farine »)
+  // désigne un article différent dans chaque société. Clé unique (societeId, texteNormalise) — une
+  // clé globale faisait écraser la correspondance d'une société par celle de la suivante.
+  societeId Int
+  societe   Societe @relation(fields: [societeId], references: [id])
 
   articleId Int
   article   Article @relation(fields: [articleId], references: [id])
@@ -262,6 +270,7 @@ model AliasIngredientImport {
   creeLe DateTime @default(now())
   majLe  DateTime @updatedAt
 
+  @@unique([societeId, texteNormalise])
   @@index([articleId])
 }
 
@@ -908,7 +917,11 @@ model MenuLigne {
 model AliasProduitVenduImport {
   id Int @id @default(autoincrement())
 
-  texteNormalise String @unique
+  texteNormalise String
+
+  // Propre à chaque entreprise, comme AliasIngredientImport (point 10 de l'audit du 15/10).
+  societeId Int
+  societe   Societe @relation(fields: [societeId], references: [id])
 
   recetteId Int
   recette   Recette @relation(fields: [recetteId], references: [id])
@@ -916,6 +929,7 @@ model AliasProduitVenduImport {
   creeLe DateTime @default(now())
   majLe  DateTime @updatedAt
 
+  @@unique([societeId, texteNormalise])
   @@index([recetteId])
 }
 
