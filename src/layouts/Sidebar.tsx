@@ -1,24 +1,25 @@
 import { Link, useLocation } from "react-router-dom";
 import { RefreshCw, LogOut } from "lucide-react";
-import { seDeconnecter } from "../config/api";
+import { seDeconnecter, voitLesTarifs } from "../config/api";
 import IndicateurHorsLigne from "../offline/IndicateurHorsLigne";
 
+// gestion : écran fermé au cuisinier (décision du 15/10, voir voitLesTarifs et AppRoutes).
 const menu = [
-  { label: "🏠 Tableau de bord", path: "/" },
+  { label: "🏠 Tableau de bord", path: "/", gestion: true },
   { label: "📖 Fiches recettes", path: "/recettes" },
   { label: "🍽️ Menus", path: "/menus" },
-  { label: "🥕 Base ingrédients", path: "/ingredients" },
-  { label: "🚚 Fournisseurs", path: "/fournisseurs" },
+  { label: "🥕 Base ingrédients", path: "/ingredients", gestion: true },
+  { label: "🚚 Fournisseurs", path: "/fournisseurs", gestion: true },
   { label: "🏭 Production", path: "/production" },
-  { label: "📦 Commandes fournisseurs", path: "/commandes", indentSuspendu: true },
+  { label: "📦 Commandes fournisseurs", path: "/commandes", indentSuspendu: true, gestion: true },
   { label: "🛡️ HACCP", path: "/haccp" },
   { label: "📋 Traçabilité HACCP", path: "/productions", indentSuspendu: true },
-  { label: "💰 Ventes", path: "/ventes" },
-  { label: "📊 Menu engineering", path: "/menu-engineering" },
-  { label: "🔮 Prévisions", path: "/previsions" },
-  { label: "💬 Questions / Réponses", path: "/questions" },
+  { label: "💰 Ventes", path: "/ventes", gestion: true },
+  { label: "📊 Menu engineering", path: "/menu-engineering", gestion: true },
+  { label: "🔮 Prévisions", path: "/previsions", gestion: true },
+  { label: "💬 Questions / Réponses", path: "/questions", gestion: true },
   { label: "📦 Mouvements de stock", path: "/mouvements" },
-  { label: "🏭 Dépôts", path: "/depots" },
+  { label: "🏭 Dépôts", path: "/depots", gestion: true },
   { label: "⚙ Paramètres", path: "/parametres" },
 ];
 
@@ -45,7 +46,7 @@ export default function Sidebar({ ouverte, onFermer }: Props) {
 
       <IndicateurHorsLigne />
 
-      {menu.map((item) => (
+      {menu.filter((item) => !item.gestion || voitLesTarifs()).map((item) => (
         <Link
           key={item.path}
           to={item.path}

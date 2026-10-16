@@ -18,6 +18,7 @@ import {
   type ControleSaisi,
 } from "../../../offline/actionsProduction";
 import { busFileAttente } from "../../../offline/fileAttenteDb";
+import { voitLesTarifs } from "../../../config/api";
 import { EVENEMENT_PRODUCTION_SYNCHRONISEE } from "../../../offline/synchronisation";
 
 type BrouillonControle = { valeur: string; conforme: boolean; commentaire: string };
@@ -404,7 +405,8 @@ export default function ProductionPlanifierPage() {
           )}
 
           <div className="feuille-production-sans-impression" style={{ marginBottom: 20, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            {planification && (
+            {/* Proposition d'achat (montants, commandes fournisseurs) : jamais pour un cuisinier. */}
+            {planification && voitLesTarifs() && (
               <button className="btn-primary" onClick={genererPropositionAchat} disabled={chargementAchat}>
                 {chargementAchat ? "Calcul…" : "Générer la proposition d'achat"}
               </button>

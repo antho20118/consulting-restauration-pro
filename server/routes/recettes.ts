@@ -14,6 +14,7 @@ import { extraireRecette, ImportIANonConfigureError, PhotoInvalideError } from "
 import { genererFicheRecettePdf } from "../utils/pdf/ficheRecettePdf.js";
 import { repondreErreurEcriture } from "../utils/erreursEcriture.js";
 import { idUrlValide } from "../utils/idUrl.js";
+import { fermeAuCuisinier, voitLesTarifs } from "../middleware/masquerTarifs.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
 const router = Router();
@@ -141,6 +142,8 @@ router.get("/:id/export-pdf", async (req: Request, res: Response) => {
     }
 
     const calculee = calculerCoutRecette(recette);
+    // Fiche d'un CUISINIER : aucun montant transmis au rendu (décision du 15/10).
+    const avecCouts = voitLesTarifs(req);
     // Reconstruit explicitement la forme attendue par genererFicheRecettePdf (RecetteFichePdf) —
     // calculerCoutRecette étant générique, son type de retour exact dépend de l'instanciation de
     // son paramètre générique T et ne se laisse pas nommer proprement depuis un autre fichier ;
@@ -159,13 +162,17 @@ router.get("/:id/export-pdf", async (req: Request, res: Response) => {
         quantite: ligne.quantite,
         unite: { symbole: ligne.unite.symbole },
         article: { nom: ligne.article.nom },
-        coutLigne: ligne.coutLigne,
+        ...(avecCouts ? { coutLigne: ligne.coutLigne } : {}),
       })),
       etapes: calculee.etapes,
-      coutParPortion: calculee.coutParPortion,
-      coutParKgFini: calculee.coutParKgFini,
-      prixVenteHT: calculee.prixVenteHT,
-      foodCostPct: calculee.foodCostPct,
+      couts: avecCouts
+        ? {
+            coutParPortion: calculee.coutParPortion,
+            coutParKgFini: calculee.coutParKgFini,
+            prixVenteHT: calculee.prixVenteHT,
+            foodCostPct: calculee.foodCostPct,
+          }
+        : null,
     });
 
     res.setHeader("Content-Type", "application/pdf");
@@ -189,7 +196,7 @@ router.get("/:id/export-pdf", async (req: Request, res: Response) => {
 // Suggestions d'économies : tarifs fournisseurs moins chers pour un même article déjà utilisé
 // dans la recette (jamais un remplacement d'un article par un autre — voir
 // server/utils/suggestionsEconomie.ts).
-router.get("/:id/suggestions-economie", async (req: Request, res: Response) => {
+router.get("/:id/suggestions-economie", fermeAuCuisinier, async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     if (!idUrlValide(id)) {

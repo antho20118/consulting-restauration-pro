@@ -7,7 +7,7 @@ import ImporterRecetteModal from "../components/ImporterRecetteModal";
 import ImporterFichierCoutsModal from "../components/ImporterFichierCoutsModal";
 import ImporterTechniquesFichierModal from "../components/ImporterTechniquesFichierModal";
 import ImporterRecettesExcelSecuriseModal from "../components/ImporterRecettesExcelSecuriseModal";
-import { API_URL, apiFetch } from "../../../config/api";
+import { API_URL, apiFetch, voitLesTarifs } from "../../../config/api";
 import toast from "react-hot-toast";
 import { getRecettes, supprimerRecette, supprimerToutesLesRecettes } from "../services/recetteService";
 import { exporterExcel } from "../../../common/exportExcel";
@@ -176,6 +176,8 @@ export default function RecettesPage() {
   }
 
   async function exporter() {
+    // Cuisinier : export sans aucune colonne de montant (le serveur ne les lui envoie d'ailleurs pas).
+    const tarifsVisibles = voitLesTarifs();
     await exporterExcel(`recettes_${new Date().toISOString().slice(0, 10)}.xlsx`, [
       {
         nom: "Recettes",
@@ -184,12 +186,16 @@ export default function RecettesPage() {
           Catégorie: recette.categorie?.nom ?? "",
           "Sous-catégorie": recette.sousCategorie?.nom ?? "",
           Portions: recette.portions,
-          // Coût incalculable : cellule vide, jamais un faux 0 € (voir Recette.calculImpossible).
-          "Coût total (€)": recette.calculImpossible ? "" : Number(recette.coutTotal.toFixed(2)),
-          "Coût / portion (€)": recette.calculImpossible ? "" : Number(recette.coutParPortion.toFixed(2)),
-          "Prix de vente HT (€)": recette.prixVenteHT ?? "",
-          "Food cost (%)": recette.foodCostPct != null ? Number(recette.foodCostPct.toFixed(1)) : "",
-          "Marge HT (€)": recette.margeHT != null ? Number(recette.margeHT.toFixed(2)) : "",
+          ...(tarifsVisibles
+            ? {
+                // Coût incalculable : cellule vide, jamais un faux 0 € (voir Recette.calculImpossible).
+                "Coût total (€)": recette.calculImpossible ? "" : Number(recette.coutTotal.toFixed(2)),
+                "Coût / portion (€)": recette.calculImpossible ? "" : Number(recette.coutParPortion.toFixed(2)),
+                "Prix de vente HT (€)": recette.prixVenteHT ?? "",
+                "Food cost (%)": recette.foodCostPct != null ? Number(recette.foodCostPct.toFixed(1)) : "",
+                "Marge HT (€)": recette.margeHT != null ? Number(recette.margeHT.toFixed(2)) : "",
+              }
+            : {}),
         })),
       },
       {
@@ -200,7 +206,7 @@ export default function RecettesPage() {
             Ingrédient: ligne.article.nom,
             Quantité: ligne.quantite,
             Unité: ligne.unite.symbole,
-            "Coût ligne (€)": Number(ligne.coutLigne.toFixed(2)),
+            ...(tarifsVisibles ? { "Coût ligne (€)": Number(ligne.coutLigne.toFixed(2)) } : {}),
           }))
         ),
       },
@@ -241,11 +247,17 @@ export default function RecettesPage() {
         }}
       >
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button className="btn-primary" onClick={ouvrirCreation}>+ Nouvelle recette</button>
-          <button onClick={() => setImportOuvert(true)}>Importer une recette</button>
-          <button onClick={() => setImportFichierCoutsOuvert(true)}>Importer un fichier de coûts</button>
-          <button onClick={() => setImportTechniquesFichierOuvert(true)}>Importer des techniques (fichier)</button>
-          <button onClick={() => setImportExcelSecuriseOuvert(true)}>Importer Excel (sécurisé)</button>
+          {/* Cuisinier : consultation seule (saisie chiffrée et réservée à la gestion, refusée par le
+              serveur) — voir voitLesTarifs. */}
+          {voitLesTarifs() && (
+            <>
+              <button className="btn-primary" onClick={ouvrirCreation}>+ Nouvelle recette</button>
+              <button onClick={() => setImportOuvert(true)}>Importer une recette</button>
+              <button onClick={() => setImportFichierCoutsOuvert(true)}>Importer un fichier de coûts</button>
+              <button onClick={() => setImportTechniquesFichierOuvert(true)}>Importer des techniques (fichier)</button>
+              <button onClick={() => setImportExcelSecuriseOuvert(true)}>Importer Excel (sécurisé)</button>
+            </>
+          )}
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 
@@ -273,7 +285,7 @@ export default function RecettesPage() {
         </div>
       </div>
 
-      {recettes.length > 0 && (
+      {recettes.length > 0 && voitLesTarifs() && (
         <div style={{ textAlign: "right", marginBottom: 10 }}>
           <button
             onClick={supprimerTout}

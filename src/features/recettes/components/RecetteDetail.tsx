@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import AlertesConsulting from "./AlertesConsulting";
 import SuggestionsEconomie from "./SuggestionsEconomie";
 import { getEvaluationHACCP, telechargerFichePdf } from "../services/recetteService";
+import { voitLesTarifs } from "../../../config/api";
 import type { EtapeEvalueeHACCP, Recette, RegleHACCP } from "../types/recette";
 
 type Props = {
@@ -48,6 +49,7 @@ function DetailReglesHACCP({ regles }: { regles: RegleHACCP[] }) {
 export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Props) {
   const [evaluationHACCP, setEvaluationHACCP] = useState<EtapeEvalueeHACCP[] | null>(null);
   const [telechargementEnCours, setTelechargementEnCours] = useState(false);
+  const tarifsVisibles = voitLesTarifs();
 
   useEffect(() => {
     getEvaluationHACCP(recette.id)
@@ -200,7 +202,7 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
             <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
               <th style={{ padding: "6px 0" }}>Ingrédient</th>
               <th style={{ padding: "6px 0" }}>Quantité</th>
-              <th style={{ padding: "6px 0", textAlign: "right" }}>Coût</th>
+              {tarifsVisibles && <th style={{ padding: "6px 0", textAlign: "right" }}>Coût</th>}
             </tr>
           </thead>
           <tbody>
@@ -210,9 +212,11 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
                 <td style={{ padding: "6px 0" }}>
                   {ligne.quantite} {ligne.unite.symbole}
                 </td>
-                <td style={{ padding: "6px 0", textAlign: "right" }}>
-                  {recette.calculImpossible ? "—" : `${ligne.coutLigne.toFixed(2)} €`}
-                </td>
+                {tarifsVisibles && (
+                  <td style={{ padding: "6px 0", textAlign: "right" }}>
+                    {recette.calculImpossible ? "—" : `${ligne.coutLigne.toFixed(2)} €`}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -285,6 +289,8 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
         </>
       )}
 
+      {tarifsVisibles && (
+      <>
       <div
         style={{
           background: "#f4f6f8",
@@ -325,14 +331,21 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
         <AlertesConsulting recetteId={recette.id} />
         <SuggestionsEconomie recetteId={recette.id} />
       </div>
+      </>
+      )}
 
       <div
         className="fiche-technique-sans-impression"
         style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
       >
-        <button className="btn-danger" onClick={() => onDelete(recette)}>
-          Supprimer
-        </button>
+        {/* Cuisinier : consultation seule (voir voitLesTarifs) ; div vide pour garder la mise en page. */}
+        {tarifsVisibles ? (
+          <button className="btn-danger" onClick={() => onDelete(recette)}>
+            Supprimer
+          </button>
+        ) : (
+          <div />
+        )}
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onClose}>Fermer</button>
           <button onClick={() => window.print()}>Imprimer</button>
@@ -352,9 +365,11 @@ export default function RecetteDetail({ recette, onClose, onEdit, onDelete }: Pr
           >
             🏭 Planifier une production
           </Link>
-          <button className="btn-primary" onClick={() => onEdit(recette)}>
-            Modifier
-          </button>
+          {tarifsVisibles && (
+            <button className="btn-primary" onClick={() => onEdit(recette)}>
+              Modifier
+            </button>
+          )}
         </div>
       </div>
     </div>
