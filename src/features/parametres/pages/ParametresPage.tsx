@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { getUtilisateur } from "../../../config/api";
+import { getUtilisateur, voitLesTarifs } from "../../../config/api";
 import SocieteSection from "../components/SocieteSection";
 import CategoriesManager from "../components/CategoriesManager";
 import CategoriesRecetteManager from "../components/CategoriesRecetteManager";
@@ -40,9 +40,12 @@ export default function ParametresPage() {
     <div style={{ padding: 20 }}>
       <h1>⚙ Paramètres</h1>
 
-      <Section titre="Société">
-        <SocieteSection />
-      </Section>
+      {/* Coefficient multiplicateur (politique de prix) : jamais pour un cuisinier (voitLesTarifs). */}
+      {voitLesTarifs() && (
+        <Section titre="Société">
+          <SocieteSection />
+        </Section>
+      )}
 
       {estProprietaire && (
         <Section titre="Comptes utilisateurs">

@@ -33,6 +33,13 @@ export type UtilisateurConnecte = {
   superAdmin: boolean;
 };
 
+// Décision du 15/10 : un CUISINIER ne voit aucun tarif. Le serveur retire déjà tous les montants de
+// ses réponses et lui ferme les écrans financiers (server/middleware/masquerTarifs.ts) : côté
+// interface, seulement pour ne pas lui présenter de colonnes vides ni de pages refusées.
+export function voitLesTarifs(): boolean {
+  return getUtilisateur()?.role !== "CUISINIER";
+}
+
 export function getUtilisateur(): UtilisateurConnecte | null {
   const brut = localStorage.getItem(CLE_UTILISATEUR);
   if (!brut) return null;

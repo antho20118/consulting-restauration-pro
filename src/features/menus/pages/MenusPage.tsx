@@ -4,6 +4,7 @@ import MenusTable from "../components/MenusTable";
 import MenuForm from "../components/MenuForm";
 import { getMenus, supprimerMenu } from "../services/menuService";
 import { exporterExcel } from "../../../common/exportExcel";
+import { voitLesTarifs } from "../../../config/api";
 import type { Menu } from "../types/menu";
 
 export default function MenusPage() {
@@ -46,16 +47,22 @@ export default function MenusPage() {
   }
 
   async function exporter() {
+    // Cuisinier : export sans aucune colonne de montant (le serveur ne les lui envoie d'ailleurs pas).
+    const tarifsVisibles = voitLesTarifs();
     await exporterExcel(`menus_${new Date().toISOString().slice(0, 10)}.xlsx`, [
       {
         nom: "Menus",
         lignes: menusFiltres.map((menu) => ({
           Nom: menu.nom,
           Catégorie: menu.categorie?.nom ?? "",
-          "Coût par personne (€)": menu.calculImpossible ? "" : Number(menu.coutTotal.toFixed(2)),
-          "Prix de vente HT (€)": menu.prixVenteHT ?? "",
-          "Food cost (%)": menu.foodCostPct != null ? Number(menu.foodCostPct.toFixed(1)) : "",
-          "Marge HT (€)": menu.margeHT != null ? Number(menu.margeHT.toFixed(2)) : "",
+          ...(tarifsVisibles
+            ? {
+                "Coût par personne (€)": menu.calculImpossible ? "" : Number(menu.coutTotal.toFixed(2)),
+                "Prix de vente HT (€)": menu.prixVenteHT ?? "",
+                "Food cost (%)": menu.foodCostPct != null ? Number(menu.foodCostPct.toFixed(1)) : "",
+                "Marge HT (€)": menu.margeHT != null ? Number(menu.margeHT.toFixed(2)) : "",
+              }
+            : {}),
         })),
       },
       {
@@ -65,7 +72,7 @@ export default function MenusPage() {
             Menu: menu.nom,
             Recette: ligne.recette.nom,
             Quantité: ligne.quantite,
-            "Coût ligne (€)": Number(ligne.coutLigne.toFixed(2)),
+            ...(tarifsVisibles ? { "Coût ligne (€)": Number(ligne.coutLigne.toFixed(2)) } : {}),
           }))
         ),
       },
@@ -86,7 +93,8 @@ export default function MenusPage() {
         }}
       >
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="btn-primary" onClick={ouvrirCreation}>+ Nouveau menu</button>
+          {/* Cuisinier : consultation seule (voir voitLesTarifs). */}
+          {voitLesTarifs() && <button className="btn-primary" onClick={ouvrirCreation}>+ Nouveau menu</button>}
           <button onClick={exporter}>Exporter Excel</button>
         </div>
 

@@ -44,7 +44,8 @@ type RecetteFichePdf = {
     quantite: number;
     unite: { symbole: string };
     article: { nom: string };
-    coutLigne: number;
+    // Absent avec couts null (fiche d'un CUISINIER, voir couts ci-dessous).
+    coutLigne?: number;
   }[];
   etapes: {
     id: number;
@@ -52,10 +53,14 @@ type RecetteFichePdf = {
     pointCritiqueHACCP: boolean;
     controleHACCP: string | null;
   }[];
-  coutParPortion: number;
-  coutParKgFini: number | null;
-  prixVenteHT: number | null;
-  foodCostPct: number | null;
+  // null : fiche sans aucun montant (CUISINIER, décision du 15/10 — voir
+  // server/middleware/masquerTarifs.ts) ; ni colonne « Coût » ni pied de page chiffré.
+  couts: {
+    coutParPortion: number;
+    coutParKgFini: number | null;
+    prixVenteHT: number | null;
+    foodCostPct: number | null;
+  } | null;
 };
 
 const styles = StyleSheet.create({
@@ -135,6 +140,7 @@ function formaterEuros(valeur: number): string {
 }
 
 export async function genererFicheRecettePdf(recette: RecetteFichePdf): Promise<Buffer> {
+  const { couts } = recette;
   const sousTitreParts = [
     recette.categorie?.nom ?? "Sans catégorie",
     recette.sousCategorie?.nom,
@@ -189,7 +195,7 @@ export async function genererFicheRecettePdf(recette: RecetteFichePdf): Promise<
         <View style={styles.ligneTableauEntete}>
           <Text style={styles.colIngredient}>Ingrédient</Text>
           <Text style={styles.colQuantite}>Quantité</Text>
-          <Text style={styles.colCout}>Coût</Text>
+          {couts && <Text style={styles.colCout}>Coût</Text>}
         </View>
         {recette.lignes.map((ligne) => (
           <View key={ligne.id} style={styles.ligneTableau}>
@@ -197,7 +203,7 @@ export async function genererFicheRecettePdf(recette: RecetteFichePdf): Promise<
             <Text style={styles.colQuantite}>
               {ligne.quantite} {ligne.unite.symbole}
             </Text>
-            <Text style={styles.colCout}>{formaterEuros(ligne.coutLigne)}</Text>
+            {couts && <Text style={styles.colCout}>{formaterEuros(ligne.coutLigne ?? 0)}</Text>}
           </View>
         ))}
 
@@ -225,12 +231,14 @@ export async function genererFicheRecettePdf(recette: RecetteFichePdf): Promise<
           </>
         )}
 
-        <View style={styles.piedPage}>
-          <Text>Coût / portion : {formaterEuros(recette.coutParPortion)}</Text>
-          {recette.coutParKgFini != null && <Text>Coût / kg fini : {formaterEuros(recette.coutParKgFini)}</Text>}
-          <Text>Prix de vente HT : {recette.prixVenteHT != null ? formaterEuros(recette.prixVenteHT) : "—"}</Text>
-          <Text>Food cost : {recette.foodCostPct != null ? `${recette.foodCostPct.toFixed(1)} %` : "—"}</Text>
-        </View>
+        {couts && (
+          <View style={styles.piedPage}>
+            <Text>Coût / portion : {formaterEuros(couts.coutParPortion)}</Text>
+            {couts.coutParKgFini != null && <Text>Coût / kg fini : {formaterEuros(couts.coutParKgFini)}</Text>}
+            <Text>Prix de vente HT : {couts.prixVenteHT != null ? formaterEuros(couts.prixVenteHT) : "—"}</Text>
+            <Text>Food cost : {couts.foodCostPct != null ? `${couts.foodCostPct.toFixed(1)} %` : "—"}</Text>
+          </View>
+        )}
       </Page>
     </Document>
   );

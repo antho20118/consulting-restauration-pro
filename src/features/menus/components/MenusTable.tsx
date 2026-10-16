@@ -1,5 +1,10 @@
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import type { Menu } from "../types/menu";
+import { voitLesTarifs } from "../../../config/api";
+
+// Colonnes de montant et actions de gestion, absentes pour un cuisinier (décision du 15/10, voir
+// voitLesTarifs) : consultation seule.
+const COLONNES_GESTION = new Set(["coutTotal", "prixVenteHT", "foodCostPct", "actions"]);
 
 type Props = {
   menus: Menu[];
@@ -60,11 +65,13 @@ export default function MenusTable({ menus, onEdit, onDelete }: Props) {
     },
   ];
 
+  const colonnesVisibles = voitLesTarifs() ? columns : columns.filter((c) => !COLONNES_GESTION.has(c.field));
+
   return (
     <div style={{ height: 600, width: "100%" }}>
       <DataGrid
         rows={menus}
-        columns={columns}
+        columns={colonnesVisibles}
         pageSizeOptions={[10, 25, 50]}
         initialState={{
           pagination: {

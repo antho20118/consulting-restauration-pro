@@ -10,6 +10,7 @@ import { autoriserEcriture } from "./middleware/autoriserEcriture.js";
 import { requireRole } from "./middleware/requireRole.js";
 import { requireSuperAdmin } from "./middleware/requireSuperAdmin.js";
 import { autoriserEcritureSuperAdmin } from "./middleware/autoriserEcritureSuperAdmin.js";
+import { fermeAuCuisinier, masquerTarifsCuisinier } from "./middleware/masquerTarifs.js";
 import utilisateursRouter from "./routes/utilisateurs.js";
 import articlesRouter from "./routes/articles.js";
 import categoriesRouter from "./routes/categories.js";
@@ -82,6 +83,10 @@ app.use("/api/auth", authRouter);
 // jeton justement invalide/expiré (voir journalErreursClient.ts), jamais en exiger un valide.
 app.use("/api/journal-erreurs/client", journalErreursClientRouter);
 app.use("/api", requireAuth);
+// Aucun montant (prix, coût, marge…) dans les réponses envoyées à un CUISINIER (décision du 15/10,
+// voir server/middleware/masquerTarifs.ts) ; les écrans purement financiers lui sont fermés plus bas
+// (fermeAuCuisinier).
+app.use("/api", masquerTarifsCuisinier);
 
 // Matrice de permissions par rôle (voir Utilisateur/RoleUtilisateur, prisma/schema.prisma) : posée
 // ici, groupe de routeurs par groupe de routeurs, plutôt qu'éparpillée dans chacun des 24 fichiers
@@ -103,11 +108,11 @@ app.use("/api/sous-categories-recette", ECRITURE_GESTION, sousCategoriesRecetteR
 app.use("/api/unites", autoriserEcritureSuperAdmin, unitesRouter);
 app.use("/api/recettes", ECRITURE_GESTION, recettesRouter);
 app.use("/api/menus", ECRITURE_GESTION, menusRouter);
-app.use("/api/dashboard", dashboardRouter);
+app.use("/api/dashboard", fermeAuCuisinier, dashboardRouter);
 // Paramètres société (SIRET, coefficient multiplicateur) : plus sensible que la gestion courante,
 // modification réservée au PROPRIETAIRE — jamais au CHEF, contrairement au reste du groupe gestion.
 app.use("/api/societe", autoriserEcriture(["PROPRIETAIRE"]), societeRouter);
-app.use("/api/fournisseurs", ECRITURE_GESTION, fournisseursRouter);
+app.use("/api/fournisseurs", fermeAuCuisinier, ECRITURE_GESTION, fournisseursRouter);
 // tva : référentiel partagé entre sociétés, écriture réservée à l'opérateur de la plateforme (voir
 // F11 de l'audit forensique et le commentaire du modèle TVA dans schema.prisma).
 app.use("/api/tva", autoriserEcritureSuperAdmin, tvaRouter);
@@ -115,16 +120,16 @@ app.use("/api/allergenes", ECRITURE_GESTION, allergenesRouter);
 app.use("/api/mouvements", ECRITURE_OPERATIONNEL, mouvementsRouter);
 app.use("/api/depots", ECRITURE_GESTION, depotsRouter);
 app.use("/api/alias-ingredients", ECRITURE_GESTION, aliasIngredientsRouter);
-app.use("/api/achats", ECRITURE_GESTION, achatsRouter);
-app.use("/api/commandes", ECRITURE_GESTION, commandesRouter);
+app.use("/api/achats", fermeAuCuisinier, ECRITURE_GESTION, achatsRouter);
+app.use("/api/commandes", fermeAuCuisinier, ECRITURE_GESTION, commandesRouter);
 app.use("/api/production", productionRouter);
 app.use("/api/productions", ECRITURE_OPERATIONNEL, productionsRouter);
 app.use("/api/haccp", haccpRouter);
-app.use("/api/consulting", consultingRouter);
-app.use("/api/questions", questionsReponsesRouter);
-app.use("/api/documents-fournisseurs", ECRITURE_GESTION, documentsFournisseursRouter);
-app.use("/api/listings-fournisseur", ECRITURE_GESTION, listingsFournisseurRouter);
-app.use("/api/ventes", ECRITURE_GESTION, ventesRouter);
+app.use("/api/consulting", fermeAuCuisinier, consultingRouter);
+app.use("/api/questions", fermeAuCuisinier, questionsReponsesRouter);
+app.use("/api/documents-fournisseurs", fermeAuCuisinier, ECRITURE_GESTION, documentsFournisseursRouter);
+app.use("/api/listings-fournisseur", fermeAuCuisinier, ECRITURE_GESTION, listingsFournisseurRouter);
+app.use("/api/ventes", fermeAuCuisinier, ECRITURE_GESTION, ventesRouter);
 // requireSuperAdmin, pas requireRole(["PROPRIETAIRE"]) : cette route exporte/télécharge une
 // sauvegarde complète de TOUTES les sociétés sans filtre (voir prisma/sauvegarder.ts) — un
 // PROPRIETAIRE n'a d'autorité que sur SA société, jamais sur celles des autres clients.
