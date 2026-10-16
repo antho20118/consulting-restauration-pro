@@ -119,7 +119,7 @@ test("prévisualisation : un article choisi par l'utilisateur vaut confirmation 
   await expect(page.locator('button:has-text("Enregistrer")')).toHaveCount(0, { timeout: 10_000 });
 
   await expect
-    .poll(async () => (await prisma.aliasIngredientImport.findUnique({ where: { texteNormalise: INGREDIENT } }))?.articleId)
+    .poll(async () => (await prisma.aliasIngredientImport.findFirst({ where: { texteNormalise: INGREDIENT, societe: { articles: { some: { id: articleId } } } } }))?.articleId)
     .toBe(articleId);
 });
 

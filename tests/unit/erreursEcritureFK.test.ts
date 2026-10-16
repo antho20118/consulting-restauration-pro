@@ -206,7 +206,7 @@ test("9. POST /alias-ingredients avec articleId inexistant : 204, aucune écritu
     correspondances: [{ texte: texteTest, articleId: ID_INEXISTANT }],
   });
   assert.equal(status, 204);
-  const cree = await prisma.aliasIngredientImport.findUnique({ where: { texteNormalise: normaliserTexte(texteTest) } });
+  const cree = await prisma.aliasIngredientImport.findFirst({ where: { texteNormalise: normaliserTexte(texteTest) } });
   assert.equal(cree, null, "aucune correspondance ne doit avoir été créée");
 });
 

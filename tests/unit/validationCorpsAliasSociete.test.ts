@@ -55,7 +55,7 @@ function texteUnique() {
 }
 
 const lireAlias = (texte: string) =>
-  prisma.aliasIngredientImport.findUnique({ where: { texteNormalise: normaliserTexte(texte) } });
+  prisma.aliasIngredientImport.findFirst({ where: { texteNormalise: normaliserTexte(texte) } });
 
 // Interception confinée de la seule écriture que journaliserErreur effectue réellement
 // (prisma.journalErreur.create) : capture les lignes exactement créées par `executer`, puis

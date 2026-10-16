@@ -32,11 +32,10 @@ const schemaCorrespondances = z.object({
 // pas besoin de pagination.
 router.get("/", async (req: Request, res: Response) => {
   try {
-    // AliasIngredientImport n'a pas de societeId propre (texteNormalise est une clé globale, voir
-    // prisma/schema.prisma) : scopé transitivement par l'article visé, pour ne jamais suggérer à
-    // une société l'articleId d'une autre société (voir la matrice de permissions, server/app.ts).
+    // Correspondances propres à la société (clé unique societeId + texteNormalise, voir
+    // prisma/schema.prisma) : jamais celles d'une autre société.
     const alias = await prisma.aliasIngredientImport.findMany({
-      where: { article: { societeId: req.utilisateur!.societeId } },
+      where: { societeId: req.utilisateur!.societeId },
       select: { texteNormalise: true, articleId: true },
     });
 
@@ -66,14 +65,14 @@ router.post("/", async (req: Request, res: Response) => {
       c.texte?.trim() && c.articleId ? [{ texte: c.texte, articleId: c.articleId }] : []
     );
 
-    // texteNormalise est une clé globale (voir GET ci-dessus) : jamais rediriger cet alias partagé
-    // vers l'articleId d'une AUTRE société en devinant/énumérant simplement un id — silencieusement
+    // Jamais un alias vers l'articleId d'une AUTRE société (id deviné ou énuméré) — silencieusement
     // ignoré, même principe permissif que pour un articleId désactivé entretemps (voir commentaire
     // au-dessus de cette route).
+    const societeId = req.utilisateur!.societeId;
     const articlesDeLaSociete = await prisma.article.findMany({
       where: {
         id: { in: [...new Set(candidates.map((c) => c.articleId))] },
-        societeId: req.utilisateur!.societeId,
+        societeId,
       },
       select: { id: true },
     });
@@ -85,9 +84,11 @@ router.post("/", async (req: Request, res: Response) => {
         const texteNormalise = normaliserTexte(c.texte);
         if (!texteNormalise) return null;
 
+        // Clé (société, texte) : la correspondance d'une autre société pour le même texte reste
+        // intacte (point 10 de l'audit du 15/10).
         return prisma.aliasIngredientImport.upsert({
-          where: { texteNormalise },
-          create: { texteNormalise, articleId: c.articleId },
+          where: { societeId_texteNormalise: { societeId, texteNormalise } },
+          create: { societeId, texteNormalise, articleId: c.articleId },
           update: { articleId: c.articleId },
         });
       })

@@ -233,11 +233,11 @@ test("POST /ventes/import : écrit les lignes, refuse une recette retenue non co
 
   // designationAlias ne correspondait à aucune recette (aucun_candidat) : aucun alias n'a donc été
   // appris pour lui, contrairement à recetteExacteNom validé plus haut.
-  const aliasAppris = await prisma.aliasProduitVenduImport.findUnique({
-    where: { texteNormalise: normaliserTexte(recetteExacteNom) },
+  const aliasAppris = await prisma.aliasProduitVenduImport.findFirst({
+    where: { societeId, texteNormalise: normaliserTexte(recetteExacteNom) },
   });
   assert.equal(aliasAppris?.recetteId, recetteExacteId);
-  const aliasNonAppris = await prisma.aliasProduitVenduImport.findUnique({
+  const aliasNonAppris = await prisma.aliasProduitVenduImport.findFirst({
     where: { texteNormalise: normaliserTexte(designationAlias) },
   });
   assert.equal(aliasNonAppris, null);
@@ -246,8 +246,8 @@ test("POST /ventes/import : écrit les lignes, refuse une recette retenue non co
 test("POST /ventes/import/apercu : une désignation distincte, déjà apprise comme alias, est proposée en ALIAS", async () => {
   const designationDifferente = "PLAT DU JOUR 12";
   await prisma.aliasProduitVenduImport.upsert({
-    where: { texteNormalise: normaliserTexte(designationDifferente) },
-    create: { texteNormalise: normaliserTexte(designationDifferente), recetteId: recetteExacteId },
+    where: { societeId_texteNormalise: { societeId, texteNormalise: normaliserTexte(designationDifferente) } },
+    create: { societeId, texteNormalise: normaliserTexte(designationDifferente), recetteId: recetteExacteId },
     update: { recetteId: recetteExacteId },
   });
 

@@ -164,7 +164,7 @@ test("Import photo → normalisation : ingrédients multiples séparés, aucune 
   // rattachement faux serait reproduit à chaque import suivant (voir correspondancesAMemoriser).
   // L'enregistrement des correspondances n'est pas attendu par le formulaire : sondage court.
   await expect
-    .poll(async () => (await prisma.aliasIngredientImport.findUnique({ where: { texteNormalise: "sucre" } }))?.articleId)
+    .poll(async () => (await prisma.aliasIngredientImport.findFirst({ where: { societeId, texteNormalise: "sucre" } }))?.articleId)
     .toBe(articleSucreId);
   const aliasBeurre = await prisma.aliasIngredientImport.findFirst({
     where: { texteNormalise: "beurre", articleId: articleBeurreId },

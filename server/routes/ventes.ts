@@ -56,7 +56,8 @@ type LigneEntree = {
 async function construireContexteVentes(societeId: number): Promise<ContexteRapprochementVente> {
   const [recettesExistantes, aliasExistants] = await Promise.all([
     prisma.recette.findMany({ where: { societeId, actif: true }, select: { id: true, nom: true } }),
-    prisma.aliasProduitVenduImport.findMany({ select: { texteNormalise: true, recetteId: true } }),
+    // Correspondances propres à la société (point 10 de l'audit du 15/10, voir le modèle).
+    prisma.aliasProduitVenduImport.findMany({ where: { societeId }, select: { texteNormalise: true, recetteId: true } }),
   ]);
 
   const candidats: CandidatRecetteVente[] = recettesExistantes.map((r) => ({ recetteId: r.id, nom: r.nom }));
@@ -301,8 +302,8 @@ router.post("/import", async (req: Request, res: Response) => {
         // Apprentissage de l'alias : mémorise la correspondance confirmée par un humain pour le
         // prochain import portant la même désignation — jamais pour une ligne rejetée ou en attente.
         await tx.aliasProduitVenduImport.upsert({
-          where: { texteNormalise: designationNormalisee },
-          create: { texteNormalise: designationNormalisee, recetteId: recetteRetenueId },
+          where: { societeId_texteNormalise: { societeId, texteNormalise: designationNormalisee } },
+          create: { societeId, texteNormalise: designationNormalisee, recetteId: recetteRetenueId },
           update: { recetteId: recetteRetenueId },
         });
         aliasAppris.set(designationNormalisee, recetteRetenueId);

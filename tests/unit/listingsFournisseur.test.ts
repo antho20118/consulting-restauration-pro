@@ -134,7 +134,7 @@ test("crée un DocumentFournisseur(LISTING) et ses lignes niveau A+B, sans touch
   const articleReference = await creerArticleAvecTarif("LISTING PHOTO TEST Article Référencé", "REF-42", 10);
   const articleAlias = await creerArticleAvecTarif("LISTING PHOTO TEST Persil Plat Botte", null, 2);
   await prisma.aliasIngredientImport.create({
-    data: { texteNormalise: "persil frise", articleId: articleAlias.id },
+    data: { societeId, texteNormalise: "persil frise", articleId: articleAlias.id },
   });
   // Noms courts délibérément (sans préfixe "LISTING PHOTO TEST") : un préfixe commun à toutes les
   // fixtures diluerait le score Jaccard (voir MOTS_VIDES, importListing.ts — "listing"/"photo"/
