@@ -14,14 +14,28 @@ function estPanneReseau(erreur: unknown): boolean {
   return erreur instanceof TypeError;
 }
 
+// Clé unique et moment de la saisie, fixés AVANT la première tentative et réutilisés tels quels si
+// elle échoue faute de réseau : une requête partie mais dont la réponse s'est perdue est ainsi
+// reconnue par le serveur au renvoi (jamais une seconde production ni un second contrôle), et la
+// saisie mise en file garde l'heure où elle a réellement été faite (point 9 de l'audit du 15/10).
+// En ligne, seule la clé est transmise : l'heure retenue reste celle du serveur, plus fiable que
+// l'horloge du téléphone.
+function nouvelleSaisie() {
+  return { idLocal: crypto.randomUUID(), saisiLe: new Date().toISOString() };
+}
+
 export type ResultatEnregistrementProduction =
   | { sorte: "synchronise"; production: ProductionDetail }
   | { sorte: "en_attente"; idLocal: string };
 
-async function mettreEnFileProduction(recetteId: number, cible: CibleProduction, depotId?: number): Promise<string> {
-  const idLocal = crypto.randomUUID();
-  await ajouterElement({ type: "production", idLocal, recetteId, cible, depotId });
-  return idLocal;
+async function mettreEnFileProduction(
+  saisie: { idLocal: string; saisiLe: string },
+  recetteId: number,
+  cible: CibleProduction,
+  depotId?: number
+): Promise<string> {
+  await ajouterElement({ type: "production", ...saisie, recetteId, cible, depotId });
+  return saisie.idLocal;
 }
 
 export async function enregistrerProductionResiliente(
@@ -29,15 +43,16 @@ export async function enregistrerProductionResiliente(
   cible: CibleProduction,
   depotId?: number
 ): Promise<ResultatEnregistrementProduction> {
+  const saisie = nouvelleSaisie();
   if (!navigator.onLine) {
-    return { sorte: "en_attente", idLocal: await mettreEnFileProduction(recetteId, cible, depotId) };
+    return { sorte: "en_attente", idLocal: await mettreEnFileProduction(saisie, recetteId, cible, depotId) };
   }
   try {
-    const production = await enregistrerProduction(recetteId, cible, depotId);
+    const production = await enregistrerProduction(recetteId, cible, depotId, { cleIdempotence: saisie.idLocal });
     return { sorte: "synchronise", production };
   } catch (erreur) {
     if (estPanneReseau(erreur)) {
-      return { sorte: "en_attente", idLocal: await mettreEnFileProduction(recetteId, cible, depotId) };
+      return { sorte: "en_attente", idLocal: await mettreEnFileProduction(saisie, recetteId, cible, depotId) };
     }
     throw erreur;
   }
@@ -49,33 +64,37 @@ export type ResultatAjoutControle =
   | { sorte: "synchronise"; production: ProductionDetail }
   | { sorte: "en_attente"; idLocal: string };
 
-async function mettreEnFileControle(productionId: number, controle: ControleSaisi): Promise<string> {
-  const idLocal = crypto.randomUUID();
+async function mettreEnFileControle(
+  saisie: { idLocal: string; saisiLe: string },
+  productionId: number,
+  controle: ControleSaisi
+): Promise<string> {
   await ajouterElement({
     type: "controleHaccp",
-    idLocal,
+    ...saisie,
     productionRef: { sorte: "reel", id: productionId },
     recetteEtapeId: controle.recetteEtapeId,
     valeur: controle.valeur,
     conforme: controle.conforme,
     commentaire: controle.commentaire,
   });
-  return idLocal;
+  return saisie.idLocal;
 }
 
 export async function ajouterControleResilient(
   productionId: number,
   controle: ControleSaisi
 ): Promise<ResultatAjoutControle> {
+  const saisie = nouvelleSaisie();
   if (!navigator.onLine) {
-    return { sorte: "en_attente", idLocal: await mettreEnFileControle(productionId, controle) };
+    return { sorte: "en_attente", idLocal: await mettreEnFileControle(saisie, productionId, controle) };
   }
   try {
-    const production = await ajouterControle(productionId, controle);
+    const production = await ajouterControle(productionId, { ...controle, cleIdempotence: saisie.idLocal });
     return { sorte: "synchronise", production };
   } catch (erreur) {
     if (estPanneReseau(erreur)) {
-      return { sorte: "en_attente", idLocal: await mettreEnFileControle(productionId, controle) };
+      return { sorte: "en_attente", idLocal: await mettreEnFileControle(saisie, productionId, controle) };
     }
     throw erreur;
   }
@@ -90,15 +109,15 @@ export async function ajouterControleSurProductionLocale(
   idLocalProduction: string,
   controle: ControleSaisi
 ): Promise<{ idLocal: string }> {
-  const idLocal = crypto.randomUUID();
+  const saisie = nouvelleSaisie();
   await ajouterElement({
     type: "controleHaccp",
-    idLocal,
+    ...saisie,
     productionRef: { sorte: "local", idLocal: idLocalProduction },
     recetteEtapeId: controle.recetteEtapeId,
     valeur: controle.valeur,
     conforme: controle.conforme,
     commentaire: controle.commentaire,
   });
-  return { idLocal };
+  return { idLocal: saisie.idLocal };
 }

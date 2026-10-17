@@ -37,6 +37,8 @@ export type ControleHACCP = {
   valeur: string;
   conforme: boolean;
   commentaire: string | null;
+  // Réception par le serveur — différente de dateHeure pour un contrôle saisi hors connexion.
+  createdAt?: string;
 };
 
 export type Production = {

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 
 import prisma from "../prisma.js";
 import { planifierProduction, type CibleProduction } from "../utils/planifierProduction.js";
@@ -12,7 +13,16 @@ import { UniteIncompatibleError } from "../utils/coutRecette.js";
 
 const router = Router();
 
+// Saisie faite hors connexion puis rejouée par la file d'attente du téléphone (src/offline/, point 9
+// de l'audit du 15/10) : clé unique de la saisie (son idLocal) et moment réel de la saisie. Les deux
+// sont absents en ligne, où le comportement reste inchangé (heure du serveur).
+const champsSaisieHorsLigne = {
+  cleIdempotence: z.uuid().optional(),
+};
+
 const schemaCreation = z.object({
+  ...champsSaisieHorsLigne,
+  realiseeLe: z.iso.datetime({ offset: true }).optional(),
   recetteId: z.number().int().positive(),
   depotId: z.number().int().positive().optional(),
   cible: z.discriminatedUnion("mode", [
@@ -22,11 +32,77 @@ const schemaCreation = z.object({
 });
 
 const schemaControle = z.object({
+  ...champsSaisieHorsLigne,
+  constateLe: z.iso.datetime({ offset: true }).optional(),
   recetteEtapeId: z.number().int().positive(),
   valeur: z.string().trim().min(1, "La valeur constatée est obligatoire"),
   conforme: z.boolean(),
   commentaire: z.string().trim().optional(),
 });
+
+// Heure déclarée par l'appareil pour une saisie faite hors connexion. Bornée pour qu'elle ne puisse
+// pas servir à falsifier la traçabilité : jamais dans le futur (un appareil à l'heure fausse, en
+// avance, reçoit l'heure du serveur), jamais plus de 7 jours en arrière (refusé). L'heure de
+// réception par le serveur reste de toute façon enregistrée à part (createdAt) et affichée quand
+// elle diffère.
+const ANCIENNETE_MAX_MS = 7 * 24 * 3600_000;
+
+class HorodatageTropAncienError extends Error {}
+
+function horodatageDeclare(valeur: string | undefined): Date {
+  const maintenant = new Date();
+  if (!valeur) return maintenant;
+  const declaree = new Date(valeur);
+  if (declaree.getTime() > maintenant.getTime()) return maintenant;
+  if (maintenant.getTime() - declaree.getTime() > ANCIENNETE_MAX_MS) {
+    throw new HorodatageTropAncienError(
+      "Saisie de plus de 7 jours : elle ne peut plus être enregistrée avec sa date d'origine."
+    );
+  }
+  return declaree;
+}
+
+function estCleDejaUtilisee(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+// Même saisie déjà reçue (renvoi après une réponse perdue, ou deux envois simultanés) : renvoie la
+// production existante — jamais une seconde production ni une seconde déduction de stock. Une clé
+// déjà prise par une autre société est refusée sans rien en révéler.
+async function repondreSiProductionDejaRecue(
+  cleIdempotence: string | undefined,
+  societeId: number,
+  res: Response
+): Promise<boolean> {
+  if (!cleIdempotence) return false;
+  const existante = await prisma.production.findUnique({ where: { cleIdempotence }, ...inclusionProduction });
+  if (!existante) return false;
+  if (existante.societeId !== societeId) {
+    res.status(409).json({ error: "Cette saisie a déjà été utilisée" });
+    return true;
+  }
+  res.status(200).json({ ...existante, etapesCritiques: await etapesCritiquesDeLaRecette(existante.recetteId, societeId) });
+  return true;
+}
+
+// Même principe que repondreSiProductionDejaRecue, pour un contrôle HACCP : renvoie l'état actuel
+// de sa production, sans enregistrer un second contrôle.
+async function repondreSiControleDejaRecu(
+  cleIdempotence: string | undefined,
+  production: { id: number; recetteId: number; societeId: number },
+  res: Response
+): Promise<boolean> {
+  if (!cleIdempotence) return false;
+  const existant = await prisma.controleHACCPProduction.findUnique({ where: { cleIdempotence } });
+  if (!existant) return false;
+  if (existant.productionId !== production.id) {
+    res.status(409).json({ error: "Cette saisie a déjà été utilisée" });
+    return true;
+  }
+  const actuelle = await prisma.production.findUnique({ where: { id: production.id }, ...inclusionProduction });
+  res.status(200).json({ ...actuelle, etapesCritiques: await etapesCritiquesDeLaRecette(production.recetteId, production.societeId) });
+  return true;
+}
 
 const inclusionProduction = {
   include: {
@@ -124,8 +200,11 @@ router.post("/", async (req: Request, res: Response) => {
   }
 
   try {
-    const { recetteId, depotId, cible } = parsed.data;
+    const { recetteId, depotId, cible, cleIdempotence } = parsed.data;
     const societeId = req.utilisateur!.societeId;
+    const dateProduction = horodatageDeclare(parsed.data.realiseeLe);
+
+    if (await repondreSiProductionDejaRecue(cleIdempotence, societeId, res)) return;
 
     // Scopé par société : jamais permettre d'enregistrer une production pour une recette d'une
     // autre société en devinant/énumérant simplement un id (voir la matrice de permissions,
@@ -154,6 +233,8 @@ router.post("/", async (req: Request, res: Response) => {
           portionsProduites: planification.portionsCible,
           poidsFiniProduitG: planification.poidsFiniCibleG,
           creeParId: req.utilisateur!.id,
+          dateProduction,
+          cleIdempotence,
         },
         ...inclusionProduction,
       });
@@ -181,6 +262,14 @@ router.post("/", async (req: Request, res: Response) => {
     const etapesCritiques = await etapesCritiquesDeLaRecette(recetteId, societeId);
     res.status(201).json({ ...production, etapesCritiques });
   } catch (error) {
+    if (error instanceof HorodatageTropAncienError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    // Deux envois simultanés de la même saisie : le second bute sur la clé unique.
+    if (estCleDejaUtilisee(error) && (await repondreSiProductionDejaRecue(parsed.data.cleIdempotence, req.utilisateur!.societeId, res))) {
+      return;
+    }
     if (error instanceof StockInsuffisantError) {
       res.status(400).json({ error: "Stock insuffisant pour enregistrer cette production" });
       return;
@@ -205,8 +294,9 @@ router.post("/", async (req: Request, res: Response) => {
 // Ajoute un contrôle HACCP daté pour un point critique de cette production — jamais modifiable ni
 // supprimable après coup (aucune route PATCH/DELETE, voir ControleHACCPProduction) : une erreur de
 // saisie se corrige en ajoutant un nouveau contrôle, jamais en réécrivant l'historique. dateHeure
-// est toujours l'heure serveur au moment de l'enregistrement, jamais une date fournie par le
-// client (un horodatage falsifiable viderait la traçabilité de son sens).
+// est l'heure serveur, sauf pour un contrôle saisi hors connexion : l'heure de la saisie, bornée
+// (voir horodatageDeclare) pour qu'elle ne puisse pas falsifier la traçabilité ; l'heure de
+// réception reste enregistrée à part (createdAt).
 router.post("/:id/controles", async (req: Request, res: Response) => {
   const productionId = Number(req.params.id);
   if (!idUrlValide(productionId) || productionId <= 0) {
@@ -236,11 +326,15 @@ router.post("/:id/controles", async (req: Request, res: Response) => {
       return;
     }
 
+    if (await repondreSiControleDejaRecu(parsed.data.cleIdempotence, production, res)) return;
+    const dateHeure = horodatageDeclare(parsed.data.constateLe);
+
     await prisma.controleHACCPProduction.create({
       data: {
         productionId,
         recetteEtapeId: parsed.data.recetteEtapeId,
-        dateHeure: new Date(),
+        dateHeure,
+        cleIdempotence: parsed.data.cleIdempotence,
         valeur: parsed.data.valeur,
         conforme: parsed.data.conforme,
         commentaire: parsed.data.commentaire || null,
@@ -255,6 +349,15 @@ router.post("/:id/controles", async (req: Request, res: Response) => {
     const etapesCritiques = await etapesCritiquesDeLaRecette(production.recetteId, societeId);
     res.status(201).json({ ...misAJour, etapesCritiques });
   } catch (error) {
+    if (error instanceof HorodatageTropAncienError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    // Deux envois simultanés du même contrôle : le second bute sur la clé unique.
+    if (estCleDejaUtilisee(error)) {
+      const production = await prisma.production.findFirst({ where: { id: productionId, societeId: req.utilisateur!.societeId } });
+      if (production && (await repondreSiControleDejaRecu(parsed.data.cleIdempotence, production, res))) return;
+    }
     console.error(error);
     await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible d'enregistrer ce contrôle" });
