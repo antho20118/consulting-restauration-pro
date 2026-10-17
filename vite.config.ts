@@ -55,13 +55,19 @@ export default defineConfig({
             // réseau (recettes, menus, évaluation HACCP, productions) — jamais les routes
             // d'écriture (POST/PUT/DELETE), exclues ici par "method: GET" plutôt que par la seule
             // forme de l'URL, pour ne jamais mettre en cache par erreur la réponse d'une écriture.
-            urlPattern: /\/api\/(recettes|menus|productions)(\/\d+)?(\?.*)?$/,
+            // Catégories et sous-catégories de recettes (filtres de la page des fiches) et dépôts
+            // (choix du dépôt d'une production saisie sans réseau) : petites listes sans lesquelles
+            // ces écrans afficheraient une erreur réseau hors connexion.
+            urlPattern: /\/api\/(recettes|menus|productions|categories-recette|sous-categories-recette|depots)(\/\d+)?(\?.*)?$/,
             method: "GET",
             handler: "NetworkFirst",
             options: {
               cacheName: CACHE_LECTURES_HORS_LIGNE,
               networkTimeoutSeconds: 4,
-              expiration: { maxEntries: 300, maxAgeSeconds: 7 * 24 * 60 * 60 },
+              // Toutes les fiches sont préchargées à la connexion (voir
+              // src/offline/prechargementLectures.ts) : de quoi garder une carte de plusieurs
+              // centaines de recettes, chacune avec sa fiche et son évaluation HACCP.
+              expiration: { maxEntries: 1500, maxAgeSeconds: 7 * 24 * 60 * 60 },
               cacheableResponse: { statuses: [200] },
             },
           },
@@ -72,7 +78,10 @@ export default defineConfig({
             options: {
               cacheName: CACHE_LECTURES_HORS_LIGNE,
               networkTimeoutSeconds: 4,
-              expiration: { maxEntries: 300, maxAgeSeconds: 7 * 24 * 60 * 60 },
+              // Toutes les fiches sont préchargées à la connexion (voir
+              // src/offline/prechargementLectures.ts) : de quoi garder une carte de plusieurs
+              // centaines de recettes, chacune avec sa fiche et son évaluation HACCP.
+              expiration: { maxEntries: 1500, maxAgeSeconds: 7 * 24 * 60 * 60 },
               cacheableResponse: { statuses: [200] },
             },
           },
