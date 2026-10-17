@@ -11,9 +11,14 @@
 
 export type CibleProductionOffline = { mode: "portions" | "poidsFiniG"; valeur: number };
 
+// saisiLe : moment réel de la saisie (ISO), transmis au serveur avec idLocal comme clé unique de la
+// saisie (point 9 de l'audit du 15/10) — la production ou le contrôle est daté de la saisie, pas de
+// la synchronisation, et un renvoi (réponse perdue) n'est jamais enregistré deux fois. Optionnel :
+// absent des éléments mis en file avant cette version (le serveur prend alors son heure).
 export type ActionProduction = {
   type: "production";
   idLocal: string;
+  saisiLe?: string;
   recetteId: number;
   cible: CibleProductionOffline;
   depotId?: number;
@@ -24,6 +29,7 @@ export type ReferenceProduction = { sorte: "reel"; id: number } | { sorte: "loca
 export type ActionControleHACCP = {
   type: "controleHaccp";
   idLocal: string;
+  saisiLe?: string;
   productionRef: ReferenceProduction;
   recetteEtapeId: number;
   valeur: string;
@@ -58,6 +64,25 @@ export type ResultatTraitement = {
 
 function messageErreur(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : "Erreur réseau";
+}
+
+// Contrôles encore en file qui visaient, par sa référence locale, une production synchronisée pendant
+// ce passage : réécrits vers son id réel. Sans cela, un contrôle dont l'envoi échouait au même
+// passage que sa production restait bloqué pour toujours — la production quittait la file, plus
+// rien ne permettait de retrouver son id réel (point 9 de l'audit du 15/10). Renvoie uniquement les
+// éléments modifiés, à persister par l'appelant.
+export function rattacherProductionsSynchronisees(
+  elements: ElementFile[],
+  idsReels: Record<string, number>
+): ElementFile[] {
+  const modifies: ElementFile[] = [];
+  for (const element of elements) {
+    if (element.action.type !== "controleHaccp" || element.action.productionRef.sorte !== "local") continue;
+    const id = idsReels[element.action.productionRef.idLocal];
+    if (id === undefined) continue;
+    modifies.push({ ...element, action: { ...element.action, productionRef: { sorte: "reel", id } } });
+  }
+  return modifies;
 }
 
 // Traite les éléments de la file DANS LEUR ORDRE DE CRÉATION (jamais réordonnés) : c'est cet ordre

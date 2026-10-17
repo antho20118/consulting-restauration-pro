@@ -1,5 +1,5 @@
-import { traiterFile, type ActionControleHACCP, type ActionProduction } from "./fileAttenteCore";
-import { ajouterElement, appliquerResultatTraitement, busFileAttente, listerElements } from "./fileAttenteDb";
+import { rattacherProductionsSynchronisees, traiterFile, type ActionControleHACCP, type ActionProduction } from "./fileAttenteCore";
+import { ajouterElement, appliquerResultatTraitement, busFileAttente, listerElements, mettreAJourElements } from "./fileAttenteDb";
 import { ajouterControle, enregistrerProduction } from "../features/productions/services/productionService";
 
 // Émis avec {idLocal, id} à chaque production nouvellement synchronisée — écouté par
@@ -8,7 +8,11 @@ import { ajouterControle, enregistrerProduction } from "../features/productions/
 export const EVENEMENT_PRODUCTION_SYNCHRONISEE = "production-synchronisee";
 
 async function executerProduction(action: ActionProduction): Promise<number> {
-  const production = await enregistrerProduction(action.recetteId, action.cible, action.depotId);
+  // idLocal comme clé unique : un renvoi (réponse perdue) renvoie la production déjà créée.
+  const production = await enregistrerProduction(action.recetteId, action.cible, action.depotId, {
+    cleIdempotence: action.idLocal,
+    realiseeLe: action.saisiLe,
+  });
   return production.id;
 }
 
@@ -18,6 +22,8 @@ async function executerControleHaccp(action: ActionControleHACCP, productionId: 
     valeur: action.valeur,
     conforme: action.conforme,
     commentaire: action.commentaire,
+    cleIdempotence: action.idLocal,
+    constateLe: action.saisiLe,
   });
 }
 
@@ -40,6 +46,7 @@ export async function synchroniser(): Promise<void> {
     });
 
     await appliquerResultatTraitement(resultat);
+    await mettreAJourElements(rattacherProductionsSynchronisees(await listerElements(), resultat.idsReels));
 
     for (const [idLocal, id] of Object.entries(resultat.idsReels)) {
       busFileAttente.dispatchEvent(new CustomEvent(EVENEMENT_PRODUCTION_SYNCHRONISEE, { detail: { idLocal, id } }));

@@ -716,6 +716,9 @@ model Production {
   depotId Int?
   depot   Depot? @relation(fields: [depotId], references: [id])
 
+  // Moment de la production : celui de la saisie, déclaré par l'appareil quand elle a été faite
+  // hors connexion (borné, voir horodatageDeclare dans server/routes/productions.ts) ; createdAt
+  // reste l'heure de réception par le serveur.
   dateProduction DateTime @default(now())
 
   // Toujours renseignés ensemble (jamais un seul des deux) : dérivés l'un de l'autre via
@@ -731,6 +734,11 @@ model Production {
   creePar   Utilisateur? @relation(fields: [creeParId], references: [id])
 
   createdAt DateTime @default(now())
+
+  // Clé unique fournie par l'appareil pour une saisie faite hors connexion (point 9 de l'audit du
+  // 15/10) : la même saisie renvoyée (réponse perdue, réseau coupé après l'envoi) n'est jamais
+  // enregistrée deux fois — ni la production, ni la déduction de stock. Absente en ligne.
+  cleIdempotence String? @unique
 
   controles ControleHACCPProduction[]
   // Sorties de stock générées par cette production (une par article de la recette, voir POST
@@ -755,6 +763,8 @@ model ControleHACCPProduction {
   recetteEtapeId Int
   recetteEtape   RecetteEtape @relation(fields: [recetteEtapeId], references: [id])
 
+  // Moment du contrôle : heure du serveur en ligne, heure de la saisie (bornée) quand il a été
+  // fait hors connexion (voir Production.dateProduction) ; createdAt = réception par le serveur.
   dateHeure   DateTime
   valeur      String
   conforme    Boolean
@@ -767,6 +777,9 @@ model ControleHACCPProduction {
   creePar   Utilisateur? @relation(fields: [creeParId], references: [id])
 
   createdAt DateTime @default(now())
+
+  // Même principe que Production.cleIdempotence.
+  cleIdempotence String? @unique
 
   @@index([productionId])
   @@index([recetteEtapeId])
