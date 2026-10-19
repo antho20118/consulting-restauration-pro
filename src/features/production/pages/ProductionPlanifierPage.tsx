@@ -15,6 +15,7 @@ import type { ProductionDetail } from "../../productions/types/production";
 import {
   ajouterControleSurProductionLocale,
   enregistrerProductionResiliente,
+  libelleControle,
   type ControleSaisi,
 } from "../../../offline/actionsProduction";
 import { busFileAttente } from "../../../offline/fileAttenteDb";
@@ -244,7 +245,8 @@ export default function ProductionPlanifierPage() {
     setChargementProduction(true);
     try {
       const valeur = mode === "poidsFiniG" ? cible * 1000 : cible;
-      const resultat = await enregistrerProductionResiliente(id, { mode, valeur }, depotId);
+      const quantite = mode === "poidsFiniG" ? `${cible} kg fini` : `${cible} portion${cible > 1 ? "s" : ""}`;
+      const resultat = await enregistrerProductionResiliente(id, { mode, valeur }, depotId, `${recetteNom || "Production"} — ${quantite}`);
       if (resultat.sorte === "synchronise") {
         setProductionEnregistree(resultat.production);
         toast.success("Production enregistrée.");
@@ -283,7 +285,12 @@ export default function ProductionPlanifierPage() {
       conforme: saisie.conforme,
       commentaire: saisie.commentaire.trim() || undefined,
     };
-    const { idLocal } = await ajouterControleSurProductionLocale(idLocalProductionEnAttente, controle);
+    const etape = recette?.etapes.find((e) => e.id === etapeId);
+    const { idLocal } = await ajouterControleSurProductionLocale(
+      idLocalProductionEnAttente,
+      controle,
+      libelleControle(recetteNom, etape?.description, controle.valeur)
+    );
     setControlesLocauxEnAttente((prec) => [
       ...prec,
       { idLocal, etapeId, valeur: controle.valeur, conforme: controle.conforme, commentaire: controle.commentaire ?? null },

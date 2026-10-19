@@ -1,5 +1,18 @@
-import { rattacherProductionsSynchronisees, traiterFile, type ActionControleHACCP, type ActionProduction } from "./fileAttenteCore";
-import { ajouterElement, appliquerResultatTraitement, busFileAttente, listerElements, mettreAJourElements } from "./fileAttenteDb";
+import {
+  rattacherProductionsSynchronisees,
+  saisiesAAbandonner,
+  traiterFile,
+  type ActionControleHACCP,
+  type ActionProduction,
+} from "./fileAttenteCore";
+import {
+  ajouterElement,
+  appliquerResultatTraitement,
+  busFileAttente,
+  listerElements,
+  mettreAJourElements,
+  retirerElements,
+} from "./fileAttenteDb";
 import { ajouterControle, enregistrerProduction } from "../features/productions/services/productionService";
 
 // Émis avec {idLocal, id} à chaque production nouvellement synchronisée — écouté par
@@ -58,6 +71,17 @@ export async function synchroniser(): Promise<void> {
   } finally {
     synchronisationEnCours = null;
   }
+}
+
+// Abandon d'une saisie par l'utilisateur (écran des saisies en attente) : jamais pendant un passage
+// de synchronisation, qui pourrait être en train de l'envoyer — on attend sa fin, puis on retire la
+// saisie (et, pour une production, les contrôles qui l'attendent, voir saisiesAAbandonner) si elle
+// est toujours en file. Renvoie le nombre de saisies retirées (0 : envoyée entre-temps).
+export async function abandonnerSaisie(idLocal: string): Promise<number> {
+  while (synchronisationEnCours) await synchronisationEnCours.catch(() => {});
+  const idLocaux = saisiesAAbandonner(await listerElements(), idLocal);
+  await retirerElements(idLocaux);
+  return idLocaux.length;
 }
 
 let ecouteursInstalles = false;

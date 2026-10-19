@@ -25,6 +25,7 @@ const VentesPage = lazy(() => import("../features/ventes/pages/VentesPage"));
 const MenuEngineeringPage = lazy(() => import("../features/ventes/pages/MenuEngineeringPage"));
 const QuestionsPage = lazy(() => import("../features/questions/pages/QuestionsPage"));
 const PrevisionsPage = lazy(() => import("../features/ventes/pages/PrevisionsPage"));
+const SaisiesEnAttentePage = lazy(() => import("../features/saisies/pages/SaisiesEnAttentePage"));
 
 // Écrans de gestion (achats, fournisseurs, ventes, analyses, tableau de bord, base ingrédients,
 // dépôts) : fermés au cuisinier (décision du 15/10, voir voitLesTarifs) — renvoyé aux fiches
@@ -57,6 +58,7 @@ export default function AppRoutes() {
           <Route path="menu-engineering" element={<HorsCuisinier><MenuEngineeringPage /></HorsCuisinier>} />
           <Route path="previsions" element={<HorsCuisinier><PrevisionsPage /></HorsCuisinier>} />
           <Route path="questions" element={<HorsCuisinier><QuestionsPage /></HorsCuisinier>} />
+          <Route path="saisies-en-attente" element={<SaisiesEnAttentePage />} />
           <Route path="parametres" element={<ParametresPage />} />
         </Route>
       </Routes>

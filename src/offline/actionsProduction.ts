@@ -19,9 +19,16 @@ function estPanneReseau(erreur: unknown): boolean {
 // reconnue par le serveur au renvoi (jamais une seconde production ni un second contrôle), et la
 // saisie mise en file garde l'heure où elle a réellement été faite (point 9 de l'audit du 15/10).
 // En ligne, seule la clé est transmise : l'heure retenue reste celle du serveur, plus fiable que
-// l'horloge du téléphone.
-function nouvelleSaisie() {
-  return { idLocal: crypto.randomUUID(), saisiLe: new Date().toISOString() };
+// l'horloge du téléphone. libelle : description affichée sur l'écran des saisies en attente.
+type Saisie = { idLocal: string; saisiLe: string; libelle?: string };
+
+function nouvelleSaisie(libelle?: string): Saisie {
+  return { idLocal: crypto.randomUUID(), saisiLe: new Date().toISOString(), ...(libelle ? { libelle } : {}) };
+}
+
+// Libellé d'un contrôle pour l'écran des saisies en attente : « Riz cuit — Cuire à cœur : 71 °C ».
+export function libelleControle(recetteNom: string | undefined, etapeDescription: string | undefined, valeur: string): string {
+  return [recetteNom, etapeDescription].filter(Boolean).join(" — ") + (recetteNom || etapeDescription ? " : " : "Contrôle HACCP : ") + valeur;
 }
 
 export type ResultatEnregistrementProduction =
@@ -29,7 +36,7 @@ export type ResultatEnregistrementProduction =
   | { sorte: "en_attente"; idLocal: string };
 
 async function mettreEnFileProduction(
-  saisie: { idLocal: string; saisiLe: string },
+  saisie: Saisie,
   recetteId: number,
   cible: CibleProduction,
   depotId?: number
@@ -41,9 +48,10 @@ async function mettreEnFileProduction(
 export async function enregistrerProductionResiliente(
   recetteId: number,
   cible: CibleProduction,
-  depotId?: number
+  depotId?: number,
+  libelle?: string
 ): Promise<ResultatEnregistrementProduction> {
-  const saisie = nouvelleSaisie();
+  const saisie = nouvelleSaisie(libelle);
   if (!navigator.onLine) {
     return { sorte: "en_attente", idLocal: await mettreEnFileProduction(saisie, recetteId, cible, depotId) };
   }
@@ -65,7 +73,7 @@ export type ResultatAjoutControle =
   | { sorte: "en_attente"; idLocal: string };
 
 async function mettreEnFileControle(
-  saisie: { idLocal: string; saisiLe: string },
+  saisie: Saisie,
   productionId: number,
   controle: ControleSaisi
 ): Promise<string> {
@@ -83,9 +91,10 @@ async function mettreEnFileControle(
 
 export async function ajouterControleResilient(
   productionId: number,
-  controle: ControleSaisi
+  controle: ControleSaisi,
+  libelle?: string
 ): Promise<ResultatAjoutControle> {
-  const saisie = nouvelleSaisie();
+  const saisie = nouvelleSaisie(libelle);
   if (!navigator.onLine) {
     return { sorte: "en_attente", idLocal: await mettreEnFileControle(saisie, productionId, controle) };
   }
@@ -107,9 +116,10 @@ export async function ajouterControleResilient(
 // ReferenceProduction "local").
 export async function ajouterControleSurProductionLocale(
   idLocalProduction: string,
-  controle: ControleSaisi
+  controle: ControleSaisi,
+  libelle?: string
 ): Promise<{ idLocal: string }> {
-  const saisie = nouvelleSaisie();
+  const saisie = nouvelleSaisie(libelle);
   await ajouterElement({
     type: "controleHaccp",
     ...saisie,

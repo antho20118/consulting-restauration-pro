@@ -54,6 +54,11 @@ export function setUtilisateur(utilisateur: UtilisateurConnecte): void {
   localStorage.setItem(CLE_UTILISATEUR, JSON.stringify(utilisateur));
 }
 
+// Émis quand le compte connecté a changé de rôle (ou de statut d'opérateur) depuis la connexion —
+// constaté au renouvellement de la session (voir src/features/auth/services/session.ts) : menus et
+// écrans sont réaffichés selon le nouveau rôle, les fiches gardées hors ligne rechargées.
+export const EVENEMENT_COMPTE_MODIFIE = "auth:compte-modifie";
+
 // Prévient le reste de l'appli (événement "auth:logout") pour revenir à l'écran de connexion,
 // que ce soit un clic sur "Déconnexion" ou un jeton rejeté par le serveur.
 export function seDeconnecter(): void {

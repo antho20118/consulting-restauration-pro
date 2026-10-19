@@ -54,6 +54,17 @@ export async function mettreAJourElements(elements: ElementFile[]): Promise<void
   signalerChangement();
 }
 
+export async function retirerElements(idLocaux: string[]): Promise<void> {
+  if (idLocaux.length === 0) return;
+  const db = await ouvrirDb();
+  const tx = db.transaction(STORE, "readwrite");
+  for (const idLocal of idLocaux) {
+    await tx.store.delete(idLocal);
+  }
+  await tx.done;
+  signalerChangement();
+}
+
 export async function appliquerResultatTraitement(resultat: {
   traites: string[];
   echecs: { idLocal: string; erreur: string }[];
