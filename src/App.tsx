@@ -55,7 +55,12 @@ export default function App() {
 
   return (
     <>
-      <Toaster position={estTelephone ? "bottom-center" : "top-right"} toastOptions={{ duration: 4000 }} />
+      {/* pointerEvents "none" : une notification ne capte jamais le toucher ni le clic — le doigt
+          atteint le bouton qu'elle recouvre pendant ses quelques secondes d'affichage. */}
+      <Toaster
+        position={estTelephone ? "bottom-center" : "top-right"}
+        toastOptions={{ duration: 4000, style: { pointerEvents: "none" } }}
+      />
       {connecte ? <AppRoutes key={versionCompte} /> : <LoginPage onConnexion={() => setConnecte(true)} />}
     </>
   );

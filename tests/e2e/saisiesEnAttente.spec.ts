@@ -135,7 +135,23 @@ test.describe("sur téléphone", () => {
       await page.getByRole("button", { name: "Enregistrer le contrôle" }).tap();
 
       // Les notifications sont encore affichées quand le cuisinier ouvre le menu.
-      await expect(page.getByText("Contrôle mis en attente de synchronisation.")).toBeVisible();
+      const notification = page.getByText("Contrôle mis en attente de synchronisation.");
+      await expect(notification).toBeVisible();
+      // Et elles ne captent jamais le toucher : le doigt atteint ce qui est dessous (un bouton en
+      // bas de page, par exemple), même pendant leurs quelques secondes d'affichage.
+      // Mesuré une fois la notification en place (elle glisse depuis le bas de l'écran).
+      await expect
+        .poll(async () => {
+          const boite = await notification.boundingBox();
+          return boite !== null && boite.y + boite.height <= 844;
+        })
+        .toBe(true);
+      const boite = (await notification.boundingBox())!;
+      const toucherCapte = await page.evaluate(
+        ([x, y]) => Boolean(document.elementFromPoint(x, y)?.closest("[data-rht-toaster]")),
+        [boite.x + boite.width / 2, boite.y + boite.height / 2]
+      );
+      expect(toucherCapte, "un toucher sur la notification doit atteindre ce qui est dessous").toBe(false);
       await page.getByRole("button", { name: "Ouvrir le menu" }).tap();
       await page.getByRole("link", { name: /2 actions en attente/ }).tap({ timeout: 2_000 });
       await expect(page.getByRole("heading", { name: "📡 Saisies en attente" })).toBeVisible({ timeout: 5_000 });
