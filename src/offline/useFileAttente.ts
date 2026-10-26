@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
 import { busFileAttente, listerElements } from "./fileAttenteDb";
+import type { ElementFile } from "./fileAttenteCore";
 
-// Nombre d'actions actuellement en attente de synchronisation — rafraîchi à chaque changement de
-// la file (voir busFileAttente dans fileAttenteDb.ts), jamais par sondage périodique.
-export function useFileAttente(): { enAttente: number } {
-  const [enAttente, setEnAttente] = useState(0);
+// Contenu actuel de la file des saisies hors connexion — rafraîchi à chaque changement de la file
+// (voir busFileAttente dans fileAttenteDb.ts), jamais par sondage périodique. refusees : saisies
+// refusées par le serveur au dernier envoi, à vérifier sur l'écran des saisies en attente.
+export function useFileAttente(): { enAttente: number; refusees: number; elements: ElementFile[] } {
+  const [elements, setElements] = useState<ElementFile[]>([]);
 
   useEffect(() => {
     let annule = false;
 
     function rafraichir() {
-      listerElements().then((elements) => {
-        if (!annule) setEnAttente(elements.length);
+      listerElements().then((liste) => {
+        if (!annule) setElements(liste);
       });
     }
 
@@ -23,5 +25,5 @@ export function useFileAttente(): { enAttente: number } {
     };
   }, []);
 
-  return { enAttente };
+  return { enAttente: elements.length, refusees: elements.filter((e) => e.statut === "erreur").length, elements };
 }

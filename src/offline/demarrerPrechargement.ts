@@ -1,4 +1,5 @@
-import { API_URL, apiFetch, getUtilisateur } from "../config/api";
+import { API_URL, apiFetch, EVENEMENT_COMPTE_MODIFIE, getUtilisateur } from "../config/api";
+import { CACHE_LECTURES_HORS_LIGNE } from "./nomCache";
 import {
   prechargementNecessaire,
   prechargerLectures,
@@ -80,4 +81,19 @@ export async function demarrerPrechargementLectures(): Promise<BilanPrechargemen
 window.addEventListener("auth:logout", () => {
   dejaLance = false;
   memoriserDernier(null);
+});
+
+// Rôle changé depuis la connexion (voir src/features/auth/services/session.ts) : les fiches gardées
+// sur l'appareil ont été chargées avec l'ancien rôle — un CHEF devenu CUISINIER y retrouverait, hors
+// connexion, les prix qu'il ne doit plus voir. Purgées, puis rechargées avec le nouveau rôle.
+window.addEventListener(EVENEMENT_COMPTE_MODIFIE, () => {
+  memoriserDernier(null);
+  const purge = typeof caches === "undefined" ? Promise.resolve(false) : caches.delete(CACHE_LECTURES_HORS_LIGNE);
+  purge
+    .catch(() => false)
+    .then(() => {
+      dejaLance = false;
+      return demarrerPrechargementLectures();
+    })
+    .catch(() => {});
 });

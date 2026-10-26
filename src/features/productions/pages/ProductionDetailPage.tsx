@@ -5,7 +5,7 @@ import { getProduction } from "../services/productionService";
 import type { ProductionDetail } from "../types/production";
 import { suggestionsPourEtape } from "../utils/suggestionsControleHACCP";
 import { mentionReceptionDifferee } from "../utils/receptionDifferee";
-import { ajouterControleResilient } from "../../../offline/actionsProduction";
+import { ajouterControleResilient, libelleControle } from "../../../offline/actionsProduction";
 import { busFileAttente, listerElements } from "../../../offline/fileAttenteDb";
 
 type BrouillonControle = { valeur: string; conforme: boolean; commentaire: string };
@@ -98,12 +98,17 @@ export default function ProductionDetailPage() {
     }
     setEnCours(etapeId);
     try {
-      const resultat = await ajouterControleResilient(productionId, {
-        recetteEtapeId: etapeId,
-        valeur: saisie.valeur.trim(),
-        conforme: saisie.conforme,
-        commentaire: saisie.commentaire.trim() || undefined,
-      });
+      const etape = production?.etapesCritiques.find((e) => e.id === etapeId);
+      const resultat = await ajouterControleResilient(
+        productionId,
+        {
+          recetteEtapeId: etapeId,
+          valeur: saisie.valeur.trim(),
+          conforme: saisie.conforme,
+          commentaire: saisie.commentaire.trim() || undefined,
+        },
+        libelleControle(production?.recette.nom, etape?.description, saisie.valeur.trim())
+      );
       if (resultat.sorte === "synchronise") {
         setProduction(resultat.production);
         toast.success("Contrôle enregistré.");

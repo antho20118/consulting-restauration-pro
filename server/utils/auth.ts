@@ -33,15 +33,22 @@ export type PayloadUtilisateur = {
   societeId: number;
 };
 
-export function creerToken(payload: PayloadUtilisateur): string {
-  return jwt.sign(payload, SECRET_EFFECTIF, { expiresIn: DUREE_TOKEN });
+// Durée totale maximale d'une session, renouvellements compris (voir GET /api/auth/session) : un
+// appareil utilisé chaque jour reste connecté, mais jamais indéfiniment — au-delà, reconnexion.
+export const DUREE_MAX_SESSION_S = 7 * 24 * 3600;
+
+// connecteLe (secondes) : début de la session, conservé à chaque renouvellement du jeton pour borner
+// sa durée totale (DUREE_MAX_SESSION_S) — absent des jetons émis avant les renouvellements.
+export function creerToken(payload: PayloadUtilisateur, options: { connecteLe?: number } = {}): string {
+  const contenu = options.connecteLe === undefined ? payload : { ...payload, connecteLe: options.connecteLe };
+  return jwt.sign(contenu, SECRET_EFFECTIF, { expiresIn: DUREE_TOKEN });
 }
 
 // null si le jeton est absent/invalide/expiré — jamais un simple booléen (voir requireAuth.ts, qui
 // a besoin du payload décodé, pas seulement de savoir s'il est valide).
-export function verifierToken(token: string): (PayloadUtilisateur & { iat?: number }) | null {
+export function verifierToken(token: string): (PayloadUtilisateur & { iat?: number; connecteLe?: number }) | null {
   try {
-    return jwt.verify(token, SECRET_EFFECTIF) as PayloadUtilisateur & { iat?: number };
+    return jwt.verify(token, SECRET_EFFECTIF) as PayloadUtilisateur & { iat?: number; connecteLe?: number };
   } catch {
     return null;
   }

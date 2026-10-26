@@ -3,7 +3,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 
 import prisma from "../prisma.js";
-import { creerToken, hacherCode, verifierCode } from "../utils/auth.js";
+import { creerToken, DUREE_MAX_SESSION_S, hacherCode, verifierCode, verifierToken } from "../utils/auth.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
 
@@ -75,12 +75,15 @@ router.post("/login", async (req: Request, res: Response) => {
       return;
     }
 
-    const token = creerToken({
-      id: utilisateur.id,
-      identifiant: utilisateur.identifiant,
-      role: utilisateur.role,
-      societeId: utilisateur.societeId,
-    });
+    const token = creerToken(
+      {
+        id: utilisateur.id,
+        identifiant: utilisateur.identifiant,
+        role: utilisateur.role,
+        societeId: utilisateur.societeId,
+      },
+      { connecteLe: Math.floor(Date.now() / 1000) }
+    );
     res.json({
       token,
       utilisateur: {
@@ -95,6 +98,50 @@ router.post("/login", async (req: Request, res: Response) => {
     console.error(error);
     await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de se connecter" });
+  }
+});
+
+// Renouvellement de la session en cours, appelé régulièrement par l'application ouverte (voir
+// src/features/auth/services/session.ts) : un jeton expire 12 h après son émission, et un cuisinier
+// connecté le matin était jusqu'ici déconnecté d'office en plein service. Renvoie aussi le compte
+// tel qu'il est en base, pour qu'un rôle changé par le PROPRIETAIRE s'applique aux menus sans
+// reconnexion (le serveur l'applique déjà à chaque requête, voir requireAuth.ts). Jamais au-delà de
+// DUREE_MAX_SESSION_S depuis la connexion : reconnexion demandée (401, comme un jeton expiré).
+router.get("/session", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const entete = req.headers.authorization ?? "";
+    const payload = verifierToken(entete.slice("Bearer ".length));
+    // Jeton émis avant les renouvellements : la session débute à son émission.
+    const connecteLe = payload?.connecteLe ?? payload?.iat;
+    if (typeof connecteLe !== "number" || Math.floor(Date.now() / 1000) - connecteLe > DUREE_MAX_SESSION_S) {
+      res.status(401).json({ error: "Session expirée, reconnecte-toi" });
+      return;
+    }
+
+    const utilisateur = await prisma.utilisateur.findUniqueOrThrow({ where: { id: req.utilisateur!.id } });
+    const token = creerToken(
+      {
+        id: utilisateur.id,
+        identifiant: utilisateur.identifiant,
+        role: utilisateur.role,
+        societeId: utilisateur.societeId,
+      },
+      { connecteLe }
+    );
+    res.json({
+      token,
+      utilisateur: {
+        id: utilisateur.id,
+        identifiant: utilisateur.identifiant,
+        role: utilisateur.role,
+        societeId: utilisateur.societeId,
+        superAdmin: utilisateur.superAdmin,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    await journaliserErreur(error, "SERVEUR", contexteDepuisRequete(req, 500));
+    res.status(500).json({ error: "Impossible de renouveler la session" });
   }
 });
 

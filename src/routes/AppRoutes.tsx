@@ -4,6 +4,11 @@ import { Navigate, Routes, Route } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 import PageLoader from "../common/PageLoader";
 import { voitLesTarifs } from "../config/api";
+// Chargé avec l'application, jamais à la demande comme les autres écrans : c'est l'écran du
+// hors-ligne, il doit s'ouvrir sans réseau même quand le navigateur n'a rien gardé pour le
+// hors-ligne (navigation privée, mise à jour pas encore installée) — sinon, un appui sur le
+// compteur des saisies en attente ne faisait rien.
+import SaisiesEnAttentePage from "../features/saisies/pages/SaisiesEnAttentePage";
 
 const DashboardPage = lazy(() => import("../features/dashboard/pages/DashboardPage"));
 const IngredientsPage = lazy(() => import("../features/ingredients/pages/IngredientsPage"));
@@ -57,6 +62,7 @@ export default function AppRoutes() {
           <Route path="menu-engineering" element={<HorsCuisinier><MenuEngineeringPage /></HorsCuisinier>} />
           <Route path="previsions" element={<HorsCuisinier><PrevisionsPage /></HorsCuisinier>} />
           <Route path="questions" element={<HorsCuisinier><QuestionsPage /></HorsCuisinier>} />
+          <Route path="saisies-en-attente" element={<SaisiesEnAttentePage />} />
           <Route path="parametres" element={<ParametresPage />} />
         </Route>
       </Routes>

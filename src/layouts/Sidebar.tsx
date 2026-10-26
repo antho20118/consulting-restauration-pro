@@ -44,7 +44,7 @@ export default function Sidebar({ ouverte, onFermer }: Props) {
     >
       <h2>🍽 Consulting</h2>
 
-      <IndicateurHorsLigne />
+      <IndicateurHorsLigne onOuvrir={onFermer} />
 
       {menu.filter((item) => !item.gestion || voitLesTarifs()).map((item) => (
         <Link
