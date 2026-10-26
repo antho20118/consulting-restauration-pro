@@ -4,6 +4,11 @@ import { Navigate, Routes, Route } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
 import PageLoader from "../common/PageLoader";
 import { voitLesTarifs } from "../config/api";
+// Chargé avec l'application, jamais à la demande comme les autres écrans : c'est l'écran du
+// hors-ligne, il doit s'ouvrir sans réseau même quand le navigateur n'a rien gardé pour le
+// hors-ligne (navigation privée, mise à jour pas encore installée) — sinon, un appui sur le
+// compteur des saisies en attente ne faisait rien.
+import SaisiesEnAttentePage from "../features/saisies/pages/SaisiesEnAttentePage";
 
 const DashboardPage = lazy(() => import("../features/dashboard/pages/DashboardPage"));
 const IngredientsPage = lazy(() => import("../features/ingredients/pages/IngredientsPage"));
@@ -25,7 +30,6 @@ const VentesPage = lazy(() => import("../features/ventes/pages/VentesPage"));
 const MenuEngineeringPage = lazy(() => import("../features/ventes/pages/MenuEngineeringPage"));
 const QuestionsPage = lazy(() => import("../features/questions/pages/QuestionsPage"));
 const PrevisionsPage = lazy(() => import("../features/ventes/pages/PrevisionsPage"));
-const SaisiesEnAttentePage = lazy(() => import("../features/saisies/pages/SaisiesEnAttentePage"));
 
 // Écrans de gestion (achats, fournisseurs, ventes, analyses, tableau de bord, base ingrédients,
 // dépôts) : fermés au cuisinier (décision du 15/10, voir voitLesTarifs) — renvoyé aux fiches

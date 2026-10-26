@@ -6,7 +6,24 @@ import { EVENEMENT_COMPTE_MODIFIE, getToken } from "./config/api";
 import { demarrerRenouvellementSession } from "./features/auth/services/session";
 import { demarrerPrechargementLectures } from "./offline/demarrerPrechargement";
 
+// Sur téléphone (même seuil que le tiroir du menu, voir index.css), les notifications s'affichent
+// en bas : en haut, elles recouvraient le menu — et le compteur des saisies en attente, que l'on
+// ouvre justement juste après une saisie hors ligne, recevait le toucher à sa place.
+const REQUETE_TELEPHONE = "(max-width: 768px)";
+
+function useEstTelephone(): boolean {
+  const [estTelephone, setEstTelephone] = useState(() => window.matchMedia(REQUETE_TELEPHONE).matches);
+  useEffect(() => {
+    const requete = window.matchMedia(REQUETE_TELEPHONE);
+    const surChangement = () => setEstTelephone(requete.matches);
+    requete.addEventListener("change", surChangement);
+    return () => requete.removeEventListener("change", surChangement);
+  }, []);
+  return estTelephone;
+}
+
 export default function App() {
+  const estTelephone = useEstTelephone();
   const [connecte, setConnecte] = useState(() => getToken() !== null);
   // Incrémenté quand le rôle du compte change (voir session.ts) : tous les écrans sont remontés,
   // donc réaffichés selon le nouveau rôle (menus, colonnes de prix, écrans fermés au cuisinier).
@@ -38,7 +55,7 @@ export default function App() {
 
   return (
     <>
-      <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+      <Toaster position={estTelephone ? "bottom-center" : "top-right"} toastOptions={{ duration: 4000 }} />
       {connecte ? <AppRoutes key={versionCompte} /> : <LoginPage onConnexion={() => setConnecte(true)} />}
     </>
   );

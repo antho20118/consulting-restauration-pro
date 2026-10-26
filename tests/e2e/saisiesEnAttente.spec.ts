@@ -101,3 +101,51 @@ test("rôle changé par le propriétaire : appliqué aux menus à la réouvertur
   const memorise = await page.evaluate(() => JSON.parse(localStorage.getItem("consulting_utilisateur") ?? "null"));
   expect(memorise?.role).toBe("CHEF");
 });
+
+// Sur téléphone, au retour de staging : l'appui sur le compteur juste après une saisie hors ligne
+// ne faisait rien. Deux causes : les notifications (« … mise en attente de synchronisation »)
+// s'affichaient par-dessus le compteur du menu et recevaient le toucher ; et l'écran des saisies
+// en attente, chargé à la demande, ne pouvait pas l'être sans réseau quand le navigateur n'avait
+// rien gardé pour le hors-ligne (navigation privée, mise à jour pas encore installée). Ici, le
+// serveur de développement joue ce dernier cas : hors ligne, rien ne peut plus être chargé.
+test.describe("sur téléphone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("hors ligne, juste après la saisie : le compteur du menu ouvre l'écran des saisies en attente", async ({ page, context }) => {
+    const societeId = (await prisma.societe.findFirstOrThrow({ orderBy: { id: "asc" } })).id;
+    const idRecette = (
+      await prisma.recette.create({
+        data: {
+          nom: "E2E SAISIES Mobile",
+          portions: 1,
+          societeId,
+          etapes: { create: [{ ordre: 1, description: "E2E SAISIES Mobile cuisson", pointCritiqueHACCP: true }] },
+        },
+      })
+    ).id;
+    try {
+      await connecter(page, "admin");
+      await page.goto(`/production/${idRecette}`);
+      await expect(page.getByRole("heading", { name: /E2E SAISIES Mobile/ })).toBeVisible({ timeout: 15_000 });
+
+      await context.setOffline(true);
+      await page.getByRole("button", { name: "Planifier" }).tap();
+      await page.getByRole("button", { name: "Enregistrer la production" }).tap();
+      await page.getByPlaceholder("Valeur constatée (ex. 72°C)").fill("75 °C");
+      await page.getByRole("button", { name: "Enregistrer le contrôle" }).tap();
+
+      // Les notifications sont encore affichées quand le cuisinier ouvre le menu.
+      await expect(page.getByText("Contrôle mis en attente de synchronisation.")).toBeVisible();
+      await page.getByRole("button", { name: "Ouvrir le menu" }).tap();
+      await page.getByRole("link", { name: /2 actions en attente/ }).tap({ timeout: 2_000 });
+      await expect(page.getByRole("heading", { name: "📡 Saisies en attente" })).toBeVisible({ timeout: 5_000 });
+
+      page.once("dialog", (dialogue) => dialogue.accept());
+      await page.getByTestId("saisie-en-attente").filter({ hasText: "E2E SAISIES Mobile — 1 portion" }).getByRole("button", { name: "Abandonner" }).tap();
+      await expect(page.getByText("Aucune saisie en attente : tout est enregistré.")).toBeVisible();
+    } finally {
+      await prisma.recetteEtape.deleteMany({ where: { recetteId: idRecette } });
+      await prisma.recette.deleteMany({ where: { id: idRecette } });
+    }
+  });
+});
