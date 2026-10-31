@@ -120,3 +120,22 @@ test("liste puis télécharge une sauvegarde réellement présente sur le volume
   assert.match(telechargement.headers.get("content-disposition") ?? "", /attachment/);
   assert.equal(await telechargement.text(), contenu);
 });
+
+// Sauvegarde hors de Railway (point 1 de l'audit du 15/10) : son état (configurée ou non, dernière
+// réussie, dernier échec) est consultable par l'opérateur de la plateforme, jamais par un autre
+// compte — et sans jamais renvoyer une valeur secrète de configuration.
+test("GET /api/sauvegardes/externe : état de la sauvegarde externe, réservé au superAdmin", async () => {
+  const refuse = await fetch(`${baseUrl}/api/sauvegardes/externe`, { headers: { Authorization: `Bearer ${tokenNonSuperAdmin}` } });
+  assert.equal(refuse.status, 403);
+
+  const reponse = await fetch(`${baseUrl}/api/sauvegardes/externe`, { headers: authHeaders() });
+  assert.equal(reponse.status, 200);
+  assert.deepEqual(await reponse.json(), {
+    configuration: "absente",
+    probleme: null,
+    enCours: false,
+    derniereConnue: false,
+    derniereReussie: null,
+    dernierEchec: null,
+  });
+});

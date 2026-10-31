@@ -1,4 +1,5 @@
 import { API_URL, apiFetch } from "../../../config/api";
+import { telechargerFichier } from "../../../common/telechargerFichier";
 
 export type Sauvegarde = {
   nom: string;
@@ -27,13 +28,25 @@ export async function telechargerSauvegarde(nom: string): Promise<void> {
     throw new Error("Impossible de télécharger cette sauvegarde");
   }
 
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const lien = document.createElement("a");
-  lien.href = url;
-  lien.download = nom;
-  document.body.appendChild(lien);
-  lien.click();
-  lien.remove();
-  URL.revokeObjectURL(url);
+  telechargerFichier(nom, await response.blob());
+}
+
+// État de la sauvegarde automatique hors de Railway (voir server/utils/sauvegardeExterne/).
+export type EtatSauvegardeExterne = {
+  configuration: "absente" | "incomplete" | "ok";
+  probleme: string | null;
+  enCours: boolean;
+  derniereConnue: boolean;
+  derniereReussie: { le: string; nom: string } | null;
+  dernierEchec: { le: string; message: string } | null;
+};
+
+export async function getEtatSauvegardeExterne(): Promise<EtatSauvegardeExterne> {
+  const response = await apiFetch(`${API_URL}/sauvegardes/externe`);
+
+  if (!response.ok) {
+    throw new Error("Impossible de récupérer l'état de la sauvegarde externe");
+  }
+
+  return response.json();
 }

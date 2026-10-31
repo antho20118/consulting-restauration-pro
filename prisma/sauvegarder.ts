@@ -10,7 +10,7 @@
 // être stocké ailleurs.
 //
 // Liste des tables obtenue depuis le schéma Prisma lui-même (Prisma.dmmf), jamais une liste
-// recopiée à la main qui pourrait oublier un modèle ajouté plus tard.
+// recopiée à la main qui pourrait oublier un modèle ajouté plus tard (voir exporterBase).
 //
 // Format versionné (F08 de l'audit forensique, phase 2) : l'enveloppe porte formatVersion (version
 // de la forme du fichier lui-même) et derniereMigrationAppliquee (lue depuis _prisma_migrations,
@@ -23,42 +23,28 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { racineStockage } from "../server/utils/storageDocumentsFournisseur.js";
-import { derniereMigrationAppliquee } from "./utils/migrationsAppliquees.js";
+import { exporterBase } from "../server/utils/sauvegardeExterne/exportBase.js";
 
 const prisma = new PrismaClient();
-
-const FORMAT_VERSION = 1;
-
-type AccesseurModele = { findMany: () => Promise<unknown[]> };
 
 async function main() {
   const dossierSauvegardes = path.join(racineStockage(), "sauvegardes");
   await fs.mkdir(dossierSauvegardes, { recursive: true });
 
-  const nomsModeles = Prisma.dmmf.datamodel.models.map((m) => m.name);
-  const client = prisma as unknown as Record<string, AccesseurModele>;
+  // Même export que la sauvegarde automatique hors de Railway (voir server/utils/sauvegardeExterne/).
+  const enveloppe = await exporterBase(prisma);
 
-  const modeles: Record<string, unknown[]> = {};
-  for (const nomModele of nomsModeles) {
-    const accesseur = nomModele.charAt(0).toLowerCase() + nomModele.slice(1);
-    modeles[nomModele] = await client[accesseur].findMany();
-  }
-
-  const migration = await derniereMigrationAppliquee(prisma);
-  const creeLe = new Date().toISOString();
-  const enveloppe = { formatVersion: FORMAT_VERSION, creeLe, derniereMigrationAppliquee: migration, modeles };
-
-  const horodatage = creeLe.replace(/[:.]/g, "-");
+  const horodatage = enveloppe.creeLe.replace(/[:.]/g, "-");
   const nomFichier = `sauvegarde-${horodatage}.json`;
   const cheminFichier = path.join(dossierSauvegardes, nomFichier);
   await fs.writeFile(cheminFichier, JSON.stringify(enveloppe, null, 2), "utf8");
 
   console.log(`✅ Sauvegarde écrite : ${cheminFichier}`);
-  console.log(`  formatVersion: ${FORMAT_VERSION}`);
-  console.log(`  derniereMigrationAppliquee: ${migration}`);
-  for (const [nomModele, lignes] of Object.entries(modeles)) {
+  console.log(`  formatVersion: ${enveloppe.formatVersion}`);
+  console.log(`  derniereMigrationAppliquee: ${enveloppe.derniereMigrationAppliquee}`);
+  for (const [nomModele, lignes] of Object.entries(enveloppe.modeles)) {
     console.log(`  ${nomModele}: ${lignes.length} ligne(s)`);
   }
   console.log(`\nTéléchargement : GET /api/sauvegardes/${nomFichier} (jeton requis, voir la page Paramètres).`);
