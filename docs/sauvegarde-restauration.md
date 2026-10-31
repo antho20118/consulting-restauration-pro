@@ -19,6 +19,107 @@ produit soit ensuite effectivement stocké hors de Railway. Un stockage off-site
 etc.) et le PITR (Point-In-Time Recovery) du plan Railway Pro restent hors périmètre dépôt — voir
 « Limites » plus bas.
 
+## Sauvegarde automatique hors de Railway (chaque nuit)
+
+Point 1 de l'audit du 15/10 : jusque-là, toutes les données ne vivaient que chez Railway, et l'offre
+Hobby n'y fait **aucune** sauvegarde (ni automatique, ni manuelle, ni PITR — vérifié dans l'onglet
+Backups le 30/10). Le serveur lui-même (voir `server/utils/sauvegardeExterne/`, démarré dans
+`server/server.ts`) fait désormais, **chaque nuit à partir de 3 h (heure de Paris)**, rattrapée dès
+que possible si elle a été manquée :
+
+1. un export complet de la base — le même que `npm run db:sauvegarder`, donc restaurable par
+   `prisma/restaurer.ts` —, lu dans **une seule transaction PostgreSQL figée et en lecture seule**
+   (REPEATABLE READ + READ ONLY) : cohérent même si une saisie arrive pendant l'export, et aucune
+   écriture possible sur la base ;
+2. **chiffré par une clé publique** (RSA-OAEP 4096 bits + AES-256-GCM) : le serveur sait chiffrer
+   mais **ne peut pas déchiffrer** ; seule la clé privée, conservée par le propriétaire hors de
+   Railway, le peut. Une fuite des variables Railway (incident du 21/10) ne permet donc de lire
+   aucune sauvegarde ;
+3. déposé chez un hébergeur **compatible S3** (Scaleway) dans `base/quotidiennes/`, et la première
+   du mois aussi dans `base/mensuelles/` ; chaque dépôt est **relu et comparé octet pour octet**
+   (empreinte SHA-256) avant d'être considéré comme fait ;
+4. les **documents fournisseurs** (photos de factures, listings — sur le disque Railway monté sur
+   `/data`, pas en base) absents de l'hébergeur y sont envoyés, chiffrés eux aussi, sous
+   `documents/`.
+
+**L'application ne supprime jamais rien** : sa clé d'accès n'en a pas le droit, et son code n'a
+aucune opération de suppression. La conservation est assurée par des **règles de cycle de vie
+configurées chez l'hébergeur** :
+
+| Dossier | Contenu | Règle chez l'hébergeur |
+| --- | --- | --- |
+| `base/quotidiennes/` | une sauvegarde par nuit | supprimée après **35 jours** |
+| `base/mensuelles/` | la première sauvegarde de chaque mois | supprimée après **25 mois** (760 jours) |
+| `documents/` | photos de factures et de listings | jamais supprimés |
+
+Une clé sans droit de suppression peut encore **réécrire** un fichier existant (même nom, autre
+contenu), ce qui reviendrait à l'effacer. D'où, chez l'hébergeur, le **versionnage obligatoire** de
+l'espace : une réécriture conserve l'ancienne version, que la clé de l'application ne peut pas
+supprimer. Les règles de cycle de vie qui suppriment ces **versions anciennes** doivent suivre la
+même durée que leur dossier — jamais une durée unique pour tout l'espace, qui effacerait au bout de
+35 jours les originaux d'une sauvegarde mensuelle ou d'un document réécrits par un attaquant :
+
+| Dossier | Versions anciennes supprimées après |
+| --- | --- |
+| `base/quotidiennes/` | 35 jours |
+| `base/mensuelles/` | 25 mois (760 jours) |
+| `documents/` | jamais |
+
+L'application, elle, n'écrit jamais deux fois sous le même nom (sauvegardes horodatées, documents
+envoyés une seule fois). Le verrouillage d'objets (Object Lock), qui interdit toute réécriture ou
+suppression pendant une durée donnée, reste une option à étudier à la mise en place.
+
+Avec ces règles, une fuite des clés de l'application ne permet ni d'effacer ni de raccourcir
+l'historique : chaque original reste récupérable pendant toute la durée de conservation de son
+dossier.
+
+Un échec est inscrit au journal des erreurs (Paramètres) et retenté une heure plus tard. L'état
+(dernière réussie, dernier échec, configuration) est affiché en tête de Paramètres → Sauvegardes
+(opérateur de la plateforme).
+
+### Mise en place (une seule fois)
+
+1. **Clés de chiffrement** : Paramètres → Sauvegardes → « Générer une paire de clés » (fabriquées
+   dans le navigateur, rien n'est envoyé au serveur). La **clé publique** va dans la variable
+   Railway `SAUVEGARDE_CLE_PUBLIQUE`. La **clé privée** va dans le gestionnaire de mots de passe du
+   propriétaire et sur papier — **jamais dans Railway** (le serveur refuse de démarrer la sauvegarde
+   s'il la trouve dans ses variables). En cas de nouvelle paire de clés plus tard, **garder aussi
+   l'ancienne clé privée** : elle reste la seule à pouvoir relire les sauvegardes déjà faites.
+2. **Hébergeur** : un espace de stockage dédié, **versionnage activé**, les règles de cycle de vie
+   ci-dessus (fichiers et versions anciennes, dossier par dossier), et une clé d'accès
+   limitée à cet espace avec les droits **déposer, lire, lister — sans suppression, ni des fichiers
+   ni de leurs versions** (à vérifier chez l'hébergeur au moment de la mise en place).
+3. **Variables Railway** (production ; staging avec un espace ou un `SAUVEGARDE_S3_PREFIXE` séparé) :
+
+| Variable | Exemple / rôle |
+| --- | --- |
+| `SAUVEGARDE_S3_ENDPOINT` | `https://s3.fr-par.scw.cloud` |
+| `SAUVEGARDE_S3_REGION` | `fr-par` |
+| `SAUVEGARDE_S3_BUCKET` | nom de l'espace de stockage |
+| `SAUVEGARDE_S3_ACCESS_KEY_ID` | clé d'accès (sans droit de suppression) |
+| `SAUVEGARDE_S3_SECRET_ACCESS_KEY` | clé secrète |
+| `SAUVEGARDE_CLE_PUBLIQUE` | clé publique produite par le générateur |
+| `SAUVEGARDE_S3_PREFIXE` | facultatif : dossier dans l'espace (ex. `production`) |
+
+Aucune variable : fonction désactivée. Configuration partielle ou dangereuse : signalée (journal
+des erreurs, Paramètres), jamais une sauvegarde à moitié configurée. Retirer les variables suffit à
+désactiver la fonction, sans redéployer de code.
+
+### Récupérer une sauvegarde externe
+
+Depuis n'importe quel ordinateur, avec les variables `SAUVEGARDE_S3_*` ci-dessus et
+`SAUVEGARDE_CLE_PRIVEE` (la clé privée du propriétaire — sur cet ordinateur seulement) :
+
+```bash
+npm run db:recuperer-sauvegarde-externe -- liste
+npm run db:recuperer-sauvegarde-externe -- base derniere sauvegarde.json
+npm run db:recuperer-sauvegarde-externe -- documents dossier-documents
+```
+
+Le fichier `sauvegarde.json` obtenu se restaure comme une sauvegarde manuelle (voir « Dry-run » et
+« Restaurer réellement » ci-dessous) ; le contenu de `dossier-documents` se recopie tel quel à la
+racine de `DOCUMENTS_STORAGE_PATH`. Aucun fichier existant n'est jamais écrasé.
+
 ## Format du fichier (`formatVersion`)
 
 Chaque sauvegarde est une enveloppe :
@@ -134,9 +235,16 @@ hors périmètre dépôt — voir « Limites »).
 
 ## Limites connues
 
-- **Sauvegarde du volume physique** (fichiers `fournisseurs/`, et le fichier de sauvegarde JSON
-  lui-même une fois écrit) : relève de l'infrastructure (volume Railway), pas de ce dépôt. Un
-  stockage off-site automatisé et le PITR du plan Railway Pro restent à mettre en place séparément.
+- **Taille de la base pour la sauvegarde hors de Railway** : l'export est construit en mémoire dans
+  le processus de l'application (JSON, compression, chiffrement), photos des plats comprises.
+  Négligeable aujourd'hui (une base de quelques mégaoctets) ; à surveiller dans les métriques
+  Railway si la base dépasse une centaine de mégaoctets — il faudrait alors passer à un export en
+  flux (table par table, compression et chiffrement au fil de l'eau, envoi en plusieurs parties).
+
+- **Sauvegarde du volume physique** : les documents fournisseurs (`fournisseurs/`) sont désormais
+  copiés chaque nuit hors de Railway (voir « Sauvegarde automatique hors de Railway »). Le PITR
+  (restauration à la minute près) du plan Railway Pro n'est pas en place : la sauvegarde
+  automatique est quotidienne, une journée de saisies au plus peut donc être perdue.
 - **Droits PostgreSQL réels sur Railway** : le dry-run nécessite de créer/détruire une base
   (`CREATE DATABASE`/`DROP DATABASE`), vérifié en local et en CI (rôle superutilisateur de l'image
   officielle `postgres`). Le rôle applicatif réellement attribué par Railway n'a pas été vérifié

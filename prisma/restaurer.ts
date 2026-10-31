@@ -45,6 +45,7 @@ import { construireGrapheDepuisIntrospection } from "./utils/grapheIntrospection
 import { introspecterSchema, type SchemaIntrospecte, type ColonneIntrospectee } from "./utils/introspectionSchema.js";
 import { derniereMigrationAppliquee } from "./utils/migrationsAppliquees.js";
 import { realignerSequences, type RealignementSequence } from "./utils/realignementSequences.js";
+import { estLanceDirectement } from "./utils/pointEntree.js";
 
 const RACINE_DEPOT = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 const DOSSIER_MIGRATIONS_REEL = path.join(RACINE_DEPOT, "prisma", "migrations");
@@ -742,6 +743,8 @@ async function main() {
 // import. D'où ce garde d'entrée, équivalent ESM de `require.main === module` : main() ne
 // s'exécute que si ce fichier est lancé directement (`npx tsx prisma/restaurer.ts ...`), jamais
 // lors d'un `import` depuis un fichier de test.
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Chemins réels comparés (voir prisma/utils/pointEntree.ts) : un dossier dont le nom contient des
+// espaces ou des accents empêchait jusqu'ici toute restauration, silencieusement.
+if (estLanceDirectement(import.meta.url)) {
   main();
 }

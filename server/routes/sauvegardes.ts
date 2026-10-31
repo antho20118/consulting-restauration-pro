@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { racineStockage } from "../utils/storageDocumentsFournisseur.js";
 import { journaliserErreur, contexteDepuisRequete } from "../utils/journalErreurs.js";
+import { etatSauvegardeExterne } from "../utils/sauvegardeExterne/planificateur.js";
 
 const router = Router();
 
@@ -50,6 +51,13 @@ router.get("/", async (req, res) => {
     await journaliserErreur(erreur, "SERVEUR", contexteDepuisRequete(req, 500));
     res.status(500).json({ error: "Impossible de lister les sauvegardes" });
   }
+});
+
+// État de la sauvegarde automatique hors de Railway (voir server/utils/sauvegardeExterne/) :
+// configurée ou non, dernière réussie, dernier échec — jamais une valeur de configuration. Déclarée
+// avant "/:nomFichier", dont le format refuserait "externe".
+router.get("/externe", (_req, res) => {
+  res.json(etatSauvegardeExterne());
 });
 
 router.get("/:nomFichier", async (req, res) => {

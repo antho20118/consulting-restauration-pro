@@ -53,6 +53,8 @@ test("paramètres : l'opérateur (superAdmin) voit la sauvegarde présente sur l
 
   await page.goto("/parametres");
   await expect(page.getByRole("heading", { name: "Sauvegardes" })).toBeVisible();
+  // État de la sauvegarde automatique hors de Railway (variables SAUVEGARDE_* absentes en test).
+  await expect(page.getByText("Sauvegarde automatique hors de Railway : pas encore configurée.")).toBeVisible();
   await expect(page.getByText(NOM_FICHIER)).toHaveCount(0); // le nom du fichier lui-même n'est jamais affiché, seulement sa date/taille
   await expect(page.getByRole("button", { name: "Télécharger" })).toBeVisible();
 
@@ -60,4 +62,14 @@ test("paramètres : l'opérateur (superAdmin) voit la sauvegarde présente sur l
   await page.getByRole("button", { name: "Télécharger" }).click();
   const telechargement = await telechargementPromise;
   expect(telechargement.suggestedFilename()).toBe(NOM_FICHIER);
+
+  // Paire de clés de chiffrement fabriquée dans le navigateur, sans aucun appel au serveur.
+  const appelsApi: string[] = [];
+  page.on("request", (requete) => {
+    if (requete.url().includes("/api/")) appelsApi.push(requete.url());
+  });
+  await page.getByRole("button", { name: "Générer une paire de clés" }).click();
+  await expect(page.getByTestId("cle-publique")).toHaveValue(/^MII[A-Za-z0-9+/=]{500,}$/, { timeout: 30_000 });
+  await expect(page.getByTestId("cle-privee")).toHaveValue(/^MII[A-Za-z0-9+/=]{2000,}$/);
+  expect(appelsApi, "aucune clé ne part vers le serveur").toEqual([]);
 });
